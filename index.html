@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Autómata Celular de Kauffman B37/S4567</title>
+    <link href="styles/main.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1><i class="fas fa-cogs"></i> Autómata Celular de Kauffman</h1>
+
+        <div class="rules">
+            <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 o 7 vecinos</p>
+            <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 4, 5, 6 o 7 vecinos</p>
+            <p class="notation">
+                Notación: <span class="highlight">B37/S4567</span>
+            </p>
+        </div>
+    </header>
+
+    <main>
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="config-section">
+                    <h3><i class="fas fa-sliders-h"></i> Configuración</h3>
+
+                    <div class="config-group">
+                        <label for="gridSize">
+                            <i class="fas fa-border-all"></i> Tamaño:
+                            <span class="value-display" id="gridSizeValue">60×60</span>
+                        </label>
+                        <input id="gridSize" max="100" min="20" step="5" type="range" value="60">
+                        <div class="range-ticks">
+                            <span>Pequeño</span>
+                            <span>Medio</span>
+                            <span>Grande</span>
+                        </div>
+                    </div>
+
+                    <div class="config-group">
+                        <label for="speedControl">
+                            <i class="fas fa-tachometer-alt"></i> Velocidad:
+                            <span class="value-display" id="speedValue">Normal</span>
+                        </label>
+                        <input id="speedControl" max="10" min="1" type="range" value="5">
+                        <div class="range-ticks">
+                            <span>Lento</span>
+                            <span>Normal</span>
+                            <span>Rápido</span>
+                        </div>
+                    </div>
+
+                    <div class="config-group">
+                        <label for="cellSize">
+                            <i class="fas fa-expand-alt"></i> Zoom:
+                            <span class="value-display" id="cellSizeValue">8px</span>
+                        </label>
+                        <input id="cellSize" max="20" min="4" step="2" type="range" value="8">
+                    </div>
+                </div>
+
+                <div class="patterns-section">
+                    <h3><i class="fas fa-shapes"></i> Patrones</h3>
+                    <div class="patterns-grid" id="patternsContainer">
+                        <!-- Patrones se cargarán dinámicamente -->
+                    </div>
+                    <div class="pattern-info">
+                        <p id="patternName">Selecciona un patrón</p>
+                        <p class="pattern-desc" id="patternDesc"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="center-panel">
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-label"><i class="fas fa-history"></i> Generación</span>
+                        <span class="stat-value generation" id="generation">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label"><i class="fas fa-users"></i> Población</span>
+                        <span class="stat-value population" id="population">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label"><i class="fas fa-percentage"></i> Densidad</span>
+                        <span class="stat-value density" id="density">0%</span>
+                    </div>
+                </div>
+
+                <div class="canvas-wrapper">
+                    <div id="canvas-container">
+                        <div class="canvas-overlay" id="patternPreview"></div>
+                        <canvas id="canvas"></canvas>
+                    </div>
+
+                    <div class="canvas-controls">
+                        <div class="coords" id="mouseCoords">X: 0, Y: 0</div>
+                        <button class="btn-toggle" id="gridToggle" title="Mostrar/Ocultar cuadrícula">
+                            <i class="fas fa-th"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn-control btn-play" id="playBtn">
+                        <i class="fas fa-play" id="playIcon"></i>
+                        <span id="playText">Ejecutar</span>
+                    </button>
+
+                    <button class="btn-control btn-step" id="stepBtn">
+                        <i class="fas fa-step-forward"></i>
+                        <span>Paso</span>
+                    </button>
+
+                    <div class="speed-buttons">
+                        <button class="btn-speed" id="speedDown" title="Más lento">
+                            <i class="fas fa-minus"></i>
+                        </button>
+                        <button class="btn-speed" id="speedUp" title="Más rápido">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+
+                    <button class="btn-control btn-random" id="randomBtn">
+                        <i class="fas fa-dice"></i>
+                        <span>Aleatorio</span>
+                    </button>
+
+                    <button class="btn-control btn-clear" id="clearBtn">
+                        <i class="fas fa-broom"></i>
+                        <span>Limpiar</span>
+                    </button>
+                </div>
+
+                <div class="instructions">
+                    <p><i class="fas fa-mouse-pointer"></i> Haz clic para dibujar | <i class="fas fa-hand-pointer"></i>
+                        Selecciona un patrón y haz clic para pegarlo</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <p><i class="fas fa-brain"></i> Basado en las reglas de <strong>Louis Kauffman</strong></p>
+            <p class="footer-links">
+                <a href="https://github.com/AgustinGomila/automaton" target="_blank">
+                    <i class="fab fa-github"></i> Código en GitHub
+                </a>
+                <a href="#" id="exportBtn">
+                    <i class="fas fa-download"></i> Exportar Patrón
+                </a>
+                <a href="#" id="importBtn">
+                    <i class="fas fa-upload"></i> Importar
+                </a>
+            </p>
+        </div>
+    </footer>
+</div>
+
+<script src="scripts/patterns.js"></script>
+<script src="scripts/automaton.js"></script>
+<script src="scripts/ui.js"></script>
+</body>
+</html>
