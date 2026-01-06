@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
     <title>Autómata Celular de Kauffman B37/S4567</title>
     <link href="styles/main.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -10,9 +10,17 @@
 <body>
 <div class="container">
     <header>
-        <h1><i class="fas fa-cogs"></i> Autómata Celular de Kauffman</h1>
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <i class="fas fa-bars"></i>
+        </button>
 
-        <div class="rules">
+        <h1><i class="fas fa-cogs"></i> Autómata de Kauffman</h1>
+
+        <div class="rules-mobile-toggle" id="rulesToggle">
+            <i class="fas fa-info-circle"></i>
+        </div>
+
+        <div class="rules" id="rulesPanel">
             <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 o 7 vecinos</p>
             <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 4, 5, 6 o 7 vecinos</p>
             <p class="notation">
@@ -23,7 +31,8 @@
 
     <main>
         <div class="main-content">
-            <div class="left-panel">
+            <!-- Panel izquierdo - Configuración -->
+            <div class="left-panel mobile-hidden" id="leftPanel">
                 <div class="config-section">
                     <h3><i class="fas fa-sliders-h"></i> Configuración</h3>
 
@@ -60,21 +69,40 @@
                         </label>
                         <input id="cellSize" max="20" min="4" step="2" type="range" value="8">
                     </div>
-                </div>
 
-                <div class="patterns-section">
-                    <h3><i class="fas fa-shapes"></i> Patrones</h3>
-                    <div class="patterns-grid" id="patternsContainer">
-                        <!-- Patrones se cargarán dinámicamente -->
+                    <button class="mobile-panel-close" id="closePanelBtn">
+                        <i class="fas fa-times"></i> Cerrar
+                    </button>
+
+                    <div class="config-group">
+                        <label for="limitType">
+                            <i class="fas fa-stopwatch"></i> Límite:
+                        </label>
+                        <select class="limit-select" id="limitType">
+                            <option value="none">Sin límite</option>
+                            <option value="generations">Generaciones</option>
+                            <option value="population">Población</option>
+                        </select>
                     </div>
-                    <div class="pattern-info">
-                        <p id="patternName">Selecciona un patrón</p>
-                        <p class="pattern-desc" id="patternDesc"></p>
+
+                    <div class="config-group" id="limitValueGroup" style="display: none;">
+                        <label for="limitValue">
+                            <i class="fas fa-sliders-h"></i> Valor:
+                            <span class="value-display" id="limitValueDisplay">0</span>
+                        </label>
+                        <input id="limitValue" max="10000" min="10" step="10" type="range" value="1000">
+                        <div class="range-ticks">
+                            <span>Bajo</span>
+                            <span>Medio</span>
+                            <span>Alto</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Panel central principal -->
             <div class="center-panel">
+                <!-- Estadísticas - MOSTRAR SIEMPRE -->
                 <div class="stats">
                     <div class="stat-item">
                         <span class="stat-label"><i class="fas fa-history"></i> Generación</span>
@@ -90,6 +118,7 @@
                     </div>
                 </div>
 
+                <!-- Área del Canvas -->
                 <div class="canvas-wrapper">
                     <div id="canvas-container">
                         <div class="canvas-overlay" id="patternPreview"></div>
@@ -104,6 +133,7 @@
                     </div>
                 </div>
 
+                <!-- Controles principales -->
                 <div class="controls">
                     <button class="btn-control btn-play" id="playBtn">
                         <i class="fas fa-play" id="playIcon"></i>
@@ -133,15 +163,46 @@
                         <i class="fas fa-broom"></i>
                         <span>Limpiar</span>
                     </button>
+
+                    <button class="btn-control btn-cancel" id="cancelPatternBtn">
+                        <i class="fas fa-times"></i>
+                        <span>Cancelar</span>
+                    </button>
                 </div>
 
                 <div class="instructions">
-                    <p><i class="fas fa-mouse-pointer"></i> Haz clic para dibujar | <i class="fas fa-hand-pointer"></i>
-                        Selecciona un patrón y haz clic para pegarlo</p>
+                    <p>
+                        <i class="fas fa-mouse-pointer"></i> Haz clic para dibujar/colocar patrón |
+                        <i class="fas fa-redo-alt"></i> Clic derecho en patrón para rotar
+                    </p>
                 </div>
             </div>
         </div>
     </main>
+
+    <!-- Patrones -->
+    <div class="patterns-horizontal-container">
+        <div class="patterns-header">
+            <h3><i class="fas fa-shapes"></i> Patrones</h3>
+            <div class="pattern-info-mini">
+                <span id="patternNameMini">Selecciona un patrón</span>
+            </div>
+        </div>
+
+        <div class="patterns-scroll-wrapper">
+            <div class="patterns-horizontal-scroll" id="patternsContainer">
+                <!-- Patrones se cargarán aquí -->
+            </div>
+            <div class="scroll-buttons">
+                <button class="scroll-btn left-scroll" id="scrollLeft">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="scroll-btn right-scroll" id="scrollRight">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <footer class="footer">
         <div class="footer-content">
@@ -153,8 +214,8 @@
                 <a href="#" id="exportBtn">
                     <i class="fas fa-download"></i> Exportar Patrón
                 </a>
-                <a href="#" id="importBtn">
-                    <i class="fas fa-upload"></i> Importar
+                <a href="#" id="configMobileBtn">
+                    <i class="fas fa-sliders-h"></i> Configuración
                 </a>
             </p>
         </div>
@@ -164,5 +225,6 @@
 <script src="scripts/patterns.js"></script>
 <script src="scripts/automaton.js"></script>
 <script src="scripts/ui.js"></script>
+<script src="scripts/responsive.js"></script>
 </body>
 </html>

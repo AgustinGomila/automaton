@@ -50,29 +50,6 @@ Louis Kauffman es un matemático conocido por su trabajo en:
 - **Sistemas autoorganizados**
 - **Cibernética de segundo orden**
 
-## 🔬 Experimentación
-
-### Modificar las Reglas
-
-Puedes experimentar con diferentes reglas editando la función `nextGeneration()`:
-
-```javascript
-// Ejemplo: Conway's Life (B3/S23)
-if (isAlive) {
-    newGrid[x][y] = [2, 3].includes(neighbors);
-} else {
-    newGrid[x][y] = neighbors === 3;
-}
-```
-
-### Ajustar Parámetros
-
-```javascript
-const GRID_SIZE = 80;         // Cuadrícula más grande
-const CELL_SIZE = 6;          // Células más pequeñas
-const UPDATE_INTERVAL = 50;   // Más rápido
-```
-
 ## 💻 Instalación Local
 
 ### Opción 1: Ejecutar directamente

@@ -18,6 +18,16 @@ class CellularAutomaton {
         // Estadísticas
         this.populationHistory = [];
         this.maxHistoryLength = 100;
+
+        // Límites
+        this.maxGenerations = null;
+        this.maxPopulation = null;
+        this.limitType = 'none'; // 'none', 'generations', 'population'
+        this.limitValue = 1000;
+        this.isLimitReached = false;
+
+        // Render inicial
+        setTimeout(() => this.render(), 100);
     }
 
     createEmptyGrid() {
@@ -52,6 +62,11 @@ class CellularAutomaton {
     }
 
     nextGeneration() {
+        // Verificar límites antes de continuar
+        if (this.checkLimits()) {
+            return 0;
+        }
+
         const newGrid = this.createEmptyGrid();
         let changes = 0;
 
@@ -76,6 +91,9 @@ class CellularAutomaton {
         this.grid = newGrid;
         this.generation++;
         this.updateStats();
+
+        // Verificar límites después de actualizar
+        this.checkLimits();
 
         return changes;
     }
@@ -114,6 +132,73 @@ class CellularAutomaton {
         }
     }
 
+    checkLimits() {
+        if (this.limitType === 'none') {
+            this.isLimitReached = false;
+            return false;
+        }
+
+        if (this.limitType === 'generations' && this.maxGenerations !== null) {
+            this.isLimitReached = this.generation >= this.maxGenerations;
+        } else if (this.limitType === 'population' && this.maxPopulation !== null) {
+            const population = this.countPopulation();
+            this.isLimitReached = population >= this.maxPopulation;
+        }
+
+        if (this.isLimitReached && this.isRunning) {
+            this.stop();
+            this.showLimitReachedMessage();
+        }
+
+        return this.isLimitReached;
+    }
+
+    // Mostrar mensaje de límite alcanzado
+    showLimitReachedMessage() {
+        if (this.limitType === 'generations') {
+            console.log(`Límite de generaciones alcanzado: ${this.generation}/${this.maxGenerations}`);
+            // Opcional: mostrar notificación en UI
+            if (document.getElementById('generation')) {
+                const genEl = document.getElementById('generation');
+                genEl.classList.add('limit-reached');
+                setTimeout(() => genEl.classList.remove('limit-reached'), 1000);
+            }
+        } else if (this.limitType === 'population') {
+            console.log(`Límite de población alcanzado: ${this.countPopulation()}/${this.maxPopulation}`);
+            // Opcional: mostrar notificación en UI
+            if (document.getElementById('population')) {
+                const popEl = document.getElementById('population');
+                popEl.classList.add('limit-reached');
+                setTimeout(() => popEl.classList.remove('limit-reached'), 1000);
+            }
+        }
+    }
+
+    setLimit(type, value) {
+        this.limitType = type;
+
+        if (type === 'none') {
+            this.maxGenerations = null;
+            this.maxPopulation = null;
+            this.isLimitReached = false;
+        } else if (type === 'generations') {
+            this.maxGenerations = parseInt(value);
+            this.maxPopulation = null;
+        } else if (type === 'population') {
+            this.maxPopulation = parseInt(value);
+            this.maxGenerations = null;
+        }
+
+        this.limitValue = value;
+        this.isLimitReached = false;
+
+        // Actualizar UI si está disponible
+        if (document.getElementById('limitValue')) {
+            document.getElementById('limitValue').value = value;
+            document.getElementById('limitValueDisplay').textContent = value.toLocaleString();
+        }
+    }
+
     render() {
         // Limpiar canvas
         this.ctx.fillStyle = '#0f172a';
@@ -121,7 +206,7 @@ class CellularAutomaton {
 
         // Dibujar cuadrícula si está habilitada
         if (this.showGrid) {
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             this.ctx.lineWidth = 1;
 
             // Líneas verticales
@@ -188,12 +273,15 @@ class CellularAutomaton {
         }
         this.generation = 0;
         this.updateStats();
+        this.generation = 0;
+        this.isLimitReached = false;
         this.render();
     }
 
     clear() {
         this.grid = this.createEmptyGrid();
         this.generation = 0;
+        this.isLimitReached = false;
         this.updateStats();
         this.render();
     }
@@ -262,13 +350,51 @@ class CellularAutomaton {
 
     getCellFromMouse(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
 
-        const x = Math.floor((e.clientX - rect.left) * scaleX / this.cellSize);
-        const y = Math.floor((e.clientY - rect.top) * scaleY / this.cellSize);
+        // Cálculo directo, sin scaling innecesario
+        const x = Math.floor((e.clientX - rect.left) / this.cellSize);
+        const y = Math.floor((e.clientY - rect.top) / this.cellSize);
 
         return {x, y};
+    }
+
+    // Asegurar que importPattern use las mismas coordenadas
+    importPattern(pattern, centerX, centerY) {
+        if (!pattern || !pattern.pattern) {
+            console.warn('No pattern to import');
+            return;
+        }
+
+        // Si el patrón es "random", generar aleatorio
+        if (pattern.pattern === 'random') {
+            this.randomize(0.3);
+            return;
+        }
+
+        const patternData = pattern.pattern;
+
+        // CORRECCIÓN: Usar coordenadas correctas para centrar el patrón
+        const offsetX = Math.floor(patternData[0].length / 2);
+        const offsetY = Math.floor(patternData.length / 2);
+
+        // Colocar patrón - las coordenadas X,Y ya vienen correctas desde el click
+        for (let row = 0; row < patternData.length; row++) {
+            for (let col = 0; col < patternData[row].length; col++) {
+                if (patternData[row][col] === 1) {
+                    const gridX = centerX - offsetX + col;
+                    const gridY = centerY - offsetY + row;
+
+                    // Verificar límites
+                    if (gridX >= 0 && gridX < this.gridSize &&
+                        gridY >= 0 && gridY < this.gridSize) {
+                        this.grid[gridX][gridY] = true;
+                    }
+                }
+            }
+        }
+
+        this.updateStats();
+        this.render();
     }
 
     exportPattern() {
@@ -306,47 +432,6 @@ class CellularAutomaton {
         }
 
         return null;
-    }
-
-    importPattern(pattern, centerX, centerY) {
-        if (!pattern || !pattern.pattern) {
-            console.warn('No pattern to import');
-            return;
-        }
-
-        console.log('Importing pattern at:', centerX, centerY);
-
-        // Si el patrón es "random", generar aleatorio
-        if (pattern.pattern === 'random') {
-            this.randomize(0.3);
-            return;
-        }
-
-        const patternData = pattern.pattern;
-        const offsetX = Math.floor(patternData[0].length / 2);
-        const offsetY = Math.floor(patternData.length / 2);
-
-        console.log('Pattern dimensions:', patternData[0].length, 'x', patternData.length);
-        console.log('Offset:', offsetX, offsetY);
-
-        // Colocar patrón
-        for (let y = 0; y < patternData.length; y++) {
-            for (let x = 0; x < patternData[y].length; x++) {
-                if (patternData[y][x] === 1) {
-                    const gridX = centerX - offsetX + x;
-                    const gridY = centerY - offsetY + y;
-
-                    // Verificar límites
-                    if (gridX >= 0 && gridX < this.gridSize &&
-                        gridY >= 0 && gridY < this.gridSize) {
-                        this.grid[gridX][gridY] = true;
-                    }
-                }
-            }
-        }
-
-        this.updateStats();
-        this.render();
     }
 }
 
