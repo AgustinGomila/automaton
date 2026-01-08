@@ -1,54 +1,68 @@
-# Autómata Celular de Kauffman B37/S4567
+# Autómata Celular Interactivo
 
-Una implementación interactiva del autómata celular con reglas **B37/S4567** presentado por Louis Kauffman en sus
-conferencias sobre teoría de distinciones y sistemas autoorganizados.
+Una implementación interactiva de autómata celular con soporte para **múltiples reglas**, incluyendo **B37/S4567** de
+Louis Kauffman y otras configuraciones clásicas.
 
 ## 🎯 Experimentar con el Autómata
 
 **[Experimentar →](https://agustingomila.github.io/automaton/)**
 
-## 📖 ¿Qué es este autómata?
+## 📖 Características
 
-Este autómata celular sigue reglas específicas que difieren del famoso "Juego de la Vida" de Conway:
+### Reglas Disponibles
 
-### Reglas (Notación B37/S4567)
+- **Kauffman B37/S4567** - Regla original presentada por Louis Kauffman
+- **Conway's Life B3/S23** - El autómata celular más famoso
+- **HighLife B36/S23** - Variación con replicador
+- **Day & Night B3678/S34678** - Simétrico con comportamiento interesante
+- **30+ reglas predefinidas** más
+- **Regla personalizada** - Define tus propios parámetros B/S
 
-- **B37 (Birth)**: Una célula muerta **nace** si tiene exactamente **3 o 7** vecinos vivos
-- **S4567 (Survival)**: Una célula viva **sobrevive** si tiene **4, 5, 6 o 7** vecinos vivos
+### Funcionalidades
 
-### Comparación con el Juego de la Vida
+- **Selector de vecindad**: Moore (8 vecinos) o von Neumann (4 vecinos)
+- **Radio configurable**: Controla la distancia de influencia (1-10)
+- **Patrones predefinidos**: 20 patrones iniciales + aleatorio
+- **Rotación de patrones**: Gira los patrones 90° con clic derecho
+- **Límites configurables**: Establece límites por generaciones o población
+- **Interacción completa**: Dibuja, coloca patrones, exporta/importa
+- **Diseño responsivo**: Funciona en móviles y escritorio
 
-| Autómata               | Reglas    |
-|------------------------|-----------|
-| **Conway's Life**      | B3/S23    |
-| **Kauffman B37/S4567** | B37/S4567 |
+## 🎮 Uso Interactivo
 
-## 🚀 Uso
-
-<img src="images/automaton_low.gif" alt="automaton" style="width:500px; height:auto; display:block; margin:0 auto;" />
-
-### Controles
+### Controles Principales
 
 - **▶ Ejecutar/Pausar**: Inicia o detiene la simulación automática
 - **⏭ Paso**: Avanza una generación manualmente
 - **🎲 Aleatorio**: Genera un patrón inicial aleatorio
 - **↻ Limpiar**: Borra toda la cuadrícula
+- **⚙ Configuración**: Ajusta reglas, vecindad, límites y más
 
 ### Interacción
 
-- **Clic**: Alterna el estado de una célula individual
-- **Arrastrar**: Dibuja patrones arrastrando el mouse
+- **Clic izquierdo**: Dibuja células individuales o coloca patrón seleccionado
+- **Clic derecho**: Rota el patrón seleccionado 90°
+- **Arrastrar**: Dibuja libremente mientras arrastras
+- **Escape**: Cancela la selección de patrón
 
-## 🧬 Contexto Teórico
+## 🧠 Contexto Teórico
 
 ### Louis Kauffman
 
-Louis Kauffman es un matemático conocido por su trabajo en:
+El autómata incluye la regla **B37/S4567** presentada por Louis Kauffman, matemático conocido por su trabajo en:
 
 - **Teoría de nudos**
 - **Cálculo de formas** (Laws of Form)
 - **Sistemas autoorganizados**
 - **Cibernética de segundo orden**
+
+### Reglas Clásicas
+
+Además de Kauffman, el simulador incluye autómatas celulares clásicos:
+
+- **Conway's Game of Life** - El más famoso
+- **Seeds, Mazes, Amoeba** - Variaciones con comportamientos únicos
+- **HighLife, Day & Night** - Autómatas bien estudiados
 
 ## 💻 Instalación Local
 
@@ -71,12 +85,12 @@ npx serve
 ## 📚 Referencias
 
 - **Louis Kauffman**: [Página personal](http://www.math.uic.edu/~kauffman/)
-- **Laws of Form**: George Spencer-Brown
+- **Conway's Game of Life**: [Wikipedia](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
+- **Reglas de autómatas**: [LifeWiki](https://conwaylife.com/wiki/)
 - **Teoría de Autómatas Celulares**: Stephen Wolfram - *A New Kind of Science*
-- **Vecindario de Moore**: [Wikipedia](https://en.wikipedia.org/wiki/Moore_neighborhood)
 
 ---
 
-**Desarrollado con curiosidad sobre sistemas autoorganizados y teoría de distinciones.**
+**Explora la emergencia de patrones complejos a partir de reglas simples.**
 
-*"Toda distinción crea una frontera, y toda frontera procesa información."*
+*"Toda distinción crea una frontera, y toda frontera procesa información." - Louis Kauffman*

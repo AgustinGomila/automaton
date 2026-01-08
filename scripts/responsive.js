@@ -134,6 +134,20 @@ class ResponsiveController {
     adjustForMobile() {
         if (!this.isMobile) return;
 
+        // Ajustar patrones para móviles
+        const container = document.getElementById('patternsContainer');
+        if (container) {
+            // En móviles, por defecto 1 fila
+            container.classList.remove('two-rows');
+            container.classList.remove('compact-view');
+
+            // Ocultar controles de patrones en móviles muy pequeños
+            const controls = document.querySelector('.patterns-controls');
+            if (controls && window.innerWidth < 480) {
+                controls.style.display = 'none';
+            }
+        }
+
         // Ajustar tamaño de grid para móviles si es muy grande
         const gridSizeInput = document.getElementById('gridSize');
         if (gridSizeInput && parseInt(gridSizeInput.value) > 50) {

@@ -26,8 +26,39 @@ class CellularAutomaton {
         this.limitValue = 1000;
         this.isLimitReached = false;
 
+        // Inicializar con regla de Kauffman
+        this.rule = {
+            survival: [4, 5, 6, 7],
+            birth: [3, 7]
+        };
+
+        // Vecindad
+        this.neighborhoodType = 'moore'; // 'moore' o 'neumann'
+        this.neighborhoodRadius = 1;
+
         // Render inicial
         setTimeout(() => this.render(), 100);
+    }
+
+    setRule(survival, birth) {
+        this.rule = {
+            survival: [...survival],
+            birth: [...birth]
+        };
+        // Reiniciar estadísticas y límites
+        this.generation = 0;
+        this.isLimitReached = false;
+        this.updateStats();
+        this.render();
+    }
+
+    setRuleByKey(ruleKey) {
+        if (window.RULES && window.RULES[ruleKey]) {
+            const rule = window.RULES[ruleKey];
+            this.setRule(rule.survival, rule.birth);
+            return true;
+        }
+        return false;
     }
 
     createEmptyGrid() {
@@ -35,8 +66,22 @@ class CellularAutomaton {
     }
 
     resizeCanvas() {
+        const container = document.getElementById('canvas-container');
+
         this.canvas.width = this.gridSize * this.cellSize;
         this.canvas.height = this.gridSize * this.cellSize;
+
+        // Forzar el tamaño del canvas en CSS para evitar escalado automático
+        this.canvas.style.width = this.canvas.width + 'px';
+        this.canvas.style.height = this.canvas.height + 'px';
+
+        // Ajustar contenedor
+        if (container) {
+            container.style.width = this.canvas.width + 20 + 'px'; // + padding
+            container.style.height = this.canvas.height + 20 + 'px';
+        }
+
+        this.render();
     }
 
     resizeGrid(newSize) {
@@ -50,15 +95,53 @@ class CellularAutomaton {
 
     countNeighbors(x, y) {
         let count = 0;
-        for (let i = -1; i <= 1; i++) {
-            for (let j = -1; j <= 1; j++) {
-                if (i === 0 && j === 0) continue;
-                const newX = (x + i + this.gridSize) % this.gridSize;
-                const newY = (y + j + this.gridSize) % this.gridSize;
-                if (this.grid[newX][newY]) count++;
+        const radius = this.neighborhoodRadius;
+
+        if (this.neighborhoodType === 'moore') {
+            // Vecindad de Moore: cuadrado completo
+            for (let i = -radius; i <= radius; i++) {
+                for (let j = -radius; j <= radius; j++) {
+                    if (i === 0 && j === 0) continue; // Saltar la celda central
+
+                    const newX = (x + i + this.gridSize) % this.gridSize;
+                    const newY = (y + j + this.gridSize) % this.gridSize;
+
+                    if (this.grid[newX][newY]) count++;
+                }
+            }
+        } else if (this.neighborhoodType === 'neumann') {
+            // Vecindad de von Neumann: solo horizontal y vertical
+            for (let i = -radius; i <= radius; i++) {
+                for (let j = -radius; j <= radius; j++) {
+                    // Solo células donde |i| + |j| <= radius
+                    if (Math.abs(i) + Math.abs(j) > radius) continue;
+                    if (i === 0 && j === 0) continue;
+
+                    const newX = (x + i + this.gridSize) % this.gridSize;
+                    const newY = (y + j + this.gridSize) % this.gridSize;
+
+                    if (this.grid[newX][newY]) count++;
+                }
             }
         }
+
         return count;
+    }
+
+    setNeighborhoodType(type) {
+        this.neighborhoodType = type;
+        this.generation = 0;
+        this.isLimitReached = false;
+        this.updateStats();
+        this.render();
+    }
+
+    setNeighborhoodRadius(radius) {
+        this.neighborhoodRadius = radius;
+        this.generation = 0;
+        this.isLimitReached = false;
+        this.updateStats();
+        this.render();
     }
 
     nextGeneration() {
@@ -75,13 +158,13 @@ class CellularAutomaton {
                 const neighbors = this.countNeighbors(x, y);
                 const isAlive = this.grid[x][y];
 
-                // Reglas de Kauffman B37/S4567
+                // Aplicar reglas actuales
                 if (isAlive) {
-                    // Supervivencia: 4, 5, 6 o 7 vecinos
-                    newGrid[x][y] = [4, 5, 6, 7].includes(neighbors);
+                    // Supervivencia: si el número de vecinos está en survival
+                    newGrid[x][y] = this.rule.survival.includes(neighbors);
                 } else {
-                    // Nacimiento: 3 o 7 vecinos
-                    newGrid[x][y] = [3, 7].includes(neighbors);
+                    // Nacimiento: si el número de vecinos está en birth
+                    newGrid[x][y] = this.rule.birth.includes(neighbors);
                 }
 
                 if (newGrid[x][y] !== isAlive) changes++;
@@ -121,7 +204,7 @@ class CellularAutomaton {
         // Actualizar histórico
         this.populationHistory.push(population);
         if (this.populationHistory.length > this.maxHistoryLength) {
-            this.populationHistory.shift();
+            this.populationHistory = this.populationHistory.slice(-this.maxHistoryLength);
         }
 
         // Actualizar UI
@@ -273,7 +356,6 @@ class CellularAutomaton {
         }
         this.generation = 0;
         this.updateStats();
-        this.generation = 0;
         this.isLimitReached = false;
         this.render();
     }
@@ -340,6 +422,13 @@ class CellularAutomaton {
         this.cellSize = size;
         this.resizeCanvas();
         this.render();
+
+        // Forzar redimensionamiento del contenedor
+        const container = document.getElementById('canvas-container');
+        if (container) {
+            container.style.width = this.canvas.width + 'px';
+            container.style.height = this.canvas.height + 'px';
+        }
     }
 
     toggleGrid() {
@@ -351,11 +440,26 @@ class CellularAutomaton {
     getCellFromMouse(e) {
         const rect = this.canvas.getBoundingClientRect();
 
-        // Cálculo directo, sin scaling innecesario
-        const x = Math.floor((e.clientX - rect.left) / this.cellSize);
-        const y = Math.floor((e.clientY - rect.top) / this.cellSize);
+        // Obtener dimensiones reales del canvas (considerando escala CSS)
+        const actualWidth = this.canvas.offsetWidth;
+        const actualHeight = this.canvas.offsetHeight;
 
-        return {x, y};
+        // Calcular escala CSS
+        const scaleX = this.canvas.width / actualWidth;
+        const scaleY = this.canvas.height / actualHeight;
+
+        // Calcular coordenadas relativas considerando escala
+        const canvasX = (e.clientX - rect.left) * scaleX;
+        const canvasY = (e.clientY - rect.top) * scaleY;
+
+        const x = Math.floor(canvasX / this.cellSize);
+        const y = Math.floor(canvasY / this.cellSize);
+
+        // Limitar coordenadas a los límites del grid
+        return {
+            x: Math.max(0, Math.min(x, this.gridSize - 1)),
+            y: Math.max(0, Math.min(y, this.gridSize - 1))
+        };
     }
 
     // Asegurar que importPattern use las mismas coordenadas
@@ -373,7 +477,7 @@ class CellularAutomaton {
 
         const patternData = pattern.pattern;
 
-        // CORRECCIÓN: Usar coordenadas correctas para centrar el patrón
+        // Usar coordenadas correctas para centrar el patrón
         const offsetX = Math.floor(patternData[0].length / 2);
         const offsetY = Math.floor(patternData.length / 2);
 

@@ -1,7 +1,11 @@
-// UI Controller - Mantener tu versión que funciona
+// UI Controller
 class UIController {
+
     constructor() {
         this.isDrawing = false;
+        this.showInfluenceArea = false;
+        this.patternsTwoRows = false;
+        this.patternsCompactView = false;
         this.init();
     }
 
@@ -11,6 +15,22 @@ class UIController {
         this.updateSpeedDisplay();
         this.updateGridSizeDisplay();
         this.updateCellSizeDisplay();
+        this.loadRules();
+        this.bindNeighborhoodEvents();
+        this.bindPatternsControls();
+
+        // Inicializar ambos indicadores
+        this.updateNeighborhoodInfo();
+
+        // Inicializar reglas si hay una seleccionada
+        const selector = document.getElementById('ruleSelector');
+        if (selector && selector.value && window.RULES) {
+            const ruleKey = selector.value;
+            const rule = window.RULES[ruleKey];
+            if (rule) {
+                this.updateRuleInfo(rule);
+            }
+        }
     }
 
     bindEvents() {
@@ -23,6 +43,22 @@ class UIController {
             this.deselectPattern();
             window.selectedPatternRotation = 0;
         });
+
+        // Reglas
+        document.getElementById('ruleSelector').addEventListener('change', this.changeRule.bind(this));
+        document.getElementById('applyCustomRuleBtn').addEventListener('click', () => {
+            this.applyCustomRule();
+        });
+        document.getElementById('birthInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.applyCustomRule();
+        });
+        document.getElementById('survivalInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.applyCustomRule();
+        });
+
+        // Área de influencia toggle
+        document.getElementById('influenceToggle').addEventListener('change', this.toggleInfluenceArea.bind(this));
+        document.getElementById('quickInfluenceToggle').addEventListener('click', this.quickToggleInfluenceArea.bind(this));
 
         // Controles
         document.getElementById('speedControl').addEventListener('input', this.updateSpeed.bind(this));
@@ -56,14 +92,26 @@ class UIController {
             const {x, y} = automaton.getCellFromMouse(e);
             this.updateMouseCoords(x, y);
 
-            // Mostrar vista previa del patrón (con rotación actual)
             if (window.selectedPattern) {
                 showPatternPreview(x, y);
+
+                // Mostrar área de influencia si está activada
+                if (this.showInfluenceArea) {
+                    showInfluenceArea(x, y);
+                } else {
+                    hideInfluenceArea();
+                }
             } else {
                 hidePatternPreview();
+
+                // Mostrar área de influencia para celda individual si está activada
+                if (this.showInfluenceArea) {
+                    showInfluenceArea(x, y);
+                } else {
+                    hideInfluenceArea();
+                }
             }
 
-            // Dibujar al arrastrar
             if (this.isDrawing && !window.selectedPattern) {
                 automaton.toggleCell(x, y);
             }
@@ -94,6 +142,9 @@ class UIController {
         canvas.addEventListener('mouseleave', () => {
             this.isDrawing = false;
             hidePatternPreview();
+            if (!this.showInfluenceArea) {
+                hideInfluenceArea();
+            }
         });
 
         canvas.addEventListener('contextmenu', (e) => {
@@ -124,6 +175,78 @@ class UIController {
 
         // Eventos táctiles
         this.setupTouchEvents();
+    }
+
+    loadRules() {
+        const selector = document.getElementById('ruleSelector');
+        if (!selector) return;
+
+        if (!window.RULES) {
+            console.error('RULES no está definido');
+            return;
+        }
+
+        // Agregar cada regla
+        Object.keys(window.RULES).forEach(key => {
+            const rule = window.RULES[key];
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = `${rule.name} (${rule.ruleString})`;
+            selector.appendChild(option);
+        });
+
+        // Seleccionar Kauffman por defecto
+        selector.value = 'kauffman';
+    }
+
+    applyCustomRule() {
+        const birthInput = document.getElementById('birthInput').value;
+        const survivalInput = document.getElementById('survivalInput').value;
+
+        try {
+            const customRule = parseCustomRule(birthInput, survivalInput);
+
+            if (customRule.birth.length === 0 && customRule.survival.length === 0) {
+                throw new Error('Ingresa valores válidos para B y S');
+            }
+
+            // Aplicar la regla al autómata
+            automaton.setRule(customRule.survival, customRule.birth);
+
+            // Actualizar la información en el header
+            this.updateCustomRuleInfo();
+
+            // Mostrar confirmación
+            alert(`Regla personalizada aplicada: B${customRule.birth.join('')}/S${customRule.survival.join('')}`);
+
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
+    updateCustomRuleInfo() {
+        const rulesSpecific = document.getElementById('rulesSpecific');
+        if (!rulesSpecific || !automaton) return;
+
+        const birth = automaton.rule.birth.sort((a, b) => a - b);
+        const survival = automaton.rule.survival.sort((a, b) => a - b);
+
+        rulesSpecific.innerHTML = `
+        <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${birth.join(', ')} vecinos</p>
+        <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${survival.join(', ')} vecinos</p>
+        <p class="notation">
+            Notación: <span class="highlight">B${birth.join('')}/S${survival.join('')}</span>
+        </p>
+    `;
+
+        // Actualizar el título de la página
+        document.title = `Autómata Celular - Personalizada B${birth.join('')}/S${survival.join('')}`;
+
+        // Actualizar el header principal
+        const headerTitle = document.querySelector('h1');
+        if (headerTitle) {
+            headerTitle.innerHTML = `<i class="fas fa-cogs"></i> Autómata - Personalizada`;
+        }
     }
 
     showRotationFeedback() {
@@ -192,11 +315,87 @@ class UIController {
         }, false);
     }
 
+    // Controlar las filas de patrones
+    bindPatternsControls() {
+        const toggleRowsBtn = document.getElementById('patternsToggleRows');
+        const toggleCompactBtn = document.getElementById('patternsToggleCompact');
+        const container = document.getElementById('patternsContainer');
+
+        if (toggleRowsBtn && container) {
+            toggleRowsBtn.addEventListener('click', () => {
+                this.patternsTwoRows = !this.patternsTwoRows;
+                container.classList.toggle('two-rows', this.patternsTwoRows);
+
+                // Cambiar icono
+                const icon = toggleRowsBtn.querySelector('i');
+                if (this.patternsTwoRows) {
+                    icon.className = 'fas fa-grip-lines-vertical';
+                    toggleRowsBtn.title = 'Cambiar a 1 fila';
+                } else {
+                    icon.className = 'fas fa-grip-lines';
+                    toggleRowsBtn.title = 'Cambiar a 2 filas';
+                }
+            });
+        }
+
+        if (toggleCompactBtn && container) {
+            toggleCompactBtn.addEventListener('click', () => {
+                this.patternsCompactView = !this.patternsCompactView;
+                container.classList.toggle('compact-view', this.patternsCompactView);
+
+                // Aplicar clase compact a todos los botones
+                document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
+                    btn.classList.toggle('compact', this.patternsCompactView);
+                });
+
+                // Cambiar icono
+                const icon = toggleCompactBtn.querySelector('i');
+                if (this.patternsCompactView) {
+                    icon.className = 'fas fa-expand-alt';
+                    toggleCompactBtn.title = 'Vista normal';
+                } else {
+                    icon.className = 'fas fa-compress';
+                    toggleCompactBtn.title = 'Vista compacta';
+                }
+            });
+        }
+
+        // Scroll buttons mejorados
+        const scrollLeft = document.getElementById('scrollLeft');
+        const scrollRight = document.getElementById('scrollRight');
+
+        if (scrollLeft && scrollRight && container) {
+            scrollLeft.addEventListener('click', () => {
+                container.scrollLeft -= 150;
+            });
+
+            scrollRight.addEventListener('click', () => {
+                container.scrollLeft += 150;
+            });
+
+            // Mostrar/ocultar botones de scroll según posición
+            container.addEventListener('scroll', () => {
+                const showLeft = container.scrollLeft > 0;
+                const showRight = container.scrollLeft < (container.scrollWidth - container.clientWidth);
+
+                scrollLeft.style.opacity = showLeft ? '1' : '0.5';
+                scrollLeft.style.pointerEvents = showLeft ? 'all' : 'none';
+
+                scrollRight.style.opacity = showRight ? '1' : '0.5';
+                scrollRight.style.pointerEvents = showRight ? 'all' : 'none';
+            });
+
+            // Inicializar estado
+            container.dispatchEvent(new Event('scroll'));
+        }
+    }
+
     deselectPattern() {
         window.selectedPattern = null;
         window.selectedPatternKey = null;
         window.selectedPatternRotation = 0;
         hidePatternPreview();
+        hideInfluenceArea();
 
         document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
             btn.classList.remove('active');
@@ -287,7 +486,31 @@ class UIController {
 
         if (!automaton.isRunning || confirm('Cambiar el tamaño detendrá la simulación. ¿Continuar?')) {
             if (automaton.isRunning) this.togglePlay();
+
+            // Guardar estado del mouse
+            const lastCoords = document.getElementById('mouseCoords').textContent;
+            const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
+            let lastX = 0, lastY = 0;
+            if (match) {
+                lastX = parseInt(match[1]);
+                lastY = parseInt(match[2]);
+            }
+
             automaton.resizeGrid(value);
+
+            // Restaurar preview después del resize
+            setTimeout(() => {
+                if (window.selectedPattern) {
+                    // Limitar coordenadas al nuevo tamaño
+                    const safeX = Math.min(lastX, value - 1);
+                    const safeY = Math.min(lastY, value - 1);
+                    showPatternPreview(safeX, safeY);
+
+                    if (this.showInfluenceArea) {
+                        showInfluenceArea(safeX, safeY);
+                    }
+                }
+            }, 100);
         }
     }
 
@@ -301,7 +524,25 @@ class UIController {
         const slider = document.getElementById('cellSize');
         const value = parseInt(slider.value);
         document.getElementById('cellSizeValue').textContent = `${value}px`;
+
         automaton.setCellSize(value);
+
+        // Forzar reflow y actualizar previews
+        setTimeout(() => {
+            if (window.selectedPattern) {
+                const lastCoords = document.getElementById('mouseCoords').textContent;
+                const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
+                if (match) {
+                    const x = parseInt(match[1]);
+                    const y = parseInt(match[2]);
+                    showPatternPreview(x, y);
+
+                    if (this.showInfluenceArea) {
+                        showInfluenceArea(x, y);
+                    }
+                }
+            }
+        }, 50);
     }
 
     updateCellSizeDisplay() {
@@ -312,6 +553,53 @@ class UIController {
 
     toggleGrid() {
         automaton.toggleGrid();
+    }
+
+    toggleInfluenceArea() {
+        const toggle = document.getElementById('influenceToggle');
+        this.showInfluenceArea = toggle.checked;
+
+        // Sincronizar el botón rápido
+        const quickToggle = document.getElementById('quickInfluenceToggle');
+        if (quickToggle) {
+            if (this.showInfluenceArea) {
+                quickToggle.classList.add('active');
+                quickToggle.style.color = 'var(--secondary)';
+            } else {
+                quickToggle.classList.remove('active');
+                quickToggle.style.color = '';
+            }
+        }
+
+        if (!this.showInfluenceArea) {
+            hideInfluenceArea();
+        } else if (window.selectedPattern) {
+            // Si hay patrón seleccionado y el área está activa, mostrarla
+            const lastCoords = document.getElementById('mouseCoords').textContent;
+            const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
+            if (match) {
+                const x = parseInt(match[1]);
+                const y = parseInt(match[2]);
+                showInfluenceArea(x, y);
+            }
+        }
+    }
+
+    quickToggleInfluenceArea() {
+        const toggle = document.getElementById('influenceToggle');
+        this.showInfluenceArea = !this.showInfluenceArea;
+        toggle.checked = this.showInfluenceArea;
+
+        // Actualizar estilo del botón rápido
+        const quickToggle = document.getElementById('quickInfluenceToggle');
+        if (this.showInfluenceArea) {
+            quickToggle.classList.add('active');
+            quickToggle.style.color = 'var(--secondary)';
+        } else {
+            quickToggle.classList.remove('active');
+            quickToggle.style.color = '';
+            hideInfluenceArea();
+        }
     }
 
     scrollPatterns(direction) {
@@ -396,6 +684,158 @@ class UIController {
         if (select.value !== 'none') {
             automaton.setLimit(select.value, value);
         }
+    }
+
+    changeRule() {
+        const selector = document.getElementById('ruleSelector');
+        const ruleKey = selector.value;
+        const customRuleGroup = document.getElementById('customRuleGroup');
+
+        if (ruleKey === 'custom') {
+            // Mostrar controles personalizados
+            customRuleGroup.style.display = 'block';
+
+            // Cargar valores actuales del autómata
+            document.getElementById('birthInput').value = automaton.rule.birth.join(',');
+            document.getElementById('survivalInput').value = automaton.rule.survival.join(',');
+
+            // Actualizar info con regla actual
+            this.updateCustomRuleInfo();
+        } else {
+            // Ocultar controles personalizados
+            customRuleGroup.style.display = 'none';
+
+            if (automaton && window.RULES && window.RULES[ruleKey]) {
+                const rule = window.RULES[ruleKey];
+
+                // Cambiar la regla en el autómata
+                automaton.setRuleByKey(ruleKey);
+
+                // Actualizar el header completo
+                this.updateHeaderInfo();
+
+                // Si la simulación está corriendo, pausarla para evitar confusiones
+                if (automaton.isRunning) {
+                    this.togglePlay();
+                }
+            }
+        }
+    }
+
+    changeNeighborhoodType(type) {
+        if (automaton) {
+            automaton.setNeighborhoodType(type);
+            this.updateNeighborhoodInfo();
+
+            // Actualizar área de influencia si está visible
+            if (this.showInfluenceArea) {
+                const lastCoords = document.getElementById('mouseCoords').textContent;
+                const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
+                if (match) {
+                    const x = parseInt(match[1]);
+                    const y = parseInt(match[2]);
+                    showInfluenceArea(x, y);
+                }
+            }
+
+            if (automaton.isRunning) {
+                this.togglePlay();
+            }
+        }
+    }
+
+    changeNeighborhoodRadius(radius) {
+        const radiusValue = document.getElementById('radiusValue');
+        if (radiusValue) {
+            radiusValue.textContent = radius;
+        }
+
+        if (automaton) {
+            automaton.setNeighborhoodRadius(radius);
+            this.updateNeighborhoodInfo();
+
+            // Actualizar área de influencia si está visible
+            if (this.showInfluenceArea) {
+                const lastCoords = document.getElementById('mouseCoords').textContent;
+                const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
+                if (match) {
+                    const x = parseInt(match[1]);
+                    const y = parseInt(match[2]);
+                    showInfluenceArea(x, y);
+                }
+            }
+
+            if (automaton.isRunning) {
+                this.togglePlay();
+            }
+        }
+    }
+
+    updateHeaderInfo() {
+        // Actualizar reglas si hay una seleccionada
+        const selector = document.getElementById('ruleSelector');
+        if (selector && selector.value && window.RULES) {
+            const ruleKey = selector.value;
+            const rule = window.RULES[ruleKey];
+            if (rule) {
+                this.updateRuleInfo(rule);
+            }
+        }
+
+        // Actualizar información de vecindad
+        this.updateNeighborhoodInfo();
+    }
+
+    // Actualizar información de reglas
+    updateRuleInfo(rule) {
+        const rulesSpecific = document.getElementById('rulesSpecific');
+        if (!rulesSpecific) return;
+
+        // Actualizar solo el contenido de las reglas específicas
+        rulesSpecific.innerHTML = `
+        <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${rule.birth.join(', ')} vecinos</p>
+        <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${rule.survival.join(', ')} vecinos</p>
+        <p class="notation">
+            Notación: <span class="highlight">${rule.ruleString}</span>
+        </p>
+    `;
+
+        // Actualizar el título de la página
+        document.title = `Autómata Celular - ${rule.name} ${rule.ruleString}`;
+
+        // Actualizar el header principal
+        const headerTitle = document.querySelector('h1');
+        if (headerTitle) {
+            headerTitle.innerHTML = `<i class="fas fa-cogs"></i> Autómata - ${rule.name}`;
+        }
+    }
+
+    bindNeighborhoodEvents() {
+        const typeSelect = document.getElementById('neighborhoodType');
+        const radiusSlider = document.getElementById('neighborhoodRadius');
+
+        if (typeSelect) {
+            typeSelect.addEventListener('change', (e) => {
+                this.changeNeighborhoodType(e.target.value);
+            });
+        }
+
+        if (radiusSlider) {
+            radiusSlider.addEventListener('input', (e) => {
+                this.changeNeighborhoodRadius(parseInt(e.target.value));
+            });
+        }
+    }
+
+    updateNeighborhoodInfo() {
+        const infoElement = document.getElementById('neighborhoodInfo');
+        if (!infoElement || !automaton) return;
+
+        const type = automaton.neighborhoodType === 'moore' ? 'Moore' : 'von Neumann';
+        const radius = automaton.neighborhoodRadius;
+
+        // Actualizar el contenido del elemento
+        infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (radio ${radius})`;
     }
 }
 

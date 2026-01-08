@@ -21,11 +21,19 @@
         </div>
 
         <div class="rules" id="rulesPanel">
-            <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 o 7 vecinos</p>
-            <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 4, 5, 6 o 7 vecinos</p>
-            <p class="notation">
-                Notación: <span class="highlight">B37/S4567</span>
-            </p>
+            <!-- Reglas específicas -->
+            <div class="rules-specific" id="rulesSpecific">
+                <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 o 7 vecinos</p>
+                <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 4, 5, 6 o 7 vecinos</p>
+                <p class="notation">
+                    Notación: <span class="highlight">B37/S4567</span>
+                </p>
+            </div>
+
+            <!-- Información de vecindad -->
+            <div class="neighborhood-info" id="neighborhoodInfo">
+                <i class="fas fa-crosshairs"></i> Vecindad: Moore (radio 1)
+            </div>
         </div>
     </header>
 
@@ -35,6 +43,57 @@
             <div class="left-panel mobile-hidden" id="leftPanel">
                 <div class="config-section">
                     <h3><i class="fas fa-sliders-h"></i> Configuración</h3>
+
+                    <div class="config-group">
+                        <label for="ruleSelector">
+                            <i class="fas fa-chess-board"></i> Regla:
+                        </label>
+                        <select class="limit-select" id="ruleSelector">
+                            <!-- Las opciones se llenarán con JavaScript -->
+                        </select>
+                    </div>
+
+                    <!-- Controles de regla personalizada -->
+                    <div class="custom-rule-group" id="customRuleGroup" style="display: none;">
+                        <div class="config-group">
+                            <label for="birthInput">
+                                <i class="fas fa-seedling"></i> B (Nacimiento):
+                            </label>
+                            <input id="birthInput" placeholder="Ej: 3,6,8" type="text" value="3,7">
+                        </div>
+                        <div class="config-group">
+                            <label for="survivalInput">
+                                <i class="fas fa-heart"></i> S (Supervivencia):
+                            </label>
+                            <input id="survivalInput" placeholder="Ej: 2,3,4" type="text" value="4,5,6,7">
+                        </div>
+                        <button class="btn-control" id="applyCustomRuleBtn" style="margin-top: 10px; width: 100%;">
+                            <i class="fas fa-check"></i> Aplicar Regla
+                        </button>
+                    </div>
+
+                    <div class="config-group">
+                        <label for="neighborhoodType">
+                            <i class="fas fa-project-diagram"></i> Vecindad:
+                        </label>
+                        <select class="limit-select" id="neighborhoodType">
+                            <option value="moore">Moore (8 vecinos)</option>
+                            <option value="neumann">Neumann (4 vecinos)</option>
+                        </select>
+                    </div>
+
+                    <div class="config-group">
+                        <label for="neighborhoodRadius">
+                            <i class="fas fa-expand-arrows-alt"></i> Radio:
+                            <span class="value-display" id="radiusValue">1</span>
+                        </label>
+                        <input id="neighborhoodRadius" max="10" min="1" type="range" value="1">
+                        <div class="range-ticks">
+                            <span>Cerca</span>
+                            <span></span>
+                            <span>Lejos</span>
+                        </div>
+                    </div>
 
                     <div class="config-group">
                         <label for="gridSize">
@@ -68,6 +127,17 @@
                             <span class="value-display" id="cellSizeValue">8px</span>
                         </label>
                         <input id="cellSize" max="20" min="4" step="2" type="range" value="8">
+                    </div>
+
+                    <!-- Nuevo toggle para área de influencia -->
+                    <div class="config-group">
+                        <div class="toggle-switch">
+                            <input class="toggle-checkbox" id="influenceToggle" type="checkbox">
+                            <label class="toggle-label" for="influenceToggle">
+                                <i class="fas fa-bullseye"></i> Mostrar área de influencia
+                                <span class="toggle-switch-slider"></span>
+                            </label>
+                        </div>
                     </div>
 
                     <button class="mobile-panel-close" id="closePanelBtn">
@@ -114,7 +184,7 @@
                     </div>
                     <div class="stat-item">
                         <span class="stat-label"><i class="fas fa-percentage"></i> Densidad</span>
-                        <span class="stat-value density" id="density">0%</span>
+                        <span class="stat-value density" id="density">0.0%</span>
                     </div>
                 </div>
 
@@ -122,6 +192,7 @@
                 <div class="canvas-wrapper">
                     <div id="canvas-container">
                         <div class="canvas-overlay" id="patternPreview"></div>
+                        <div class="canvas-overlay" id="influenceArea"></div>
                         <canvas id="canvas"></canvas>
                     </div>
 
@@ -129,6 +200,10 @@
                         <div class="coords" id="mouseCoords">X: 0, Y: 0</div>
                         <button class="btn-toggle" id="gridToggle" title="Mostrar/Ocultar cuadrícula">
                             <i class="fas fa-th"></i>
+                        </button>
+                        <!-- Botón rápido para área de influencia en controles del canvas -->
+                        <button class="btn-toggle" id="quickInfluenceToggle" title="Mostrar/Ocultar área de influencia">
+                            <i class="fas fa-bullseye"></i>
                         </button>
                     </div>
                 </div>
@@ -183,14 +258,25 @@
     <!-- Patrones -->
     <div class="patterns-horizontal-container">
         <div class="patterns-header">
-            <h3><i class="fas fa-shapes"></i> Patrones</h3>
-            <div class="pattern-info-mini">
-                <span id="patternNameMini">Selecciona un patrón</span>
+            <div class="patterns-header-left">
+                <h3><i class="fas fa-shapes"></i> Patrones</h3>
+                <div class="pattern-info-expanded" id="patternInfoExpanded">
+                    <div class="pattern-info-main" id="patternNameMini">Selecciona un patrón</div>
+                    <div class="pattern-info-secondary" id="patternDetailsMini"></div>
+                </div>
+            </div>
+            <div class="patterns-controls">
+                <button class="btn-toggle" id="patternsToggleRows" title="Alternar 1/2 filas">
+                    <i class="fas fa-grip-lines"></i>
+                </button>
+                <button class="btn-toggle" id="patternsToggleCompact" title="Vista compacta">
+                    <i class="fas fa-compress"></i>
+                </button>
             </div>
         </div>
 
         <div class="patterns-scroll-wrapper">
-            <div class="patterns-horizontal-scroll" id="patternsContainer">
+            <div class="patterns-grid-container" id="patternsContainer">
                 <!-- Patrones se cargarán aquí -->
             </div>
             <div class="scroll-buttons">
@@ -222,6 +308,7 @@
     </footer>
 </div>
 
+<script src="scripts/rules.js"></script>
 <script src="scripts/patterns.js"></script>
 <script src="scripts/automaton.js"></script>
 <script src="scripts/ui.js"></script>
