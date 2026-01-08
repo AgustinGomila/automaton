@@ -21,6 +21,7 @@ class UIController {
         document.getElementById('clearBtn').addEventListener('click', this.clear.bind(this));
         document.getElementById('cancelPatternBtn').addEventListener('click', () => {
             this.deselectPattern();
+            window.selectedPatternRotation = 0;
         });
 
         // Controles
@@ -51,26 +52,13 @@ class UIController {
         const preview = document.getElementById('patternPreview');
 
         // Eventos de ratón
-        canvas.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            this.isDrawing = true;
-
-            const {x, y} = automaton.getCellFromMouse(e);
-
-            if (window.selectedPattern) {
-                automaton.importPattern(window.selectedPattern, x, y);
-            } else {
-                automaton.toggleCell(x, y);
-            }
-        });
-
         canvas.addEventListener('mousemove', (e) => {
             const {x, y} = automaton.getCellFromMouse(e);
             this.updateMouseCoords(x, y);
 
-            // Mostrar vista previa del patrón
+            // Mostrar vista previa del patrón (con rotación actual)
             if (window.selectedPattern) {
-                showPatternPreview(x, y, window.selectedPattern);
+                showPatternPreview(x, y);
             } else {
                 hidePatternPreview();
             }
@@ -79,6 +67,24 @@ class UIController {
             if (this.isDrawing && !window.selectedPattern) {
                 automaton.toggleCell(x, y);
             }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            // Solo reaccionar al botón izquierdo (0) y central (1) para dibujar/colocar
+            if (e.button === 0 || e.button === 1) {
+                e.preventDefault();
+                this.isDrawing = true;
+
+                const {x, y} = automaton.getCellFromMouse(e);
+
+                if (window.selectedPattern) {
+                    // Solo colocar con clic izquierdo (0). El central (1) también podría, pero por ahora dejamos ambos.
+                    automaton.importPattern(window.selectedPattern, x, y);
+                } else {
+                    automaton.toggleCell(x, y);
+                }
+            }
+            // Si es clic derecho (2), no hacemos nada en mousedown, ya que se maneja en contextmenu.
         });
 
         canvas.addEventListener('mouseup', () => {
@@ -90,8 +96,48 @@ class UIController {
             hidePatternPreview();
         });
 
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+
+            // Solo rotar si hay un patrón seleccionado que no sea aleatorio
+            if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
+                window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
+
+                // Obtener el patrón rotado y actualizar el patrón seleccionado globalmente
+                window.selectedPattern = getPatternWithRotation(
+                    window.selectedPatternKey,
+                    window.selectedPatternRotation
+                );
+
+                // Actualizar la información del patrón
+                updatePatternInfo();
+
+                // Actualizar la vista previa en la posición actual del mouse
+                const {x, y} = automaton.getCellFromMouse(e);
+                showPatternPreview(x, y);
+
+                // Mostrar feedback visual de rotación
+                this.showRotationFeedback();
+            }
+            return false;
+        });
+
         // Eventos táctiles
         this.setupTouchEvents();
+    }
+
+    showRotationFeedback() {
+        const patternName = document.getElementById('patternNameMini');
+        if (patternName) {
+            const originalText = patternName.textContent;
+            patternName.textContent = `${originalText} ↻${window.selectedPatternRotation}°`;
+
+            setTimeout(() => {
+                const rotationText = window.selectedPatternRotation > 0 ?
+                    ` (${window.selectedPatternRotation}°)` : '';
+                patternName.textContent = `${window.selectedPattern.name}${rotationText}`;
+            }, 500);
+        }
     }
 
     setupTouchEvents() {
@@ -148,6 +194,8 @@ class UIController {
 
     deselectPattern() {
         window.selectedPattern = null;
+        window.selectedPatternKey = null;
+        window.selectedPatternRotation = 0;
         hidePatternPreview();
 
         document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
@@ -275,13 +323,29 @@ class UIController {
 
     bindKeyboardEvents() {
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') this.deselectPattern();
+            if (e.key === 'Escape') {
+                this.deselectPattern();
+                window.selectedPatternRotation = 0;
+            }
             if (e.key === ' ') {
                 e.preventDefault();
                 this.togglePlay();
             }
             if (e.key === 's' || e.key === 'S') this.step();
-            if (e.key === 'r' || e.key === 'R') this.randomize();
+            if (e.key === 'r' || e.key === 'R') {
+                e.preventDefault();
+                // Rotar con tecla R si hay patrón seleccionado
+                if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
+                    window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
+                    window.selectedPattern = getPatternWithRotation(
+                        window.selectedPatternKey,
+                        window.selectedPatternRotation
+                    );
+                    updatePatternInfo();
+                    this.showRotationFeedback();
+                }
+            }
+            if (e.key === 'a' || e.key === 'A') this.randomize();
             if (e.key === 'c' || e.key === 'C') this.clear();
         });
     }

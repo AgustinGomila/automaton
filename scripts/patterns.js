@@ -106,8 +106,8 @@ const PATTERNS = {
             [0, 1, 0, 0, 0]
         ]
     },
-    pattern19: {
-        name: "IX",
+    pattern11: {
+        name: "XI",
         description: "---",
         color: "#f5bb0b",
         pattern: [
@@ -118,8 +118,8 @@ const PATTERNS = {
             [0, 0, 1, 0, 0]
         ]
     },
-    pattern11: {
-        name: "XI",
+    pattern12: {
+        name: "XII",
         description: "---",
         color: "#63d406",
         pattern: [
@@ -131,8 +131,8 @@ const PATTERNS = {
             [0, 0, 0, 0, 1],
         ]
     },
-    pattern12: {
-        name: "XII",
+    pattern13: {
+        name: "XIII",
         description: "---",
         color: "#10b981",
         pattern: [
@@ -145,8 +145,8 @@ const PATTERNS = {
             [0, 1, 0, 0, 0, 1, 0]
         ]
     },
-    pattern13: {
-        name: "XIII",
+    pattern14: {
+        name: "XIV",
         description: "---",
         color: "#d4069a",
         pattern: [
@@ -159,8 +159,8 @@ const PATTERNS = {
             [0, 0, 0, 0, 0, 1, 0]
         ]
     },
-    pattern14: {
-        name: "XIV",
+    pattern15: {
+        name: "XV",
         description: "---",
         color: "#d44e06",
         pattern: [
@@ -174,8 +174,8 @@ const PATTERNS = {
             [0, 0, 1, 0, 0, 0, 0, 0]
         ]
     },
-    pattern15: {
-        name: "XV",
+    pattern16: {
+        name: "XVI",
         description: "---",
         color: "#d4b906",
         pattern: [
@@ -190,8 +190,8 @@ const PATTERNS = {
             [0, 0, 0, 0, 1, 0, 0, 0, 0]
         ]
     },
-    pattern16: {
-        name: "XVI",
+    pattern17: {
+        name: "XVII",
         description: "---",
         color: "#0636d4",
         pattern: [
@@ -206,8 +206,8 @@ const PATTERNS = {
             [0, 0, 0, 0, 1, 0, 0, 0, 0]
         ]
     },
-    pattern17: {
-        name: "XVII",
+    pattern18: {
+        name: "XVIII",
         description: "---",
         color: "#d406ab",
         pattern: [
@@ -222,8 +222,8 @@ const PATTERNS = {
             [0, 0, 0, 0, 1, 0, 0, 0, 0]
         ]
     },
-    pattern18: {
-        name: "XVIII",
+    pattern19: {
+        name: "XIX",
         description: "---",
         color: "#06d42f",
         pattern: [
@@ -301,8 +301,8 @@ function getPatternWithRotation(patternKey, rotation = 0) {
 }
 
 // Variables globales para estado
-let selectedPatternKey = null;
-let selectedPatternRotation = 0;
+window.selectedPatternKey = null;
+window.selectedPatternRotation = 0;
 
 function renderPatterns() {
     const container = document.getElementById('patternsContainer');
@@ -463,7 +463,7 @@ function updatePatternInfo() {
 
 function showPatternPreview(x, y) {
     const preview = document.getElementById('patternPreview');
-    const pattern = window.selectedPattern;
+    const pattern = window.selectedPattern; // Ya incluye rotación
 
     if (!pattern || !pattern.pattern || pattern.pattern === 'random') {
         preview.style.display = 'none';
