@@ -247,9 +247,23 @@
 
                 <div class="instructions">
                     <p>
-                        <i class="fas fa-mouse-pointer"></i> Clic izquierdo para dibujar/colocar patrón |
-                        <i class="fas fa-redo-alt"></i> Clic derecho en patrón para rotar 90°
+                        <span class="pattern-mode-indicator free-draw" id="drawModeIndicator">Modo: Dibujo libre</span>
+                        |
+                        <i class="fas fa-mouse-pointer"></i> <strong>Clic + arrastrar</strong> para dibujar |
+                        <i class="fas fa-eraser"></i> <strong>Ctrl + clic + arrastrar</strong> para borrar |
+                        <i class="fas fa-vector-square"></i> <strong>Shift + arrastrar</strong> para seleccionar área |
+                        <br>
+                        <i class="fas fa-arrows-alt"></i> <strong>Ctrl + arrastrar</strong> selección para mover |
+                        <i class="fas fa-copy"></i> <strong>Ctrl+Shift + arrastrar</strong> selección para copiar |
+                        <i class="fas fa-trash"></i> <strong>Delete</strong> para borrar selección |
+                        <i class="fas fa-redo-alt"></i> <strong>Clic derecho</strong> en patrón para rotar |
+                        <i class="fas fa-times"></i> Botón <strong>"Cancelar"</strong> para volver a dibujo libre
                     </p>
+                </div>
+
+                <div class="mode-indicator" id="modeIndicator">
+                    <i class="fas fa-pencil-alt"></i>
+                    <span id="modeText">Modo: Dibujar (Ctrl para borrar)</span>
                 </div>
             </div>
         </div>
@@ -314,5 +328,51 @@
 <script src="scripts/core/automaton.js"></script>
 <script src="scripts/ui/ui-controller.js"></script>
 <script src="scripts/ui/responsive-controller.js"></script>
+
+<script>
+    // Actualizar indicador de modo
+    document.addEventListener('keydown', (e) => {
+        const indicator = document.getElementById('modeIndicator');
+        const modeText = document.getElementById('modeText');
+
+        if (!indicator || !modeText) return;
+
+        if (e.key === 'Control' || e.ctrlKey) {
+            indicator.className = 'mode-indicator erase';
+            modeText.textContent = 'Modo: Borrar (suelta Ctrl para dibujar)';
+            indicator.querySelector('i').className = 'fas fa-eraser';
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        const indicator = document.getElementById('modeIndicator');
+        const modeText = document.getElementById('modeText');
+
+        if (!indicator || !modeText) return;
+
+        if (e.key === 'Control' || !e.ctrlKey) {
+            indicator.className = 'mode-indicator';
+            modeText.textContent = 'Modo: Dibujar (Ctrl para borrar)';
+            indicator.querySelector('i').className = 'fas fa-pencil-alt';
+        }
+    });
+
+    // Inicialización para asegurar que el dibujo continuo funcione desde el inicio
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+            // Forzar una primera actualización del estado
+            const canvas = document.getElementById('canvas');
+            if (canvas) {
+                canvas.addEventListener('mousedown', function initDraw(e) {
+                    // Este evento se ejecuta una vez para inicializar
+                    console.log('Dibujo inicializado correctamente');
+                    // Remover el listener después de la primera ejecución
+                    canvas.removeEventListener('mousedown', initDraw);
+                }, {once: true});
+            }
+        }, 1000);
+    });
+</script>
+
 </body>
 </html>

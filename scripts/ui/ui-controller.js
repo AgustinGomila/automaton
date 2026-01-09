@@ -1,21 +1,39 @@
-// UI Controller
+// UI Controller - Versión simplificada y funcional
 class UIController {
 
     constructor() {
-        this.isDrawing = false;
         this.showInfluenceArea = false;
         this.patternsTwoRows = false;
         this.patternsCompactView = false;
         this.rulesLoaded = false;
 
-        // Inicializar regla
-        this.initUi().then(() => console.log('Reglas cargadas.'));
+        // Estados de edición
+        this.isMouseDown = false;
+        this.lastCell = null;
+        this.isSelecting = false;
+        this.selection = null;
+        this.selectionContent = null;
+        this.isDragging = false;
+        this.isCopying = false;
+
+        // Estado de teclas
+        this.ctrlPressed = false;
+        this.shiftPressed = false;
+
+        // Inicializar sin patrón seleccionado
+        window.selectedPatternKey = null;
+        window.selectedPattern = null;
+        window.selectedPatternRotation = 0;
+
+        // Escuchar eventos de cambio de patrón
+        this.bindPatternEvents();
+
+        // Inicializar
+        this.initUi().then(() => console.log('UI Controller inicializado.'));
     }
 
     async initUi() {
-        // Esperar a que se carguen las reglas
         await this.waitForRules();
-
         this.bindEvents();
         this.bindKeyboardEvents();
         this.updateSpeedDisplay();
@@ -24,11 +42,8 @@ class UIController {
         this.loadRules();
         this.bindNeighborhoodEvents();
         this.bindPatternsControls();
-
-        // Inicializar ambos indicadores
         this.updateNeighborhoodInfo();
 
-        // Inicializar reglas si hay una seleccionada
         const selector = document.getElementById('ruleSelector');
         if (selector && selector.value && window.RULES) {
             const ruleKey = selector.value;
@@ -40,29 +55,22 @@ class UIController {
     }
 
     async waitForRules() {
-        // Si ya hay reglas cargadas, continuar
         if (window.RULES && Object.keys(window.RULES).length > 0) {
-            console.log('Reglas ya cargadas:', Object.keys(window.RULES).length);
             this.rulesLoaded = true;
             return;
         }
 
-        // Si no, esperar a que se carguen
         console.log('Esperando carga de reglas...');
 
-        // Intentar cargar con el loader
         if (window.rulesLoader) {
             await window.rulesLoader.load();
             this.rulesLoaded = true;
         } else {
-            // Fallback: esperar un momento y verificar
             await new Promise(resolve => setTimeout(resolve, 500));
-
             if (window.RULES) {
                 this.rulesLoaded = true;
             } else {
-                console.error('No se pudieron cargar las reglas');
-                await window.rulesLoader.loadEmbeddedRules()
+                await window.rulesLoader.loadEmbeddedRules();
                 this.rulesLoaded = true;
             }
         }
@@ -72,19 +80,15 @@ class UIController {
         const selector = document.getElementById('ruleSelector');
         if (!selector) return;
 
-        // Verificar que las reglas estén disponibles
         if (!window.RULES) {
-            console.error('RULES no está definido');
             this.showRuleLoadError();
             return;
         }
 
-        // Limpiar selector (excepto primera opción)
         while (selector.options.length > 1) {
-            selector.removeItem(1);
+            selector.remove(1);
         }
 
-        // Agregar cada regla
         Object.keys(window.RULES).forEach(key => {
             const rule = window.RULES[key];
             const option = document.createElement('option');
@@ -93,7 +97,6 @@ class UIController {
             selector.appendChild(option);
         });
 
-        // Seleccionar Conway por defecto si existe
         if (window.RULES.conway) {
             selector.value = 'conway';
             this.updateRuleInfo(window.RULES.conway);
@@ -101,24 +104,12 @@ class UIController {
     }
 
     showRuleLoadError() {
-        // Mostrar mensaje de error en el selector
         const selector = document.getElementById('ruleSelector');
         const errorOption = document.createElement('option');
         errorOption.value = 'error';
         errorOption.textContent = 'Error cargando reglas';
         errorOption.disabled = true;
         selector.appendChild(errorOption);
-
-        // También mostrar en la UI
-        const rulesPanel = document.getElementById('rulesSpecific');
-        if (rulesPanel) {
-            rulesPanel.innerHTML = `
-                <p style="color: var(--danger)">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    Error cargando reglas. Usando configuración por defecto.
-                </p>
-            `;
-        }
     }
 
     bindEvents() {
@@ -137,14 +128,8 @@ class UIController {
         document.getElementById('applyCustomRuleBtn').addEventListener('click', () => {
             this.applyCustomRule();
         });
-        document.getElementById('birthInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.applyCustomRule();
-        });
-        document.getElementById('survivalInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.applyCustomRule();
-        });
 
-        // Área de influencia toggle
+        // Área de influencia
         document.getElementById('influenceToggle').addEventListener('change', this.toggleInfluenceArea.bind(this));
         document.getElementById('quickInfluenceToggle').addEventListener('click', this.quickToggleInfluenceArea.bind(this));
 
@@ -173,90 +158,120 @@ class UIController {
 
     bindCanvasEvents() {
         const canvas = document.getElementById('canvas');
-        const preview = document.getElementById('patternPreview');
 
-        // Eventos de ratón
+        // MOUSE DOWN
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // Solo botón izquierdo
+
+            e.preventDefault();
+            this.isMouseDown = true;
+
+            const {x, y} = automaton.getCellFromMouse(e);
+            this.lastCell = {x, y};
+
+            // Determinar acción
+            if (this.shiftPressed && !this.ctrlPressed && !this.selection) {
+                // Nueva selección
+                this.startSelection(x, y);
+                return;
+            }
+
+            if (this.selection && this.isPointInSelection(x, y)) {
+                // Arrastrar selección
+                this.startDrag(x, y, this.ctrlPressed && this.shiftPressed);
+                return;
+            }
+
+            // Si HAY patrón seleccionado, colocarlo
+            if (window.selectedPattern) {
+                automaton.importPattern(window.selectedPattern, x, y);
+                return;
+            }
+
+            // Si NO hay patrón seleccionado, dibujar/borrar
+            automaton.grid[x][y] = !this.ctrlPressed;
+            automaton.updateStats();
+            automaton.render();
+        });
+
+        // MOUSE MOVE
         canvas.addEventListener('mousemove', (e) => {
             const {x, y} = automaton.getCellFromMouse(e);
             this.updateMouseCoords(x, y);
 
+            // Vista previa solo si HAY patrón seleccionado
             if (window.selectedPattern) {
                 showPatternPreview(x, y);
-
-                // Mostrar área de influencia si está activada
-                if (this.showInfluenceArea) {
-                    showInfluenceArea(x, y);
-                } else {
-                    hideInfluenceArea();
-                }
+                if (this.showInfluenceArea) showInfluenceArea(x, y);
             } else {
+                // Si NO hay patrón seleccionado, ocultar preview
                 hidePatternPreview();
+                if (this.showInfluenceArea && !this.selection) showInfluenceArea(x, y);
+            }
 
-                // Mostrar área de influencia para celda individual si está activada
-                if (this.showInfluenceArea) {
-                    showInfluenceArea(x, y);
-                } else {
-                    hideInfluenceArea();
+            // Si mouse está presionado
+            if (this.isMouseDown) {
+                if (this.isSelecting) {
+                    this.updateSelection(x, y);
+                } else if (this.isDragging) {
+                    this.updateDrag(x, y);
+                } else if (!window.selectedPattern) {
+                    // Solo dibujo continuo si NO hay patrón seleccionado
+                    this.handleContinuousDrawing(x, y);
                 }
             }
+        });
 
-            if (this.isDrawing && !window.selectedPattern) {
-                automaton.toggleCell(x, y);
+        // MOUSE UP
+        canvas.addEventListener('mouseup', (e) => {
+            if (e.button !== 0) return;
+
+            this.isMouseDown = false;
+
+            if (this.isSelecting) {
+                this.endSelection();
             }
-        });
 
-        canvas.addEventListener('mousedown', (e) => {
-            // Solo reaccionar al botón izquierdo (0) y central (1) para dibujar/colocar
-            if (e.button === 0 || e.button === 1) {
-                e.preventDefault();
-                this.isDrawing = true;
-
-                const {x, y} = automaton.getCellFromMouse(e);
-
-                if (window.selectedPattern) {
-                    // Solo colocar con clic izquierdo (0). El central (1) también podría, pero por ahora dejamos ambos.
-                    automaton.importPattern(window.selectedPattern, x, y);
-                } else {
-                    automaton.toggleCell(x, y);
-                }
+            if (this.isDragging) {
+                this.endDrag();
             }
-            // Si es clic derecho (2), no hacemos nada en mousedown, ya que se maneja en contextmenu.
+
+            this.lastCell = null;
         });
 
-        canvas.addEventListener('mouseup', () => {
-            this.isDrawing = false;
-        });
-
+        // MOUSE LEAVE
         canvas.addEventListener('mouseleave', () => {
-            this.isDrawing = false;
+            this.isMouseDown = false;
+
+            if (this.isSelecting) {
+                this.endSelection();
+            }
+
+            if (this.isDragging) {
+                this.endDrag();
+            }
+
             hidePatternPreview();
             if (!this.showInfluenceArea) {
                 hideInfluenceArea();
             }
+
+            this.lastCell = null;
         });
 
+        // CONTEXT MENU - Rotar patrón
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-
-            // Solo rotar si hay un patrón seleccionado que no sea aleatorio
             if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
                 window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-
-                // Obtener el patrón rotado y actualizar el patrón seleccionado globalmente
                 window.selectedPattern = getPatternWithRotation(
                     window.selectedPatternKey,
                     window.selectedPatternRotation
                 );
-
-                // Actualizar la información del patrón
                 updatePatternInfo();
 
-                // Actualizar la vista previa en la posición actual del mouse
                 const {x, y} = automaton.getCellFromMouse(e);
                 showPatternPreview(x, y);
-
-                // Mostrar feedback visual de rotación
-                this.showRotationFeedback();
             }
             return false;
         });
@@ -265,203 +280,426 @@ class UIController {
         this.setupTouchEvents();
     }
 
-    applyCustomRule() {
-        const birthInput = document.getElementById('birthInput').value;
-        const survivalInput = document.getElementById('survivalInput').value;
+    // DIBUJO CONTINUO
+    handleContinuousDrawing(x, y) {
+        if (!this.lastCell) {
+            this.lastCell = {x, y};
+            return;
+        }
 
-        try {
-            const customRule = parseCustomRule(birthInput, survivalInput);
+        if (this.lastCell.x === x && this.lastCell.y === y) {
+            return;
+        }
 
-            if (customRule.birth.length === 0 && customRule.survival.length === 0) {
-                throw new Error('Ingresa valores válidos para B y S');
+        const drawMode = this.ctrlPressed ? 'erase' : 'draw';
+        const state = drawMode !== 'erase';
+        let needsRender = false;
+
+        const cells = this.getLineCells(this.lastCell.x, this.lastCell.y, x, y);
+
+        cells.forEach(cell => {
+            if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) {
+                return;
             }
 
-            // Aplicar la regla al autómata
-            automaton.setRule(customRule.survival, customRule.birth);
+            // Usar función optimizada
+            if (automaton.setCellAndRender(cell.x, cell.y, state)) {
+                needsRender = true;
+            }
+        });
 
-            // Actualizar la información en el header
-            this.updateCustomRuleInfo();
+        this.lastCell = {x, y};
 
-            // Mostrar confirmación
-            alert(`Regla personalizada aplicada: B${customRule.birth.join('')}/S${customRule.survival.join('')}`);
-
-        } catch (error) {
-            alert(`Error: ${error.message}`);
+        // Solo renderizar si hubo cambios
+        if (needsRender) {
+            automaton.updateStats();
+            automaton.render();
         }
     }
 
-    updateCustomRuleInfo() {
-        const rulesSpecific = document.getElementById('rulesSpecific');
-        if (!rulesSpecific || !automaton) return;
+    getLineCells(x0, y0, x1, y1) {
+        const cells = [];
+        const dx = Math.abs(x1 - x0);
+        const dy = Math.abs(y1 - y0);
+        const sx = (x0 < x1) ? 1 : -1;
+        const sy = (y0 < y1) ? 1 : -1;
+        let err = dx - dy;
 
-        const birth = automaton.rule.birth.sort((a, b) => a - b);
-        const survival = automaton.rule.survival.sort((a, b) => a - b);
+        while (true) {
+            cells.push({x: x0, y: y0});
+            if (x0 === x1 && y0 === y1) break;
 
-        rulesSpecific.innerHTML = `
-        <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${birth.join(', ')} vecinos</p>
-        <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${survival.join(', ')} vecinos</p>
-        <p class="notation">
-            Notación: <span class="highlight">B${birth.join('')}/S${survival.join('')}</span>
-        </p>
-    `;
-
-        // Actualizar el título de la página
-        document.title = `Autómata Celular - Personalizada B${birth.join('')}/S${survival.join('')}`;
-
-        // Actualizar el header principal
-        const headerTitle = document.querySelector('h1');
-        if (headerTitle) {
-            headerTitle.innerHTML = `<i class="fas fa-cogs"></i> Autómata - Personalizada`;
+            const e2 = 2 * err;
+            if (e2 > -dy) {
+                err -= dy;
+                x0 += sx;
+            }
+            if (e2 < dx) {
+                err += dx;
+                y0 += sy;
+            }
         }
+
+        return cells;
     }
 
-    showRotationFeedback() {
-        const patternName = document.getElementById('patternNameMini');
-        if (patternName) {
-            const originalText = patternName.textContent;
-            patternName.textContent = `${originalText} ↻${window.selectedPatternRotation}°`;
-
-            setTimeout(() => {
-                const rotationText = window.selectedPatternRotation > 0 ?
-                    ` (${window.selectedPatternRotation}°)` : '';
-                patternName.textContent = `${window.selectedPattern.name}${rotationText}`;
-            }, 500);
-        }
+    // SELECCIÓN
+    startSelection(x, y) {
+        this.clearSelection();
+        this.isSelecting = true;
+        this.selection = {
+            startX: x,
+            startY: y,
+            endX: x,
+            endY: y
+        };
+        this.updateSelectionVisual();
     }
 
-    setupTouchEvents() {
+    updateSelection(x, y) {
+        if (!this.isSelecting || !this.selection) return;
+        this.selection.endX = x;
+        this.selection.endY = y;
+        this.updateSelectionVisual();
+    }
+
+    endSelection() {
+        if (!this.isSelecting || !this.selection) return;
+
+        this.isSelecting = false;
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const maxX = Math.max(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.startY, this.selection.endY);
+
+        this.selectionContent = automaton.copyArea(minX, minY, maxX, maxY);
+        this.showSelectionInfo();
+    }
+
+    clearSelection() {
+        this.selection = null;
+        this.selectionContent = null;
+        this.hideSelectionVisual();
+        this.hideSelectionInfo();
+    }
+
+    isPointInSelection(x, y) {
+        if (!this.selection) return false;
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const maxX = Math.max(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.startY, this.selection.endY);
+
+        return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+
+    deleteSelection() {
+        if (!this.selection) return;
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const maxX = Math.max(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.startY, this.selection.endY);
+
+        automaton.clearArea(minX, minY, maxX, maxY);
+        this.clearSelection();
+    }
+
+    // ARRASTRE Y COPIA
+    startDrag(x, y, isCopy) {
+        if (!this.selection || !this.selectionContent) return;
+
+        this.isDragging = true;
+        this.isCopying = isCopy;
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        this.dragOffset = {
+            x: x - minX,
+            y: y - minY
+        };
+
+        this.createDragPreview();
+    }
+
+    updateDrag(x, y) {
+        if (!this.isDragging || !this.selectionContent) return;
+
+        const targetX = x - this.dragOffset.x;
+        const targetY = y - this.dragOffset.y;
+
+        this.updateDragPreview(targetX, targetY);
+    }
+
+    endDrag() {
+        if (!this.isDragging || !this.selectionContent) return;
+
+        this.isDragging = false;
+
+        const dragPreview = document.getElementById('dragPreview');
+        if (!dragPreview) return;
+
+        const targetX = parseInt(dragPreview.dataset.targetX) || 0;
+        const targetY = parseInt(dragPreview.dataset.targetY) || 0;
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const maxX = Math.max(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.startY, this.selection.endY);
+
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+
+        // Si no es copia, borrar área original
+        if (!this.isCopying) {
+            automaton.clearArea(minX, minY, maxX, maxY);
+        }
+
+        // Pegar en nueva posición
+        automaton.pasteArea(this.selectionContent, targetX, targetY);
+
+        // Actualizar selección
+        if (this.isCopying) {
+            // Mantener selección original
+            this.selectionContent = automaton.copyArea(targetX, targetY, targetX + width - 1, targetY + height - 1);
+        } else {
+            // Mover selección
+            this.selection.startX = targetX;
+            this.selection.startY = targetY;
+            this.selection.endX = targetX + width - 1;
+            this.selection.endY = targetY + height - 1;
+            this.selectionContent = automaton.copyArea(targetX, targetY, targetX + width - 1, targetY + height - 1);
+        }
+
+        this.removeDragPreview();
+        this.updateSelectionVisual();
+        this.showSelectionInfo();
+    }
+
+    // VISUALIZACIÓN
+    updateSelectionVisual() {
+        if (!this.selection) {
+            this.hideSelectionVisual();
+            return;
+        }
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const maxX = Math.max(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.startY, this.selection.endY);
+
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+
+        let selectionDiv = document.getElementById('selectionOverlay');
+        if (!selectionDiv) {
+            selectionDiv = document.createElement('div');
+            selectionDiv.id = 'selectionOverlay';
+            selectionDiv.className = 'selection-overlay';
+            document.getElementById('canvas-container').appendChild(selectionDiv);
+        }
+
+        const cellSize = automaton.cellSize;
         const canvas = document.getElementById('canvas');
-        let isTouchDrawing = false;
-        let touchStartTime = 0;
+        const container = document.getElementById('canvas-container');
+        const canvasRect = canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
 
-        canvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length !== 1) return;
+        const offsetX = canvasRect.left - containerRect.left;
+        const offsetY = canvasRect.top - containerRect.top;
+        const scaleX = canvas.width / canvasRect.width;
+        const scaleY = canvas.height / canvasRect.height;
 
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchStartTime = Date.now();
-
-            const {x, y} = automaton.getCellFromMouse(touch);
-
-            if (window.selectedPattern) {
-                automaton.importPattern(window.selectedPattern, x, y);
-            } else {
-                isTouchDrawing = true;
-                automaton.toggleCell(x, y);
-            }
-        });
-
-        canvas.addEventListener('touchmove', (e) => {
-            if (!isTouchDrawing || !e.touches[0]) return;
-
-            e.preventDefault();
-            const touch = e.touches[0];
-            const {x, y} = automaton.getCellFromMouse(touch);
-
-            // Solo dibujar si nos movimos suficiente
-            const touchTime = Date.now() - touchStartTime;
-            if (touchTime > 50) {
-                automaton.toggleCell(x, y);
-            }
-        });
-
-        canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            isTouchDrawing = false;
-        });
-
-        // Prevenir zoom con doble toque
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', (e) => {
-            const now = Date.now();
-            if (now - lastTouchEnd <= 300) {
-                e.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, false);
+        selectionDiv.style.display = 'block';
+        selectionDiv.style.left = (offsetX + minX * cellSize / scaleX) + 'px';
+        selectionDiv.style.top = (offsetY + minY * cellSize / scaleY) + 'px';
+        selectionDiv.style.width = (width * cellSize / scaleX) + 'px';
+        selectionDiv.style.height = (height * cellSize / scaleY) + 'px';
     }
 
-    // Controlar las filas de patrones
-    bindPatternsControls() {
-        const toggleRowsBtn = document.getElementById('patternsToggleRows');
-        const toggleCompactBtn = document.getElementById('patternsToggleCompact');
-        const container = document.getElementById('patternsContainer');
+    hideSelectionVisual() {
+        const selectionDiv = document.getElementById('selectionOverlay');
+        if (selectionDiv) {
+            selectionDiv.style.display = 'none';
+        }
+    }
 
-        if (toggleRowsBtn && container) {
-            toggleRowsBtn.addEventListener('click', () => {
-                this.patternsTwoRows = !this.patternsTwoRows;
-                container.classList.toggle('two-rows', this.patternsTwoRows);
+    createDragPreview() {
+        this.removeDragPreview();
 
-                // Cambiar icono
-                const icon = toggleRowsBtn.querySelector('i');
-                if (this.patternsTwoRows) {
-                    icon.className = 'fas fa-grip-lines-vertical';
-                    toggleRowsBtn.title = 'Cambiar a 1 fila';
-                } else {
-                    icon.className = 'fas fa-grip-lines';
-                    toggleRowsBtn.title = 'Cambiar a 2 filas';
+        if (!this.selectionContent) return;
+
+        const dragPreview = document.createElement('div');
+        dragPreview.id = 'dragPreview';
+        dragPreview.className = 'drag-preview';
+
+        // Crear canvas para mostrar contenido
+        const canvas = document.createElement('canvas');
+        const width = this.selectionContent.width;
+        const height = this.selectionContent.height;
+
+        canvas.width = width * automaton.cellSize;
+        canvas.height = height * automaton.cellSize;
+
+        const ctx = canvas.getContext('2d');
+
+        // Dibujar contenido
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) {
+                if (this.selectionContent.grid[x][y]) {
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.fillRect(
+                        x * automaton.cellSize + 1,
+                        y * automaton.cellSize + 1,
+                        automaton.cellSize - 2,
+                        automaton.cellSize - 2
+                    );
                 }
-            });
+            }
         }
 
-        if (toggleCompactBtn && container) {
-            toggleCompactBtn.addEventListener('click', () => {
-                this.patternsCompactView = !this.patternsCompactView;
-                container.classList.toggle('compact-view', this.patternsCompactView);
+        dragPreview.appendChild(canvas);
+        document.getElementById('canvas-container').appendChild(dragPreview);
 
-                // Aplicar clase compact a todos los botones
-                document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
-                    btn.classList.toggle('compact', this.patternsCompactView);
-                });
+        // Posicionar inicialmente
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        this.updateDragPreview(minX, minY);
+    }
 
-                // Cambiar icono
-                const icon = toggleCompactBtn.querySelector('i');
-                if (this.patternsCompactView) {
-                    icon.className = 'fas fa-expand-alt';
-                    toggleCompactBtn.title = 'Vista normal';
-                } else {
-                    icon.className = 'fas fa-compress';
-                    toggleCompactBtn.title = 'Vista compacta';
+    updateDragPreview(targetX, targetY) {
+        const dragPreview = document.getElementById('dragPreview');
+        if (!dragPreview) return;
+
+        dragPreview.dataset.targetX = targetX;
+        dragPreview.dataset.targetY = targetY;
+
+        const width = this.selectionContent.width;
+        const height = this.selectionContent.height;
+
+        const cellSize = automaton.cellSize;
+        const canvas = document.getElementById('canvas');
+        const container = document.getElementById('canvas-container');
+        const canvasRect = canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        const offsetX = canvasRect.left - containerRect.left;
+        const offsetY = canvasRect.top - containerRect.top;
+        const scaleX = canvas.width / canvasRect.width;
+        const scaleY = canvas.height / canvasRect.height;
+
+        dragPreview.style.position = 'absolute';
+        dragPreview.style.left = (offsetX + targetX * cellSize / scaleX) + 'px';
+        dragPreview.style.top = (offsetY + targetY * cellSize / scaleY) + 'px';
+        dragPreview.style.width = (width * cellSize / scaleX) + 'px';
+        dragPreview.style.height = (height * cellSize / scaleY) + 'px';
+        dragPreview.style.border = this.isCopying ? '2px dashed #10b981' : '2px solid #3b82f6';
+        dragPreview.style.zIndex = '5';
+        dragPreview.style.pointerEvents = 'none';
+    }
+
+    removeDragPreview() {
+        const dragPreview = document.getElementById('dragPreview');
+        if (dragPreview) {
+            dragPreview.remove();
+        }
+    }
+
+    showSelectionInfo() {
+        if (!this.selection) return;
+
+        const minX = Math.min(this.selection.startX, this.selection.endX);
+        const maxX = Math.max(this.selection.startX, this.selection.endX);
+        const minY = Math.min(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.startY, this.selection.endY);
+
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+
+        let infoDiv = document.getElementById('selectionInfo');
+        if (!infoDiv) {
+            infoDiv = document.createElement('div');
+            infoDiv.id = 'selectionInfo';
+            infoDiv.className = 'selection-info';
+            document.querySelector('.canvas-controls').appendChild(infoDiv);
+        }
+
+        infoDiv.innerHTML = `
+            <div class="selection-info-content">
+                <span><i class="fas fa-vector-square"></i> ${width}×${height}</span>
+                <button id="deleteSelectionBtn" class="btn-small"><i class="fas fa-trash"></i></button>
+                <button id="clearSelectionBtn" class="btn-small"><i class="fas fa-times"></i></button>
+            </div>
+        `;
+
+        document.getElementById('deleteSelectionBtn').addEventListener('click', () => {
+            this.deleteSelection();
+        });
+
+        document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+            this.clearSelection();
+        });
+
+        infoDiv.style.display = 'block';
+    }
+
+    hideSelectionInfo() {
+        const infoDiv = document.getElementById('selectionInfo');
+        if (infoDiv) {
+            infoDiv.style.display = 'none';
+        }
+    }
+
+    // TECLADO
+    bindKeyboardEvents() {
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Control') this.ctrlPressed = true;
+            if (e.key === 'Shift') this.shiftPressed = true;
+
+            if (e.key === 'Escape') {
+                this.deselectPattern();
+                this.clearSelection();
+                window.selectedPatternRotation = 0;
+            }
+            if (e.key === ' ') {
+                e.preventDefault();
+                this.togglePlay();
+            }
+            if (e.key === 's' || e.key === 'S') this.step();
+            if (e.key === 'r' || e.key === 'R') {
+                e.preventDefault();
+                if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
+                    window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
+                    window.selectedPattern = getPatternWithRotation(
+                        window.selectedPatternKey,
+                        window.selectedPatternRotation
+                    );
+                    updatePatternInfo();
                 }
-            });
-        }
+            }
+            if (e.key === 'a' || e.key === 'A') this.randomize();
+            if (e.key === 'c' || e.key === 'C') this.clear();
+            if (e.key === 'Delete' && this.selection) {
+                e.preventDefault();
+                this.deleteSelection();
+            }
+        });
 
-        // Scroll buttons mejorados
-        const scrollLeft = document.getElementById('scrollLeft');
-        const scrollRight = document.getElementById('scrollRight');
-
-        if (scrollLeft && scrollRight && container) {
-            scrollLeft.addEventListener('click', () => {
-                container.scrollLeft -= 150;
-            });
-
-            scrollRight.addEventListener('click', () => {
-                container.scrollLeft += 150;
-            });
-
-            // Mostrar/ocultar botones de scroll según posición
-            container.addEventListener('scroll', () => {
-                const showLeft = container.scrollLeft > 0;
-                const showRight = container.scrollLeft < (container.scrollWidth - container.clientWidth);
-
-                scrollLeft.style.opacity = showLeft ? '1' : '0.5';
-                scrollLeft.style.pointerEvents = showLeft ? 'all' : 'none';
-
-                scrollRight.style.opacity = showRight ? '1' : '0.5';
-                scrollRight.style.pointerEvents = showRight ? 'all' : 'none';
-            });
-
-            // Inicializar estado
-            container.dispatchEvent(new Event('scroll'));
-        }
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'Control') this.ctrlPressed = false;
+            if (e.key === 'Shift') this.shiftPressed = false;
+        });
     }
 
     deselectPattern() {
         window.selectedPattern = null;
         window.selectedPatternKey = null;
         window.selectedPatternRotation = 0;
-        hidePatternPreview();
-        hideInfluenceArea();
 
         document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
             btn.classList.remove('active');
@@ -469,6 +707,12 @@ class UIController {
 
         const miniEl = document.getElementById('patternNameMini');
         if (miniEl) miniEl.textContent = 'Selecciona un patrón';
+
+        hidePatternPreview();
+        hideInfluenceArea();
+
+        // Actualizar indicador de modo
+        this.updateDrawModeIndicator();
     }
 
     updateMouseCoords(x, y) {
@@ -479,7 +723,6 @@ class UIController {
     }
 
     togglePlay() {
-        // Si se alcanzó un límite, resetear antes de continuar
         if (automaton.isLimitReached) {
             automaton.isLimitReached = false;
             automaton.generation = 0;
@@ -552,31 +795,7 @@ class UIController {
 
         if (!automaton.isRunning || confirm('Cambiar el tamaño detendrá la simulación. ¿Continuar?')) {
             if (automaton.isRunning) this.togglePlay();
-
-            // Guardar estado del mouse
-            const lastCoords = document.getElementById('mouseCoords').textContent;
-            const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
-            let lastX = 0, lastY = 0;
-            if (match) {
-                lastX = parseInt(match[1]);
-                lastY = parseInt(match[2]);
-            }
-
             automaton.resizeGrid(value);
-
-            // Restaurar preview después del resize
-            setTimeout(() => {
-                if (window.selectedPattern) {
-                    // Limitar coordenadas al nuevo tamaño
-                    const safeX = Math.min(lastX, value - 1);
-                    const safeY = Math.min(lastY, value - 1);
-                    showPatternPreview(safeX, safeY);
-
-                    if (this.showInfluenceArea) {
-                        showInfluenceArea(safeX, safeY);
-                    }
-                }
-            }, 100);
         }
     }
 
@@ -590,25 +809,7 @@ class UIController {
         const slider = document.getElementById('cellSize');
         const value = parseInt(slider.value);
         document.getElementById('cellSizeValue').textContent = `${value}px`;
-
         automaton.setCellSize(value);
-
-        // Forzar reflow y actualizar previews
-        setTimeout(() => {
-            if (window.selectedPattern) {
-                const lastCoords = document.getElementById('mouseCoords').textContent;
-                const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
-                if (match) {
-                    const x = parseInt(match[1]);
-                    const y = parseInt(match[2]);
-                    showPatternPreview(x, y);
-
-                    if (this.showInfluenceArea) {
-                        showInfluenceArea(x, y);
-                    }
-                }
-            }
-        }, 50);
     }
 
     updateCellSizeDisplay() {
@@ -625,7 +826,6 @@ class UIController {
         const toggle = document.getElementById('influenceToggle');
         this.showInfluenceArea = toggle.checked;
 
-        // Sincronizar el botón rápido
         const quickToggle = document.getElementById('quickInfluenceToggle');
         if (quickToggle) {
             if (this.showInfluenceArea) {
@@ -639,15 +839,6 @@ class UIController {
 
         if (!this.showInfluenceArea) {
             hideInfluenceArea();
-        } else if (window.selectedPattern) {
-            // Si hay patrón seleccionado y el área está activa, mostrarla
-            const lastCoords = document.getElementById('mouseCoords').textContent;
-            const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
-            if (match) {
-                const x = parseInt(match[1]);
-                const y = parseInt(match[2]);
-                showInfluenceArea(x, y);
-            }
         }
     }
 
@@ -656,7 +847,6 @@ class UIController {
         this.showInfluenceArea = !this.showInfluenceArea;
         toggle.checked = this.showInfluenceArea;
 
-        // Actualizar estilo del botón rápido
         const quickToggle = document.getElementById('quickInfluenceToggle');
         if (this.showInfluenceArea) {
             quickToggle.classList.add('active');
@@ -673,35 +863,6 @@ class UIController {
         if (container) {
             container.scrollLeft += direction;
         }
-    }
-
-    bindKeyboardEvents() {
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                this.deselectPattern();
-                window.selectedPatternRotation = 0;
-            }
-            if (e.key === ' ') {
-                e.preventDefault();
-                this.togglePlay();
-            }
-            if (e.key === 's' || e.key === 'S') this.step();
-            if (e.key === 'r' || e.key === 'R') {
-                e.preventDefault();
-                // Rotar con tecla R si hay patrón seleccionado
-                if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
-                    window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-                    window.selectedPattern = getPatternWithRotation(
-                        window.selectedPatternKey,
-                        window.selectedPatternRotation
-                    );
-                    updatePatternInfo();
-                    this.showRotationFeedback();
-                }
-            }
-            if (e.key === 'a' || e.key === 'A') this.randomize();
-            if (e.key === 'c' || e.key === 'C') this.clear();
-        });
     }
 
     exportPattern() {
@@ -736,7 +897,6 @@ class UIController {
             automaton.setLimit(select.value, parseInt(limitValue.value));
         }
 
-        // Resetear el estado de límite alcanzado
         automaton.isLimitReached = false;
     }
 
@@ -758,27 +918,14 @@ class UIController {
         const customRuleGroup = document.getElementById('customRuleGroup');
 
         if (ruleKey === 'custom') {
-            // Mostrar controles personalizados
             customRuleGroup.style.display = 'block';
-
-            // Cargar valores actuales del autómata
             document.getElementById('birthInput').value = automaton.rule.birth.join(',');
             document.getElementById('survivalInput').value = automaton.rule.survival.join(',');
-
-            // Actualizar info con regla actual
-            this.updateCustomRuleInfo();
         } else {
-            // Ocultar controles personalizados
             customRuleGroup.style.display = 'none';
-
             if (automaton && window.RULES && window.RULES[ruleKey]) {
-                // Cambiar la regla en el autómata
                 automaton.setRuleByKey(ruleKey);
-
-                // Actualizar el header completo
                 this.updateHeaderInfo();
-
-                // Si la simulación está corriendo, pausarla para evitar confusiones
                 if (automaton.isRunning) {
                     this.togglePlay();
                 }
@@ -786,22 +933,23 @@ class UIController {
         }
     }
 
+    applyCustomRule() {
+        const birthInput = document.getElementById('birthInput').value;
+        const survivalInput = document.getElementById('survivalInput').value;
+
+        try {
+            const customRule = parseCustomRule(birthInput, survivalInput);
+            automaton.setRule(customRule.survival, customRule.birth);
+            alert(`Regla personalizada aplicada: B${customRule.birth.join('')}/S${customRule.survival.join('')}`);
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+
     changeNeighborhoodType(type) {
         if (automaton) {
             automaton.setNeighborhoodType(type);
             this.updateNeighborhoodInfo();
-
-            // Actualizar área de influencia si está visible
-            if (this.showInfluenceArea) {
-                const lastCoords = document.getElementById('mouseCoords').textContent;
-                const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
-                if (match) {
-                    const x = parseInt(match[1]);
-                    const y = parseInt(match[2]);
-                    showInfluenceArea(x, y);
-                }
-            }
-
             if (automaton.isRunning) {
                 this.togglePlay();
             }
@@ -817,18 +965,6 @@ class UIController {
         if (automaton) {
             automaton.setNeighborhoodRadius(radius);
             this.updateNeighborhoodInfo();
-
-            // Actualizar área de influencia si está visible
-            if (this.showInfluenceArea) {
-                const lastCoords = document.getElementById('mouseCoords').textContent;
-                const match = lastCoords.match(/X: (\d+), Y: (\d+)/);
-                if (match) {
-                    const x = parseInt(match[1]);
-                    const y = parseInt(match[2]);
-                    showInfluenceArea(x, y);
-                }
-            }
-
             if (automaton.isRunning) {
                 this.togglePlay();
             }
@@ -836,7 +972,6 @@ class UIController {
     }
 
     updateHeaderInfo() {
-        // Actualizar reglas si hay una seleccionada
         const selector = document.getElementById('ruleSelector');
         if (selector && selector.value && window.RULES) {
             const ruleKey = selector.value;
@@ -845,17 +980,13 @@ class UIController {
                 this.updateRuleInfo(rule);
             }
         }
-
-        // Actualizar información de vecindad
         this.updateNeighborhoodInfo();
     }
 
-    // Actualizar información de reglas
     updateRuleInfo(rule) {
         const rulesSpecific = document.getElementById('rulesSpecific');
         if (!rulesSpecific) return;
 
-        // Actualizar solo el contenido de las reglas específicas
         rulesSpecific.innerHTML = `
         <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${rule.birth.join(', ')} vecinos</p>
         <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${rule.survival.join(', ')} vecinos</p>
@@ -864,10 +995,7 @@ class UIController {
         </p>
     `;
 
-        // Actualizar el título de la página
         document.title = `Autómata Celular - ${rule.name} ${rule.ruleString}`;
-
-        // Actualizar el header principal
         const headerTitle = document.querySelector('h1');
         if (headerTitle) {
             headerTitle.innerHTML = `<i class="fas fa-cogs"></i> Autómata - ${rule.name}`;
@@ -897,13 +1025,154 @@ class UIController {
 
         const type = automaton.neighborhoodType === 'moore' ? 'Moore' : 'von Neumann';
         const radius = automaton.neighborhoodRadius;
-
-        // Actualizar el contenido del elemento
         infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (radio ${radius})`;
+    }
+
+    bindPatternsControls() {
+        const toggleRowsBtn = document.getElementById('patternsToggleRows');
+        const toggleCompactBtn = document.getElementById('patternsToggleCompact');
+        const container = document.getElementById('patternsContainer');
+
+        if (toggleRowsBtn && container) {
+            toggleRowsBtn.addEventListener('click', () => {
+                this.patternsTwoRows = !this.patternsTwoRows;
+                container.classList.toggle('two-rows', this.patternsTwoRows);
+                const icon = toggleRowsBtn.querySelector('i');
+                if (this.patternsTwoRows) {
+                    icon.className = 'fas fa-grip-lines-vertical';
+                    toggleRowsBtn.title = 'Cambiar a 1 fila';
+                } else {
+                    icon.className = 'fas fa-grip-lines';
+                    toggleRowsBtn.title = 'Cambiar a 2 filas';
+                }
+            });
+        }
+
+        if (toggleCompactBtn && container) {
+            toggleCompactBtn.addEventListener('click', () => {
+                this.patternsCompactView = !this.patternsCompactView;
+                container.classList.toggle('compact-view', this.patternsCompactView);
+                document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
+                    btn.classList.toggle('compact', this.patternsCompactView);
+                });
+                const icon = toggleCompactBtn.querySelector('i');
+                if (this.patternsCompactView) {
+                    icon.className = 'fas fa-expand-alt';
+                    toggleCompactBtn.title = 'Vista normal';
+                } else {
+                    icon.className = 'fas fa-compress';
+                    toggleCompactBtn.title = 'Vista compacta';
+                }
+            });
+        }
+    }
+
+    setupTouchEvents() {
+        const canvas = document.getElementById('canvas');
+        let isTouchDrawing = false;
+        let touchStartTime = 0;
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartTime = Date.now();
+            const {x, y} = automaton.getCellFromMouse(touch);
+
+            if (window.selectedPattern) {
+                automaton.importPattern(window.selectedPattern, x, y);
+            } else {
+                isTouchDrawing = true;
+                automaton.grid[x][y] = !automaton.grid[x][y];
+                automaton.updateStats();
+                automaton.render();
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isTouchDrawing || !e.touches[0]) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const {x, y} = automaton.getCellFromMouse(touch);
+            const touchTime = Date.now() - touchStartTime;
+            if (touchTime > 50) {
+                automaton.grid[x][y] = true;
+                automaton.updateStats();
+                automaton.render();
+            }
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            isTouchDrawing = false;
+        });
+    }
+
+    bindPatternEvents() {
+        // Cuando se selecciona un patrón
+        document.addEventListener('patternSelected', () => {
+            this.onPatternSelected();
+        });
+
+        // Cuando se actualiza un patrón (rotación, etc.)
+        document.addEventListener('patternUpdated', () => {
+            this.updateDrawModeIndicator();
+        });
+
+        // Cuando se de-selecciona un patrón
+        document.addEventListener('patternDeselected', () => {
+            this.updateDrawModeIndicator();
+        });
+
+        // Cuando se cancela un patrón (disparado por el botón Cancelar)
+        document.getElementById('cancelPatternBtn').addEventListener('click', () => {
+            this.updateDrawModeIndicator();
+        });
+    }
+
+    onPatternSelected() {
+        // Actualizar indicador de modo
+        this.updateDrawModeIndicator();
+
+        // También actualizar las instrucciones si es necesario
+        this.updateInstructions();
+    }
+
+    updateDrawModeIndicator() {
+        const indicator = document.getElementById('drawModeIndicator');
+        if (!indicator) return;
+
+        if (window.selectedPattern) {
+            indicator.className = 'pattern-mode-indicator pattern-selected';
+            indicator.textContent = `Modo: Patrón - ${window.selectedPattern.name}`;
+        } else {
+            indicator.className = 'pattern-mode-indicator free-draw';
+            indicator.textContent = 'Modo: Dibujo libre';
+        }
+    }
+
+    updateInstructions() {
+        // No necesitamos cambiar las instrucciones, ya están completas
+        // Pero podemos resaltar el modo actual si queremos
+        const instructions = document.querySelector('.instructions p');
+        if (instructions && window.selectedPattern) {
+            instructions.innerHTML = instructions.innerHTML.replace(
+                'Modo: Dibujo libre',
+                `<strong>Modo: Patrón - ${window.selectedPattern.name}</strong>`
+            );
+        }
     }
 }
 
 // Inicializar
 document.addEventListener('DOMContentLoaded', () => {
-    new UIController();
+    const uiController = new UIController();
+
+    // Hacer disponible globalmente si es necesario
+    window.uiController = uiController;
+
+    // Inicializar indicador de modo después de un breve delay
+    setTimeout(() => {
+        uiController.updateDrawModeIndicator();
+    }, 100);
 });

@@ -1188,6 +1188,156 @@ canvas {
     box-sizing: border-box;
 }
 
+/* ===== ESTILOS PARA SELECCIÓN Y ARRASTRE ===== */
+.selection-overlay {
+    position: absolute;
+    border: 2px dashed #3b82f6;
+    background-color: rgba(59, 130, 246, 0.1);
+    pointer-events: none;
+    z-index: 4;
+}
+
+.drag-preview {
+    position: absolute;
+    border: 2px solid #3b82f6;
+    background-color: rgba(59, 130, 246, 0.15);
+    pointer-events: none;
+    z-index: 5;
+    overflow: hidden;
+}
+
+.drag-preview canvas {
+    width: 100%;
+    height: 100%;
+    opacity: 0.7;
+}
+
+.selection-info {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+    font-size: 0.9rem;
+    display: none;
+}
+
+.selection-info-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.btn-small {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-small:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--primary);
+}
+
+.btn-small.delete {
+    color: #ef4444;
+    border-color: #ef4444;
+}
+
+.btn-small.delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Indicador de modo */
+.mode-indicator {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid #10b981;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.mode-indicator.erase {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* Agrega al archivo CSS */
+.pattern-mode-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-left: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+}
+
+.pattern-mode-indicator.free-draw {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: #10b981;
+    color: #10b981;
+}
+
+.pattern-mode-indicator.pattern-selected {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: #3b82f6;
+    color: #3b82f6;
+}
+
+/* Estilos para instrucciones */
+/* Estilos mejorados para instrucciones */
+.instructions {
+    margin-top: 10px;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+.instructions p {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.instructions strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.instructions br {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .instructions br {
+        display: inline;
+    }
+}
+
 /* ===== RESPONSIVE ===== */
 
 /* Tabletas y móviles grandes */

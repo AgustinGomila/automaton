@@ -55,6 +55,17 @@ class CellularAutomaton {
         }
     }
 
+    setCellAndRender(x, y, state) {
+        if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
+            // Solo actualizar si cambia el estado
+            if (this.grid[x][y] !== state) {
+                this.grid[x][y] = state;
+                return true; // Indica que hubo un cambio
+            }
+        }
+        return false; // No hubo cambios
+    }
+
     setRule(survival, birth) {
         this.rule = {
             survival: [...survival],
@@ -383,14 +394,6 @@ class CellularAutomaton {
         this.render();
     }
 
-    toggleCell(x, y) {
-        if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
-            this.grid[x][y] = !this.grid[x][y];
-            this.updateStats();
-            this.render();
-        }
-    }
-
     toggleRunning() {
         this.isRunning = !this.isRunning;
 
@@ -475,6 +478,60 @@ class CellularAutomaton {
             x: Math.max(0, Math.min(x, this.gridSize - 1)),
             y: Math.max(0, Math.min(y, this.gridSize - 1))
         };
+    }
+
+    // Métodos de edición
+    // Copiar área
+    copyArea(minX, minY, maxX, maxY) {
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+        const grid = Array(width).fill().map(() => Array(height).fill(false));
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
+                    grid[x - minX][y - minY] = this.grid[x][y];
+                }
+            }
+        }
+
+        return {
+            grid: grid,
+            width: width,
+            height: height
+        };
+    }
+
+    // Borrar área
+    clearArea(minX, minY, maxX, maxY) {
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
+                    this.grid[x][y] = false;
+                }
+            }
+        }
+        this.updateStats();
+        this.render();
+    }
+
+    // Pegar área
+    pasteArea(area, offsetX, offsetY) {
+        if (!area || !area.grid) return;
+
+        for (let x = 0; x < area.width; x++) {
+            for (let y = 0; y < area.height; y++) {
+                const gridX = offsetX + x;
+                const gridY = offsetY + y;
+
+                if (gridX >= 0 && gridX < this.gridSize &&
+                    gridY >= 0 && gridY < this.gridSize) {
+                    this.grid[gridX][gridY] = area.grid[x][y];
+                }
+            }
+        }
+        this.updateStats();
+        this.render();
     }
 
     // Asegurar que importPattern use las mismas coordenadas
