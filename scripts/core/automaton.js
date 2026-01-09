@@ -22,22 +22,37 @@ class CellularAutomaton {
         // Límites
         this.maxGenerations = null;
         this.maxPopulation = null;
-        this.limitType = 'none'; // 'none', 'generations', 'population'
+        this.limitType = 'none';
         this.limitValue = 1000;
         this.isLimitReached = false;
 
-        // Inicializar con regla de Kauffman
-        this.rule = {
-            survival: [4, 5, 6, 7],
-            birth: [3, 7]
-        };
-
         // Vecindad
-        this.neighborhoodType = 'moore'; // 'moore' o 'neumann'
+        this.neighborhoodType = 'moore';
         this.neighborhoodRadius = 1;
+
+        // Inicializar regla
+        this.initRule().then(() => console.log('Regla inicializada.'));
 
         // Render inicial
         setTimeout(() => this.render(), 100);
+    }
+
+    async initRule() {
+        // Esperar a que las reglas estén cargadas
+        let maxAttempts = 10;
+
+        while (!window.RULES && maxAttempts > 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            maxAttempts--;
+        }
+
+        if (window.RULES && window.RULES.conway) {
+            this.setRuleByKey('conway');
+        } else {
+            // Fallback a regla por defecto
+            console.warn('Usando regla de Conway por defecto (fallback)');
+            this.setRule([2, 3], [3]);
+        }
     }
 
     setRule(survival, birth) {
@@ -323,7 +338,7 @@ class CellularAutomaton {
                         this.cellSize / 2
                     );
 
-                    gradient.addColorStop(0, '#10b981');
+                    gradient.addColorStop(0, '#b9b610');
                     gradient.addColorStop(1, '#059669');
 
                     this.ctx.fillStyle = gradient;
@@ -544,5 +559,8 @@ let automaton;
 
 // Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', () => {
-    automaton = new CellularAutomaton();
+    // Pequeño delay para asegurar que esté listo
+    setTimeout(() => {
+        automaton = new CellularAutomaton();
+    }, 300);
 });

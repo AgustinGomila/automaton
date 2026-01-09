@@ -841,7 +841,7 @@ function showRotationFeedback() {
     notification.style.borderRadius = '8px';
     notification.style.zIndex = '1000';
     notification.style.fontSize = '0.9rem';
-    notification.textContent = `Patrón rotado ${window.selectedPatternRotation}°`;
+    notification.textContent = rotationText;
 
     document.body.appendChild(notification);
 

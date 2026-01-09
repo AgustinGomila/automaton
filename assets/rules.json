@@ -1,0 +1,426 @@
+{
+  "rules": {
+    "custom": {
+      "name": "Personalizada",
+      "ruleString": "B.../S...",
+      "description": "Regla personalizada",
+      "descriptionLong": "",
+      "author": "",
+      "survival": [],
+      "birth": []
+    },
+    "kauffman": {
+      "name": "Kauffman",
+      "ruleString": "B37/S4567",
+      "description": "Regla de Kauffman",
+      "descriptionLong": "Regla basada en el trabajo sobre autopoiesis de Francisco Varela",
+      "author": "Louis Kauffman",
+      "survival": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "birth": [
+        3,
+        7
+      ]
+    },
+    "conway": {
+      "name": "Conway's Life",
+      "ruleString": "B3/S23",
+      "description": "El autómata celular más famoso",
+      "descriptionLong": "Este es el autómata celular más famoso jamás inventado. La gente ha estado descubriendo patrones para esta regla desde alrededor de 1970. Grandes colecciones están disponibles en Internet. La definición de la regla es muy simple: una célula viva permanece viva solo cuando está rodeada por 2 o 3 vecinos vivos; de lo contrario, muere de soledad o sobrepoblación. Una célula muerta cobra vida cuando tiene exactamente 3 vecinos vivos.",
+      "author": "John Conway",
+      "survival": [
+        2,
+        3
+      ],
+      "birth": [
+        3
+      ]
+    },
+    "2x2": {
+      "name": "2x2",
+      "ruleString": "B36/S125",
+      "description": "Similar a Conway's Life, pero con diferentes patrones",
+      "descriptionLong": "Similar en carácter a Conway's Life, pero crea patrones completamente diferentes. Muchos osciladores diferentes ocurren al azar, y un planeador raro. Las semillas de bloques simples generalmente conducen a osciladores de varios períodos. Esta regla también es un universo de bloques 2x2. Esto significa que los patrones que consisten completamente en bloques 2x2, todos alineados, continuarán consistiendo en bloques 2x2.",
+      "author": "Autor desconocido",
+      "survival": [
+        1,
+        2,
+        5
+      ],
+      "birth": [
+        3,
+        6
+      ]
+    },
+    "34life": {
+      "name": "34 Life",
+      "ruleString": "B34/S34",
+      "description": "Universo explosivo con osciladores y nave periodo-3",
+      "descriptionLong": "Una de las primeras alternativas exploradas a Conway's Life, a principios de la década de 1970. El poder de cómputo era tan bajo en ese entonces, que pasaron meses antes de que alguien notara que este es un universo explosivo. Lo que hace interesante a este universo es la variedad de osciladores pequeños y la nave espacial ortogonal de período 3.",
+      "author": "Autor desconocido",
+      "survival": [
+        3,
+        4
+      ],
+      "birth": [
+        3,
+        4
+      ]
+    },
+    "amoeba": {
+      "name": "Amoeba",
+      "ruleString": "B357/S1358",
+      "description": "Forma áreas aleatorias que se asemejan a amebas",
+      "descriptionLong": "Un universo 'ameba': forma grandes áreas aleatorias que se asemejan a amebas. Internamente, un área aleatoria es caótica. El borde vacila salvajemente y los patrones tienden a crecer más que a encogerse. Cuanto más crecen, más segura es su supervivencia. Esta es una regla bastante equilibrada.",
+      "author": "Autor desconocido",
+      "survival": [
+        1,
+        3,
+        5,
+        8
+      ],
+      "birth": [
+        3,
+        5,
+        7
+      ]
+    },
+    "assimilation": {
+      "name": "Assimilation",
+      "ruleString": "B345/S4567",
+      "description": "Similar a Diamoeba, pero más estable",
+      "descriptionLong": "Regla similar a Diamoeba, pero mucho más estable. Los patrones en forma de diamante se llenan en un 70-85% y nunca mueren.",
+      "author": "Autor desconocido",
+      "survival": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "birth": [
+        3,
+        4,
+        5
+      ]
+    },
+    "coagulations": {
+      "name": "Coagulations",
+      "ruleString": "B378/S235678",
+      "description": "Crea coagulaciones pegajosas que se expanden para siempre",
+      "descriptionLong": "Crea coagulaciones pegajosas a medida que se expande para siempre. Se ve mejor con zoom=1. Note que esta es una variación cercana de la regla anterior, 235678/3678, excepto que hay una condición menos para que una célula muerta cobre vida en la siguiente generación. En general, esto debería hacer que un universo sea menos activo, pero esta es una excepción.",
+      "author": "Autor desconocido",
+      "survival": [
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        3,
+        7,
+        8
+      ]
+    },
+    "coral": {
+      "name": "Coral",
+      "ruleString": "B3/S45678",
+      "description": "Produce patrones con textura de coral",
+      "descriptionLong": "Esta regla produce patrones con una tasa de expansión sorprendentemente lenta y una textura interesante similar al coral.",
+      "author": "Autor desconocido",
+      "survival": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        3
+      ]
+    },
+    "daynight": {
+      "name": "Day & Night",
+      "ruleString": "B3678/S34678",
+      "description": "Simétrico: células muertas en campos vivos actúan igual que vivas en campos muertos",
+      "descriptionLong": "Llamada así porque las células muertas en campos de células vivas actúan por las mismas reglas que las células vivas en campos de células muertas. Obviamente hay otras reglas que tienen esta propiedad simétrica, pero esta regla fue elegida porque tiene algunas naves espaciales y osciladores de período alto interesantes. Las propiedades de la regla fueron exploradas por David Bell.",
+      "author": "Nathan Thompson",
+      "survival": [
+        3,
+        4,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        3,
+        6,
+        7,
+        8
+      ]
+    },
+    "diamoeba": {
+      "name": "Diamoeba",
+      "ruleString": "B35678/S5678",
+      "description": "Crea patrones de diamante en forma de ameba",
+      "descriptionLong": "Crea patrones sólidos en forma de diamante 'ameba' que son sorprendentemente impredecibles. Durante mucho tiempo no se supo si algún diamante se expande para siempre, o si la tendencia hacia la destrucción catastrófica de las esquinas es demasiado fuerte. Finalmente, en marzo de 1999, David Eppstein encontró la nave espacial c/7, y David Bell hizo un llenador espacial al 100% con ella.",
+      "author": "Dean Hickerson",
+      "survival": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        3,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "flakes": {
+      "name": "Flakes",
+      "ruleString": "B3/S012345678",
+      "description": "También conocido como Life without Death (LwoD)",
+      "descriptionLong": "También conocido como Life without Death (LwoD). La regla produce hermosos copos, comenzando desde grupos simples de células. Pruebe, por ejemplo, varios círculos rellenos con radio > 20 células. La regla también produce escaleras, lo que permitió a David Griffeath y Cris Moore demostrar que la regla es P-completa.",
+      "author": "Janko Gravner",
+      "survival": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        3
+      ]
+    },
+    "gnarl": {
+      "name": "Gnarl",
+      "ruleString": "B1/S1",
+      "description": "Regla simple que produce patrones complejos desde un solo punto",
+      "descriptionLong": "Una regla simple proporcionada por Kellie Evans. Para ver su belleza, comience con patrones simples, por ejemplo, con un solo punto.",
+      "author": "Kellie Evans",
+      "survival": [
+        1
+      ],
+      "birth": [
+        1
+      ]
+    },
+    "highlife": {
+      "name": "HighLife",
+      "ruleString": "B36/S23",
+      "description": "Similar a Conway's Life, pero con un replicador",
+      "descriptionLong": "Esta regla es muy similar a Conway's Life, pero tiene un patrón replicador sorpresa. No se conoce ningún replicador en Conway's Life.",
+      "author": "Nathan Thompson",
+      "survival": [
+        2,
+        3
+      ],
+      "birth": [
+        3,
+        6
+      ]
+    },
+    "inverselife": {
+      "name": "InverseLife",
+      "ruleString": "B0123478/S34678",
+      "description": "Muestra osciladores y planeadores similares a GOL, pero en negativo",
+      "descriptionLong": "La regla muestra osciladores y planeadores similares a GOL, pero las células muertas crean los patrones entre las células vivas en el fondo.",
+      "author": "Jason Rampe",
+      "survival": [
+        3,
+        4,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8
+      ]
+    },
+    "longlife": {
+      "name": "Long life",
+      "ruleString": "B345/S5",
+      "description": "Produce patrones de período extremadamente alto",
+      "descriptionLong": "Esta regla se llama 'Long life' debido a los patrones de período extremadamente alto que pueden producirse en este universo.",
+      "author": "Andrew Trevorrow",
+      "survival": [
+        5
+      ],
+      "birth": [
+        3,
+        4,
+        5
+      ]
+    },
+    "maze": {
+      "name": "Maze",
+      "ruleString": "B3/S12345",
+      "description": "Cristaliza en patrones tipo laberinto",
+      "descriptionLong": "Un universo 'laberíntico': cristaliza en patrones tipo laberinto. Variaciones interesantes: intente eliminar el 5 de la lista de 'Supervivencia'. Para producir ratones corriendo en el laberinto, agregue 7 a la lista de 'Nacimientos'.",
+      "author": "Autor desconocido",
+      "survival": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "birth": [
+        3
+      ]
+    },
+    "mazectric": {
+      "name": "Mazectric",
+      "ruleString": "B3/S1234",
+      "description": "Variación de Maze que produce pasillos más largos",
+      "descriptionLong": "'Mazectric' y 'Corrosion of Conformity'. Una variación interesante de la regla Maze que produce pasillos más largos y un formato altamente lineal. Agregar B7 a maze (manteniendo S5) permite que algunos 'ratones' corran de un lado a otro en los pasillos. Sin embargo, cambiar B3 a B45 electrifica los laberintos. Eliminar S3 da 'Corrosion of Conformity', una combustión lenta desde casi cualquier patrón inicial, resultando en una oxidación del continuo local.",
+      "author": "Charles A. Rockafellor",
+      "survival": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "birth": [
+        3
+      ]
+    },
+    "move": {
+      "name": "Move",
+      "ruleString": "B368/S245",
+      "description": "Universo muy calmado con nave lenta común",
+      "descriptionLong": "Un universo muy calmado, que sin embargo tiene una nave espacial lenta muy comúnmente ocurrida y un puffer lento.",
+      "author": "Autor desconocido",
+      "survival": [
+        2,
+        4,
+        5
+      ],
+      "birth": [
+        3,
+        6,
+        8
+      ]
+    },
+    "pseudolife": {
+      "name": "Pseudo life",
+      "ruleString": "B357/S238",
+      "description": "Variación cercana a Conway's Life, pero casi ningún patrón diseñado funciona",
+      "descriptionLong": "En esta variación cercana de Conway's Life, el caos es notablemente similar, pero casi ninguno de los patrones diseñados funciona.",
+      "author": "Autor desconocido",
+      "survival": [
+        2,
+        3,
+        8
+      ],
+      "birth": [
+        3,
+        5,
+        7
+      ]
+    },
+    "replicator": {
+      "name": "Replicator",
+      "ruleString": "B1357/S1357",
+      "description": "Cada patrón es un replicador",
+      "descriptionLong": "En este universo notable, cada patrón es un replicador. Después de 32 pasos, cada patrón inicial se replica 8 veces.",
+      "author": "Autor desconocido",
+      "survival": [
+        1,
+        3,
+        5,
+        7
+      ],
+      "birth": [
+        1,
+        3,
+        5,
+        7
+      ]
+    },
+    "seeds": {
+      "name": "Seeds",
+      "ruleString": "B2/S",
+      "description": "Toda célula viva muere cada generación, pero la mayoría de patrones explotan",
+      "descriptionLong": "Toda célula viva muere cada generación, pero la mayoría de los patrones explotan de todos modos. Es un desafío construir nuevos patrones que no exploten. Posiblemente la regla desafiante más simple.",
+      "author": "Brian Silverman",
+      "survival": [],
+      "birth": [
+        2
+      ]
+    },
+    "serviettes": {
+      "name": "Serviettes",
+      "ruleString": "B234/S",
+      "description": "Como Seeds, produce patrones con belleza tipo tejido",
+      "descriptionLong": "Al igual que /2, toda célula viva muere cada generación. Esta regla es elegida por la excepcional belleza tipo tejido de los patrones que produce.",
+      "author": "Autor desconocido",
+      "survival": [],
+      "birth": [
+        2,
+        3,
+        4
+      ]
+    },
+    "stains": {
+      "name": "Stains",
+      "ruleString": "B3678/S235678",
+      "description": "Variación que no se expande para siempre",
+      "descriptionLong": "La mayoría de las variaciones cercanas de estas reglas se expanden para siempre, pero esta curiosamente no lo hace. ¿Por qué?",
+      "author": "Autor desconocido",
+      "survival": [
+        2,
+        3,
+        5,
+        6,
+        7,
+        8
+      ],
+      "birth": [
+        3,
+        6,
+        7,
+        8
+      ]
+    },
+    "walledcities": {
+      "name": "Walled Cities",
+      "ruleString": "B45678/S2345",
+      "description": "Crea ciudades amuralladas de actividad",
+      "descriptionLong": "La regla crea ciudades amuralladas de actividad. Una vez que el campo se ha estabilizado, se pueden dibujar líneas para conectar las ciudades y los patrones se expanden para crear una ciudad aún más grande. Pero una vez que el muro está completo, la ciudad nunca crece, aunque hay actividad casi aleatoria dentro de ella.",
+      "author": "David Macfarlane",
+      "survival": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "birth": [
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    }
+  }
+}

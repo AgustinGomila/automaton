@@ -6,10 +6,16 @@ class UIController {
         this.showInfluenceArea = false;
         this.patternsTwoRows = false;
         this.patternsCompactView = false;
-        this.init();
+        this.rulesLoaded = false;
+
+        // Inicializar regla
+        this.initUi().then(() => console.log('Reglas cargadas.'));
     }
 
-    init() {
+    async initUi() {
+        // Esperar a que se carguen las reglas
+        await this.waitForRules();
+
         this.bindEvents();
         this.bindKeyboardEvents();
         this.updateSpeedDisplay();
@@ -30,6 +36,88 @@ class UIController {
             if (rule) {
                 this.updateRuleInfo(rule);
             }
+        }
+    }
+
+    async waitForRules() {
+        // Si ya hay reglas cargadas, continuar
+        if (window.RULES && Object.keys(window.RULES).length > 0) {
+            console.log('Reglas ya cargadas:', Object.keys(window.RULES).length);
+            this.rulesLoaded = true;
+            return;
+        }
+
+        // Si no, esperar a que se carguen
+        console.log('Esperando carga de reglas...');
+
+        // Intentar cargar con el loader
+        if (window.rulesLoader) {
+            await window.rulesLoader.load();
+            this.rulesLoaded = true;
+        } else {
+            // Fallback: esperar un momento y verificar
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (window.RULES) {
+                this.rulesLoaded = true;
+            } else {
+                console.error('No se pudieron cargar las reglas');
+                await window.rulesLoader.loadEmbeddedRules()
+                this.rulesLoaded = true;
+            }
+        }
+    }
+
+    loadRules() {
+        const selector = document.getElementById('ruleSelector');
+        if (!selector) return;
+
+        // Verificar que las reglas estén disponibles
+        if (!window.RULES) {
+            console.error('RULES no está definido');
+            this.showRuleLoadError();
+            return;
+        }
+
+        // Limpiar selector (excepto primera opción)
+        while (selector.options.length > 1) {
+            selector.removeItem(1);
+        }
+
+        // Agregar cada regla
+        Object.keys(window.RULES).forEach(key => {
+            const rule = window.RULES[key];
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = `${rule.name} (${rule.ruleString})`;
+            selector.appendChild(option);
+        });
+
+        // Seleccionar Conway por defecto si existe
+        if (window.RULES.conway) {
+            selector.value = 'conway';
+            this.updateRuleInfo(window.RULES.conway);
+        }
+    }
+
+    showRuleLoadError() {
+        // Mostrar mensaje de error en el selector
+        const selector = document.getElementById('ruleSelector');
+        const errorOption = document.createElement('option');
+        errorOption.value = 'error';
+        errorOption.textContent = 'Error cargando reglas';
+        errorOption.disabled = true;
+        selector.appendChild(errorOption);
+
+        // También mostrar en la UI
+        const rulesPanel = document.getElementById('rulesSpecific');
+        if (rulesPanel) {
+            rulesPanel.innerHTML = `
+                <p style="color: var(--danger)">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Error cargando reglas. Usando configuración por defecto.
+                </p>
+            `;
         }
     }
 
@@ -175,28 +263,6 @@ class UIController {
 
         // Eventos táctiles
         this.setupTouchEvents();
-    }
-
-    loadRules() {
-        const selector = document.getElementById('ruleSelector');
-        if (!selector) return;
-
-        if (!window.RULES) {
-            console.error('RULES no está definido');
-            return;
-        }
-
-        // Agregar cada regla
-        Object.keys(window.RULES).forEach(key => {
-            const rule = window.RULES[key];
-            const option = document.createElement('option');
-            option.value = key;
-            option.textContent = `${rule.name} (${rule.ruleString})`;
-            selector.appendChild(option);
-        });
-
-        // Seleccionar Kauffman por defecto
-        selector.value = 'kauffman';
     }
 
     applyCustomRule() {
@@ -458,7 +524,7 @@ class UIController {
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value) - 1;
+        let value = parseInt(slider.value.toString()) - 1;
         if (value < 1) value = 1;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -466,7 +532,7 @@ class UIController {
 
     increaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value) + 1;
+        let value = parseInt(slider.value.toString()) + 1;
         if (value > 10) value = 10;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -646,7 +712,7 @@ class UIController {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `kauffman-pattern-${new Date().getTime()}.json`;
+            a.download = `my-pattern-${new Date().getTime()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -706,8 +772,6 @@ class UIController {
             customRuleGroup.style.display = 'none';
 
             if (automaton && window.RULES && window.RULES[ruleKey]) {
-                const rule = window.RULES[ruleKey];
-
                 // Cambiar la regla en el autómata
                 automaton.setRuleByKey(ruleKey);
 
