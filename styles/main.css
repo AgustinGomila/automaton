@@ -665,7 +665,7 @@ canvas {
     }
 }
 
-/* ===== SECCIÓN DE PATRONES MEJORADA ===== */
+/* ===== SECCIÓN DE PATRONES ===== */
 
 .patterns-horizontal-container {
     background: var(--dark-card);
@@ -765,7 +765,7 @@ canvas {
     background: var(--primary);
 }
 
-/* Botones de patrón mejorados */
+/* Botones de patrón */
 .pattern-btn-horizontal {
     position: relative;
     display: flex;
@@ -855,7 +855,7 @@ canvas {
     font-weight: 600;
 }
 
-/* Tooltip mejorado */
+/* Tooltip */
 .pattern-btn-horizontal[data-tooltip] {
     position: relative;
 }
@@ -1172,13 +1172,42 @@ canvas {
     background-color: var(--primary);
 }
 
-/* Área de influencia */
+/* Estilos para área de influencia exacta */
 .influence-cell {
-    position: absolute;
-    background-color: rgba(59, 130, 246, 0.2);
-    border: 1px dashed rgba(59, 130, 246, 0.5);
+    background-color: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    box-sizing: border-box;
+}
+
+.influence-cell:hover {
+    background-color: rgba(59, 130, 246, 0.25);
+}
+
+.influence-border {
     pointer-events: none;
-    z-index: 4;
+    z-index: 1;
+}
+
+/* Diferentes estilos para diferentes radios de vecindad */
+.influence-cell.radius-1 {
+    background-color: rgba(59, 130, 246, 0.15);
+}
+
+.influence-cell.radius-2 {
+    background-color: rgba(147, 197, 253, 0.15);
+}
+
+.influence-cell.radius-3 {
+    background-color: rgba(191, 219, 254, 0.15);
+}
+
+/* Estilos para diferentes tipos de vecindad */
+.influence-cell.moore {
+    border-radius: 2px;
+}
+
+.influence-cell.neumann {
+    border-radius: 50%;
 }
 
 /* Para el área de influencia completa */
@@ -1303,7 +1332,6 @@ canvas {
 }
 
 /* Estilos para instrucciones */
-/* Estilos mejorados para instrucciones */
 .instructions {
     margin-top: 10px;
     padding: 10px;
@@ -1628,7 +1656,7 @@ canvas {
         height: 24px;
     }
 
-    /* Mejorar feedback táctil */
+    /* Feedback táctil */
     .btn-control:active,
     .pattern-btn-horizontal:active,
     .btn-toggle:active {

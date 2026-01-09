@@ -782,10 +782,19 @@ class UIController {
     }
 
     updateSpeedDisplay() {
-        const speedTexts = ['Muy Lento', 'Lento', 'Normal', 'Rápido', 'Muy Rápido'];
         const slider = document.getElementById('speedControl');
-        const value = Math.min(Math.max(parseInt(slider.value), 1), 5);
-        document.getElementById('speedValue').textContent = speedTexts[value - 1] || 'Normal';
+        const value = parseInt(slider.value);
+
+        // Array de textos para cada grupo de 2 valores
+        const speedTexts = ['Muy Lento', 'Lento', 'Normal', 'Rápido', 'Muy Rápido'];
+
+        // Calcular índice
+        const index = Math.floor((value - 1) / 2);
+        const clampedIndex = Math.min(Math.max(index, 0), speedTexts.length - 1);
+
+        // Mostrar texto y valor numérico
+        document.getElementById('speedValue').textContent =
+            `${speedTexts[clampedIndex]} (${value}/10)`;
     }
 
     updateGridSize() {

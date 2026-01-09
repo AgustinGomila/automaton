@@ -134,22 +134,9 @@ const PATTERNS = {
         cellCount: 22,
         color: "#f59e0b",
         pattern: [
-            [0, 1, 0],
-            [0, 1, 0],
-            [1, 1, 1],
-            [0, 0, 0],
-            [0, 0, 0],
-            [1, 1, 1],
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 0],
-            [1, 1, 1],
-            [0, 0, 0],
-            [0, 0, 0],
-            [1, 1, 1],
-            [0, 1, 0],
-            [0, 1, 0],
+            [0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0],
+            [1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1],
+            [0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0],
         ]
     },
 
@@ -822,7 +809,6 @@ function renderPatterns() {
         container.appendChild(patternBtn);
     });
 
-
     // Dejar que el usuario empiece dibujando libremente
     window.selectedPatternKey = null;
     window.selectedPattern = null;
@@ -990,19 +976,10 @@ function showInfluenceArea(x, y) {
     const canvas = document.getElementById('canvas');
     const container = document.getElementById('canvas-container');
     const cellSize = automaton.cellSize;
-
-    // Obtener dimensiones reales
     const containerRect = container.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
-
-    // Calcular offset
     const offsetX = canvasRect.left - containerRect.left;
     const offsetY = canvasRect.top - containerRect.top;
-
-    const radius = automaton.neighborhoodRadius;
-    const type = automaton.neighborhoodType;
-
-    // Calcular escala
     const scaleX = canvas.width / canvasRect.width;
     const scaleY = canvas.height / canvasRect.height;
 
@@ -1012,54 +989,124 @@ function showInfluenceArea(x, y) {
     influenceDiv.style.width = canvasRect.width + 'px';
     influenceDiv.style.height = canvasRect.height + 'px';
 
-    if (!window.selectedPattern || !window.selectedPattern.pattern || window.selectedPattern.pattern === 'random') {
-        // Para una sola celda
+    const radius = automaton.neighborhoodRadius;
+    const type = automaton.neighborhoodType;
+
+    // Función para calcular vecindad de una celda
+    function getNeighborhood(cx, cy) {
+        const neighbors = [];
         for (let i = -radius; i <= radius; i++) {
             for (let j = -radius; j <= radius; j++) {
-                if ((type === 'moore') ||
+                if (i === 0 && j === 0) continue;
+
+                if (type === 'moore' ||
                     (type === 'neumann' && Math.abs(i) + Math.abs(j) <= radius)) {
 
-                    if (i === 0 && j === 0) continue;
+                    const nx = cx + i;
+                    const ny = cy + j;
 
-                    const gridX = x + i;
-                    const gridY = y + j;
-
-                    if (gridX >= 0 && gridX < automaton.gridSize &&
-                        gridY >= 0 && gridY < automaton.gridSize) {
-
-                        const cell = document.createElement('div');
-                        cell.className = 'influence-cell';
-                        cell.style.position = 'absolute';
-                        cell.style.left = (gridX * cellSize / scaleX) + 'px';
-                        cell.style.top = (gridY * cellSize / scaleY) + 'px';
-                        cell.style.width = (cellSize / scaleX) + 'px';
-                        cell.style.height = (cellSize / scaleY) + 'px';
-
-                        influenceDiv.appendChild(cell);
+                    if (nx >= 0 && nx < automaton.gridSize &&
+                        ny >= 0 && ny < automaton.gridSize) {
+                        neighbors.push({x: nx, y: ny});
                     }
                 }
             }
         }
+        return neighbors;
+    }
+
+    // Para una sola celda
+    if (!window.selectedPattern || !window.selectedPattern.pattern || window.selectedPattern.pattern === 'random') {
+        const neighbors = getNeighborhood(x, y);
+        neighbors.forEach(neighbor => {
+            const cell = document.createElement('div');
+            cell.className = `influence-cell ${type} radius-${radius}`;
+            cell.style.position = 'absolute';
+            cell.style.left = (neighbor.x * cellSize / scaleX) + 'px';
+            cell.style.top = (neighbor.y * cellSize / scaleY) + 'px';
+            cell.style.width = (cellSize / scaleX) + 'px';
+            cell.style.height = (cellSize / scaleY) + 'px';
+            influenceDiv.appendChild(cell);
+        });
     } else {
         // Para un patrón
         const pattern = window.selectedPattern.pattern;
         const patternOffsetX = Math.floor(pattern[0].length / 2);
         const patternOffsetY = Math.floor(pattern.length / 2);
 
-        const minX = Math.max(0, x - patternOffsetX - radius);
-        const minY = Math.max(0, y - patternOffsetY - radius);
-        const maxX = Math.min(automaton.gridSize - 1, x - patternOffsetX + pattern[0].length - 1 + radius);
-        const maxY = Math.min(automaton.gridSize - 1, y - patternOffsetY + pattern.length - 1 + radius);
+        // Crear un mapa de las celdas del patrón
+        const patternMap = new Set();
+        const patternCells = [];
 
-        const areaDiv = document.createElement('div');
-        areaDiv.className = 'influence-cell influence-area-highlight';
-        areaDiv.style.position = 'absolute';
-        areaDiv.style.left = (minX * cellSize / scaleX) + 'px';
-        areaDiv.style.top = (minY * cellSize / scaleY) + 'px';
-        areaDiv.style.width = ((maxX - minX + 1) * cellSize / scaleX) + 'px';
-        areaDiv.style.height = ((maxY - minY + 1) * cellSize / scaleY) + 'px';
+        for (let row = 0; row < pattern.length; row++) {
+            for (let col = 0; col < pattern[row].length; col++) {
+                if (pattern[row][col] === 1) {
+                    const gridX = x - patternOffsetX + col;
+                    const gridY = y - patternOffsetY + row;
 
-        influenceDiv.appendChild(areaDiv);
+                    if (gridX >= 0 && gridX < automaton.gridSize &&
+                        gridY >= 0 && gridY < automaton.gridSize) {
+                        patternCells.push({x: gridX, y: gridY});
+                        patternMap.add(`${gridX},${gridY}`);
+                    }
+                }
+            }
+        }
+
+        // Calcular vecindad total (sin duplicados y excluyendo celdas del patrón)
+        const influenceMap = new Set();
+
+        patternCells.forEach(cell => {
+            const neighbors = getNeighborhood(cell.x, cell.y);
+            neighbors.forEach(neighbor => {
+                const key = `${neighbor.x},${neighbor.y}`;
+                if (!patternMap.has(key)) {
+                    influenceMap.add(key);
+                }
+            });
+        });
+
+        // Dibujar área de influencia
+        influenceMap.forEach(key => {
+            const [gridX, gridY] = key.split(',').map(Number);
+            const cell = document.createElement('div');
+            cell.className = `influence-cell ${type} radius-${radius}`;
+            cell.style.position = 'absolute';
+            cell.style.left = (gridX * cellSize / scaleX) + 'px';
+            cell.style.top = (gridY * cellSize / scaleY) + 'px';
+            cell.style.width = (cellSize / scaleX) + 'px';
+            cell.style.height = (cellSize / scaleY) + 'px';
+            influenceDiv.appendChild(cell);
+        });
+
+        // Dibujar borde del área de influencia
+        if (influenceMap.size > 0 || patternCells.length > 0) {
+            // Calcular área total (patrón + influencia)
+            const allCells = [
+                ...patternCells,
+                ...Array.from(influenceMap).map(key => {
+                    const [x, y] = key.split(',').map(Number);
+                    return {x, y};
+                })
+            ];
+
+            if (allCells.length > 0) {
+                let minX = Math.min(...allCells.map(c => c.x));
+                let minY = Math.min(...allCells.map(c => c.y));
+                let maxX = Math.max(...allCells.map(c => c.x));
+                let maxY = Math.max(...allCells.map(c => c.y));
+
+                const borderDiv = document.createElement('div');
+                borderDiv.className = 'influence-border';
+                borderDiv.style.position = 'absolute';
+                borderDiv.style.left = (minX * cellSize / scaleX - 1) + 'px';
+                borderDiv.style.top = (minY * cellSize / scaleY - 1) + 'px';
+                borderDiv.style.width = ((maxX - minX + 1) * cellSize / scaleX + 2) + 'px';
+                borderDiv.style.height = ((maxY - minY + 1) * cellSize / scaleY + 2) + 'px';
+                borderDiv.style.border = '1px dashed rgba(59, 130, 246, 0.5)';
+                influenceDiv.appendChild(borderDiv);
+            }
+        }
     }
 }
 
