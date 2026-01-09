@@ -765,7 +765,7 @@ function renderPatterns() {
 
         // Clic izquierdo - seleccionar
         patternBtn.addEventListener('click', (e) => {
-            if (e.button !== 0) return; // Solo clic izquierdo
+            if (e.button !== 0) return;
 
             e.preventDefault();
             e.stopPropagation();
@@ -784,6 +784,14 @@ function renderPatterns() {
 
             // Actualizar vista previa e información
             updatePatternInfo();
+
+            // Disparar un evento personalizado para notificar el cambio
+            document.dispatchEvent(new CustomEvent('patternSelected', {
+                detail: {
+                    patternKey: key,
+                    pattern: PATTERNS[key]
+                }
+            }));
         });
 
         // Clic derecho - rotar
@@ -806,9 +814,6 @@ function renderPatterns() {
 
                 // Actualizar info
                 updatePatternInfo();
-
-                // Mostrar feedback visual
-                showRotationFeedback();
             }
 
             return false;
@@ -817,37 +822,14 @@ function renderPatterns() {
         container.appendChild(patternBtn);
     });
 
-    // Seleccionar primer patrón por defecto
-    const firstBtn = container.querySelector('.pattern-btn-horizontal');
-    if (firstBtn) {
-        window.selectedPatternKey = firstBtn.dataset.patternKey;
-        firstBtn.click();
-    }
-}
 
-// Función para mostrar feedback de rotación
-function showRotationFeedback() {
-    const rotationText = window.selectedPatternRotation > 0 ?
-        `Rotado ${window.selectedPatternRotation}°` : 'Sin rotar';
+    // Dejar que el usuario empiece dibujando libremente
+    window.selectedPatternKey = null;
+    window.selectedPattern = null;
+    window.selectedPatternRotation = 0;
 
-    // Mostrar notificación temporal
-    const notification = document.createElement('div');
-    notification.style.position = 'fixed';
-    notification.style.bottom = '20px';
-    notification.style.right = '20px';
-    notification.style.background = 'var(--primary)';
-    notification.style.color = 'white';
-    notification.style.padding = '8px 16px';
-    notification.style.borderRadius = '8px';
-    notification.style.zIndex = '1000';
-    notification.style.fontSize = '0.9rem';
-    notification.textContent = rotationText;
-
-    document.body.appendChild(notification);
-
-    setTimeout(() => {
-        document.body.removeChild(notification);
-    }, 1500);
+    // Actualizar la información del patrón para mostrar "Selecciona un patrón"
+    updatePatternInfo();
 }
 
 function renderPatternToCanvas(ctx, patternData, color) {
@@ -887,28 +869,41 @@ function renderPatternToCanvas(ctx, patternData, color) {
 }
 
 function updatePatternInfo() {
+    // Si no hay patrón seleccionado
+    if (!window.selectedPatternKey) {
+        const nameEl = document.getElementById('patternNameMini');
+        const detailsEl = document.getElementById('patternDetailsMini');
+        if (nameEl) nameEl.textContent = 'Selecciona un patrón';
+        if (detailsEl) detailsEl.textContent = 'Clic en un patrón para seleccionarlo';
+        window.selectedPattern = null;
+
+        // Disparar evento de patrón de-seleccionado
+        document.dispatchEvent(new CustomEvent('patternDeselected'));
+        return;
+    }
+
+    // Si hay patrón seleccionado
     const pattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
     const nameEl = document.getElementById('patternNameMini');
     const detailsEl = document.getElementById('patternDetailsMini');
 
     if (nameEl && detailsEl && pattern) {
         const originalPattern = PATTERNS[window.selectedPatternKey];
-
-        // Nombre con rotación
-        const rotationText = window.selectedPatternRotation > 0 ?
-            ` (${window.selectedPatternRotation}°)` : '';
+        const rotationText = window.selectedPatternRotation > 0 ? ` (${window.selectedPatternRotation}°)` : '';
         nameEl.textContent = `${pattern.name}${rotationText}`;
 
-        // Detalles: categoría y tamaño
-        const categoryText = originalPattern.category ?
-            `Categoría: ${originalPattern.category}` : '';
-        const cellCountText = originalPattern.cellCount ?
-            ` | Células: ${originalPattern.cellCount}` : '';
+        const categoryText = originalPattern.category ? `Categoría: ${originalPattern.category}` : '';
+        const cellCountText = originalPattern.cellCount ? ` | Células: ${originalPattern.cellCount}` : '';
         detailsEl.textContent = `${categoryText}${cellCountText}`;
     }
 
     // Actualizar patrón seleccionado globalmente
     window.selectedPattern = pattern;
+
+    // Disparar evento de patrón actualizado
+    document.dispatchEvent(new CustomEvent('patternUpdated', {
+        detail: {pattern: pattern}
+    }));
 }
 
 function showPatternPreview(x, y) {
