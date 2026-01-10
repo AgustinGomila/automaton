@@ -10,15 +10,13 @@ class CellularAutomaton {
         this.generation = 0;
         this.isRunning = false;
         this.updateInterval = 100;
-        this.intervalId = null;
         this.showGrid = true;
+        this.showActivityEffect = true;
 
         // Sistema de dirty rendering
         this.renderFlags = new Uint8Array(this.gridSize * this.gridSize);  // Estado actual renderizado
         this.prevFlags = new Uint8Array(this.gridSize * this.gridSize);    // Estado de la generación anterior
         this.dirtyCells = new Set();
-
-        this._lastPopulation = 0;
 
         // Canvas
         this.canvas = document.getElementById('canvas');
@@ -30,6 +28,7 @@ class CellularAutomaton {
 
         // Estadísticas
         const maxHistoryLength = 100;
+        this._lastPopulation = 0;
         this.populationHistory = new CircularArray(maxHistoryLength);
 
         // Vecindad
@@ -37,13 +36,16 @@ class CellularAutomaton {
         this.neighborhoodRadius = 1;
         this._neighborOffsets = this._precomputeNeighborOffsets();
 
+        // Animación
+        this.rafId = null;
+        this._lastFrameTime = 0
+
         // Límites
         this.maxGenerations = null;
         this.maxPopulation = null;
         this.limitType = 'none'; // 'none', 'generations', 'population', 'wrap'
         this.limitValue = 1000;
         this.isLimitReached = false;
-
         this.wrapEdges = true; // true = toroidal, false = paredes duras
 
         // Bind y event listeners
@@ -75,15 +77,13 @@ class CellularAutomaton {
         this.stop();
         if (this._cleanupResize) this._cleanupResize();
 
-        // Limpiar worker
-        if (this.worker) {
-            this.worker.terminate();
-            this.worker = null;
-        }
+        // Limpiar worker de forma segura
+        this._cleanupWorker();
 
         // Liberar buffers
         this.grid = null;
-        this.dirtyFlags = null;
+        this.renderFlags = null;
+        this.prevFlags = null;
         this.dirtyCells.clear();
         this.dirtyCells = null;
         this.populationHistory.clear();
@@ -103,15 +103,33 @@ class CellularAutomaton {
     // WORKER CON HANDLER ÚNICO Y REUTILIZABLE
     // =========================================
     _initWorker() {
+        // Limpieza previa si existe
+        if (this.worker) {
+            this.worker.terminate();
+            this.worker = null;
+            this.isWorkerProcessing = false;
+        }
+
         if (this.gridSize >= this.workerThreshold && window.Worker) {
             try {
+                // Crear worker
                 this.worker = new Worker('scripts/workers/automaton-worker.js');
 
+                // Handler con ID único para tracking
+                const handlerId = `worker_handler_${Date.now()}`;
+                this._currentHandlerId = handlerId;
+
                 this.worker.onmessage = (e) => {
+                    // Ignorar mensajes de workers antiguos
+                    if (this._currentHandlerId !== handlerId) {
+                        console.warn('⚠️ Worker message ignorado (handler obsoleto)');
+                        return;
+                    }
+
                     const {newGrid, changedCells, population, density, generation} = e.data;
 
-                    // Aplicar resultados solo si el worker aún está activo
-                    if (!this.worker) return;
+                    // Validar worker aún activo
+                    if (!this.worker || this._currentHandlerId !== handlerId) return;
 
                     this.grid = newGrid;
                     this.generation = generation;
@@ -133,12 +151,14 @@ class CellularAutomaton {
                 };
 
                 this.worker.onerror = (error) => {
+                    // Solo maneja error si es del worker actual
+                    if (this._currentHandlerId !== handlerId) return;
+
                     console.error('❌ Worker error:', error);
                     this.isWorkerProcessing = false;
 
                     // Fallback inmediato a main thread
-                    this.worker.terminate();
-                    this.worker = null;
+                    this._cleanupWorker();
                     this._markAllDirty();
                     this.render();
                 };
@@ -146,10 +166,22 @@ class CellularAutomaton {
                 console.debug(`✅ Worker creado para grid ${this.gridSize}x${this.gridSize}`);
             } catch (error) {
                 console.warn('❌ No se pudo crear worker, usando main thread:', error);
-                this.worker = null;
+                this._cleanupWorker();
             }
-        } else {
+        }
+    }
+
+    _cleanupWorker() {
+        if (this.worker) {
+            // Marcar handler obsoleto
+            this._currentHandlerId = null;
+
+            // Terminar worker
+            this.worker.terminate();
             this.worker = null;
+            this.isWorkerProcessing = false;
+
+            console.debug('🧹 Worker limpiado completamente');
         }
     }
 
@@ -264,7 +296,10 @@ class CellularAutomaton {
 
         if (this.grid[x][y] !== state) {
             this.grid[x][y] = state;
+
+            // Marcar siempre que cambie, sin condiciones
             if (markDirty) this.dirtyCells.add(`${x},${y}`);
+
             return true;
         }
         return false;
@@ -287,15 +322,40 @@ class CellularAutomaton {
         if (!this.ctx || !this.canvas) return;
         if (this.dirtyCells.size === 0 && this.generation > 0) return;
 
+        // Sanity check (descomentar para depurar integridad)
+        // this._verifyRenderIntegrity();
+
+        // Render completo solo si es primera generación o hay muchos cambios
         const fullRenderNeeded = this.dirtyCells.size > (this.gridSize * this.gridSize * 0.1);
 
         if (fullRenderNeeded || this.generation === 0) {
             this._forceFullRender();
         } else {
+            // Solo renderizar celdas dirty (sin tocar el grid)
             this._renderDirtyCells();
         }
 
         this.dirtyCells.clear();
+    }
+
+    _verifyRenderIntegrity() {
+        let mismatches = 0;
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                const cellIndex = y * this.gridSize + x;
+                const isAlive = this.grid[x][y];
+                const wasRenderedAlive = this.renderFlags[cellIndex] === 1;
+
+                if (isAlive !== wasRenderedAlive) {
+                    mismatches++;
+                    this.dirtyCells.add(`${x},${y}`); // Forzar re-render
+                }
+            }
+        }
+
+        if (mismatches > 0) {
+            console.warn(`⚠️ Render integrity: ${mismatches} celdas desincronizadas`);
+        }
     }
 
     _forceFullRender() {
@@ -318,29 +378,27 @@ class CellularAutomaton {
         const isAlive = this.grid[x][y];
         const cellIndex = y * this.gridSize + x;
 
-        // Usar prevFlags para detectar cambio vs generación anterior
+        // Determinar si hubo cambio usando prevFlags vs. estado ACTUAL
         const prevAlive = this.prevFlags[cellIndex] === 1;
         const changed = isAlive !== prevAlive;
 
-        // Actualizar renderFlags con estado actual
+        // Limpiar el área de la celda COMPLETAMENTE
+        // Esto asegura que celdas muertas se "borren" visualmente
+        const innerSize = cellSize - 2; // Preservar 1px para grid si está activa
+
+        this.ctx.clearRect(
+            x * cellSize + 1,
+            y * cellSize + 1,
+            innerSize,
+            innerSize
+        );
+
+        // Actualizar flags después de limpiar
         this.renderFlags[cellIndex] = isAlive ? 1 : 0;
 
-        // Si no cambió y no es primera generación, no renderizar
-        if (!changed && this.generation > 0) return;
-
-        // 1. Limpiar celda
-        this.ctx.clearRect(x * cellSize, y * cellSize, cellSize, cellSize);
-
-        // 2. Dibujar grid si está activo
-        if (this.showGrid) {
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-            this.ctx.lineWidth = 1;
-            this.ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
-        }
-
-        // 3. Dibujar celda si está viva
+        // Solo dibujar si está viva (después de limpiar)
         if (isAlive) {
-            this._drawSingleCell(x, y, changed);  // Pasar 'changed' como parámetro
+            this._drawSingleCell(x, y, changed);
         }
     }
 
@@ -349,18 +407,17 @@ class CellularAutomaton {
         const centerX = x * cellSize + cellSize / 2;
         const centerY = y * cellSize + cellSize / 2;
 
-        // Colores
         const activeColor = '#b9b610';
         const stableColor = '#059669';
         const highlightColor = 'rgba(255, 255, 255, 0.3)';
 
-        // Gradient según actividad
         const gradient = this.ctx.createRadialGradient(
             centerX, centerY, 0,
             centerX, centerY, cellSize / 2
         );
 
-        if (changed) {
+        // Solo usar gradiente de actividad si showActivityEffect está activo
+        if (changed && this.showActivityEffect) {
             gradient.addColorStop(0, activeColor);
             gradient.addColorStop(0.7, stableColor);
             gradient.addColorStop(1, 'rgba(5, 150, 105, 0.8)');
@@ -377,8 +434,8 @@ class CellularAutomaton {
             cellSize - 2
         );
 
-        // Brillo en bordes si es activa
-        if (changed) {
+        // Brillo solo si showActivityEffect está activo
+        if (changed && this.showActivityEffect) {
             this.ctx.fillStyle = highlightColor;
             this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
         }
@@ -430,7 +487,9 @@ class CellularAutomaton {
     nextGeneration() {
         if (this.checkLimits()) return 0;
 
-        this.prevFlags.set(this.renderFlags);
+        // Copia atómica con propagación (más rápido que bucles)
+        this.prevFlags = new Uint8Array(this.renderFlags);
+
         this.dirtyCells.clear();
 
         // === DECIDIR: Worker o main thread ===
@@ -489,7 +548,6 @@ class CellularAutomaton {
 
         this.gridSize = size;
         this.grid = this.createEmptyGrid();
-        this.prevGrid = null;
         this.resizeCanvas();
         this.generation = 0;
         this.isLimitReached = false;
@@ -826,36 +884,77 @@ class CellularAutomaton {
     }
 
     toggleRunning() {
+        if (this.checkLimits()) {
+            this.isLimitReached = false;
+            this.generation = 0;
+            this.updateStats();
+        }
+
         this.isRunning = !this.isRunning;
-        this.isRunning ? this.start() : this.stop();
+
+        if (this.isRunning) {
+            this.start();
+        } else {
+            this.stop();
+        }
+
         return this.isRunning;
     }
 
     start() {
-        if (this.intervalId) return;
-        console.debug('▶️ Simulación iniciada - Intervalo:', this.updateInterval);
-        this.intervalId = setInterval(() => this._animate(), this.updateInterval);
+        // Evitar múltiples RAF loops
+        if (this.rafId) {
+            console.warn('⚠️ RAF ya activo');
+            return;
+        }
+
+        console.debug('▶️ Simulación iniciada con RAF');
+        this._lastFrameTime = performance.now();
+        this._animateRAF();
     }
 
     stop() {
-        if (this.intervalId) {
-            clearInterval(this.intervalId);
-            this.intervalId = null;
+        if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+            console.debug('⏹️ Simulación detenida');
         }
     }
 
+    _animateRAF(currentTime = 0) {
+        if (!this.isRunning) return;
+
+        // Delta time para timing preciso
+        const deltaTime = currentTime - this._lastFrameTime;
+
+        // Ejecutar solo si ha pasado el intervalo configurado
+        if (deltaTime >= this.updateInterval) {
+            this._lastFrameTime = currentTime - (deltaTime % this.updateInterval);
+
+            // Generar frame
+            this.nextGeneration();
+
+            // Emitir evento para UI
+            eventBus.emit('automaton:generation', {
+                generation: this.generation,
+                population: this.countPopulation(),
+                density: this.getDensity()
+            });
+
+            this.render();
+        }
+
+        // Loop inmediato con RAF
+        this.rafId = requestAnimationFrame((time) => this._animateRAF(time));
+    }
+
+    // Legacy para backwards compatibility
     _animate() {
-        console.debug('🔄 Generación', this.generation + 1);
-        this.nextGeneration();
-
-        // === Emitir evento para que UI se actualice en cada paso ===
-        eventBus.emit('automaton:generation', {
-            generation: this.generation,
-            population: this.countPopulation(),
-            density: this.getDensity()
-        });
-
-        this.render();
+        // Delegar al nuevo sistema
+        if (!this._lastFrameTime) {
+            this._lastFrameTime = performance.now();
+            this._animateRAF();
+        }
     }
 
     setSpeed(level) {
@@ -878,6 +977,12 @@ class CellularAutomaton {
         this.render();
         eventBus.emit('automaton:gridToggled', {showGrid: this.showGrid});
         return this.showGrid;
+    }
+
+    setShowActivityEffect(enabled) {
+        this.showActivityEffect = enabled;
+        eventBus.emit('automaton:showActivityEffectChanged', {enabled});
+        return this.showActivityEffect;
     }
 
     _handleResize() {
@@ -914,10 +1019,6 @@ class CircularArray {
     get(index) {
         if (index < 0 || index >= this.size) return undefined;
         return this.buffer[(this.head + index) % this.maxSize];
-    }
-
-    toArray() {
-        return Array.from(this); // Usa el iterador
     }
 
     clear() {

@@ -39,6 +39,8 @@ class UIController {
             rotation: 0
         };
 
+        this.showActivityEffect = true;
+
         // Suscribirse AHORA, ANTES de que automata empiece a emitir
         this._subscribeToAutomatonEvents();
 
@@ -324,6 +326,9 @@ class UIController {
         this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
         this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
 
+        // Toggle para efectos de actividad
+        this._addEventListener(document.getElementById('activityEffectToggle'), 'change', () => this.toggleActivityEffect());
+
         // Tablero toroidal o finito
         const wrapToggle = document.getElementById('wrapToggle');
         if (wrapToggle) {
@@ -510,6 +515,10 @@ class UIController {
     // =========================================
 
     handleContinuousDrawing(x, y) {
+        // Clipping preventivo
+        x = Math.max(0, Math.min(x, this.automaton.gridSize - 1));
+        y = Math.max(0, Math.min(y, this.automaton.gridSize - 1));
+
         if (!this.lastCell || (this.lastCell.x === x && this.lastCell.y === y)) {
             this.lastCell = {x, y};
             return;
@@ -542,8 +551,16 @@ class UIController {
         const sy = y0 < y1 ? 1 : -1;
         let err = dx - dy;
 
+        // Límites seguros
+        const maxX = this.automaton.gridSize - 1;
+        const maxY = this.automaton.gridSize - 1;
+
         while (true) {
-            cells.push({x: x0, y: y0});
+            // Clipping: solo añadir si está dentro de bounds
+            if (x0 >= 0 && x0 <= maxX && y0 >= 0 && y0 <= maxY) {
+                cells.push({x: x0, y: y0});
+            }
+
             if (x0 === x1 && y0 === y1) break;
 
             const e2 = 2 * err;
@@ -554,6 +571,12 @@ class UIController {
             if (e2 < dx) {
                 err += dx;
                 y0 += sy;
+            }
+
+            // Prevenir loops infinitos por overflow
+            if (cells.length > this.automaton.gridSize * 2) {
+                console.warn('⚠️ Clipping interrumpió línea demasiado larga');
+                break;
             }
         }
 
@@ -1035,6 +1058,16 @@ class UIController {
         const toggle = document.getElementById('influenceToggle');
         if (toggle) toggle.checked = this.showInfluenceArea;
         this.toggleInfluenceArea();
+    }
+
+    toggleActivityEffect() {
+        const toggle = document.getElementById('activityEffectToggle');
+        this.showActivityEffect = toggle.checked;
+
+        // Forzar re-renderizado inmediato
+        this.automaton.setShowActivityEffect(this.showActivityEffect);
+        this.automaton._markAllDirty();
+        this.automaton.render();
     }
 
     scrollPatterns(direction) {
