@@ -31,14 +31,20 @@ class UIController {
         this._cleanups = [];
         this._mouseTimeout = null;
 
-        window.selectedPatternKey = null;
-        window.selectedPattern = null;
-        window.selectedPatternRotation = 0;
+        this._selectionContainerHandler = null;
+
+        this._patternState = {
+            pattern: null,
+            key: null,
+            rotation: 0
+        };
 
         // Suscribirse AHORA, ANTES de que automata empiece a emitir
         this._subscribeToAutomatonEvents();
 
         this._waitForRulesAndInit().then();
+
+        this._setupSelectionDelegation();
     }
 
     async _waitForRulesAndInit() {
@@ -72,23 +78,85 @@ class UIController {
         eventBus.emit('ui:ready');
     }
 
+    _setupSelectionDelegation() {
+        const container = document.querySelector('.canvas-controls');
+        if (!container) return;
+
+        // Handler delegado para clics en botones de selección
+        this._selectionContainerHandler = (e) => {
+            const deleteBtn = e.target.closest('#deleteSelectionBtn');
+            const clearBtn = e.target.closest('#clearSelectionBtn');
+
+            if (deleteBtn) {
+                e.preventDefault();
+                this.deleteSelection();
+            } else if (clearBtn) {
+                e.preventDefault();
+                this.clearSelection();
+            }
+        };
+
+        container.addEventListener('click', this._selectionContainerHandler);
+
+        // Registrar cleanup
+        this._cleanups.push(() => {
+            container.removeEventListener('click', this._selectionContainerHandler);
+        });
+    }
+
     // =========================================
     // LIFECYCLE & CLEANUP
     // =========================================
 
     destroy() {
-        this._cleanups.forEach(cleanup => cleanup());
-        this._cleanups = [];
-
-        if (this._mouseTimeout) clearTimeout(this._mouseTimeout);
-
+        // 1. Detener timers
         if (this._gridSizeDebounceTimer) {
             clearTimeout(this._gridSizeDebounceTimer);
         }
+        if (this._mouseTimeout) {
+            clearTimeout(this._mouseTimeout);
+        }
 
+        // 2. Limpiar selección visual
         this._removeSelectionVisual();
         this._removeDragPreview();
         this._hideSelectionInfo();
+
+        // 3. Limpiar overlays del canvas
+        document.getElementById('patternPreview')?.remove();
+        document.getElementById('influenceArea')?.remove();
+        document.getElementById('selectionOverlay')?.remove();
+        document.getElementById('selectionInfo')?.remove();
+        document.getElementById('dragPreview')?.remove();
+
+        // 4. Limpiar event listeners registrados
+        this._cleanups.forEach(cleanup => {
+            try {
+                cleanup();
+            } catch (e) {
+                console.warn('Error en cleanup:', e);
+            }
+        });
+        this._cleanups = [];
+
+        // 5. Limpiar estado global si existe
+        if (window.selectedPattern === this._patternState?.pattern) {
+            window.selectedPattern = null;
+        }
+        if (window.selectedPatternKey === this._patternState?.key) {
+            window.selectedPatternKey = null;
+        }
+        if (window.selectedPatternRotation === this._patternState?.rotation) {
+            window.selectedPatternRotation = 0;
+        }
+
+        // 6. Liberar referencias
+        this.automaton = null;
+        this._patternState = null;
+        this.lastCell = null;
+        this.selection = null;
+        this.selectionContent = null;
+        this.dragOffset = null;
 
         eventBus.emit('ui:destroyed');
     }
@@ -342,8 +410,8 @@ class UIController {
             return;
         }
 
-        if (window.selectedPattern) {
-            this.automaton.importPattern(window.selectedPattern, x, y);
+        if (this._patternState.pattern) {
+            this.automaton.importPattern(this._patternState.pattern, x, y);
             return;
         }
 
@@ -407,23 +475,28 @@ class UIController {
     _handleRightClick(e) {
         e.preventDefault();
 
-        if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
-            window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-            window.selectedPattern = getPatternWithRotation(
-                window.selectedPatternKey,
-                window.selectedPatternRotation
+        // Verificar si hay patrón seleccionado y no es aleatorio
+        if (this._patternState.pattern && this._patternState.pattern.pattern !== 'random') {
+            // Actualizar rotación en el estado local
+            this._patternState.rotation = (this._patternState.rotation + 90) % 360;
+
+            // Recalcular patrón rotado
+            this._patternState.pattern = getPatternWithRotation(
+                this._patternState.key,
+                this._patternState.rotation
             );
 
-            // Actualizar info del patrón
-            updatePatternInfo();
+            // Emitir evento en lugar de llamada global directa
+            eventBus.emit('pattern:rotationChanged', {
+                pattern: this._patternState.pattern,
+                rotation: this._patternState.rotation
+            });
 
-            // Obtener coordenadas del mouse
+            // Actualizar preview con nuevas coordenadas
             const {x, y} = this.automaton.getCellFromMouse(e);
-
-            // Actualizar preview del patrón
             showPatternPreview(x, y);
 
-            // === Actualizar área de influencia SIEMPRE si está activa ===
+            // Actualizar área de influencia si está activa
             if (this.showInfluenceArea) {
                 showInfluenceArea(x, y);
             }
@@ -728,7 +801,7 @@ class UIController {
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const maxX = Math.max(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
-        const maxY = Math.max(this.selection.startY, this.selection.endY);
+        const maxY = Math.max(this.selection.endY, this.selection.endY);
         const width = maxX - minX + 1;
         const height = maxY - minY + 1;
 
@@ -748,8 +821,6 @@ class UIController {
       </div>
     `;
 
-        document.getElementById('deleteSelectionBtn')?.addEventListener('click', () => this.deleteSelection());
-        document.getElementById('clearSelectionBtn')?.addEventListener('click', () => this.clearSelection());
         infoDiv.style.display = 'block';
     }
 
@@ -784,10 +855,16 @@ class UIController {
                 this.step();
                 break;
             case 'r':
-                if (window.selectedPattern?.pattern !== 'random') {
-                    window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-                    window.selectedPattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
-                    updatePatternInfo();
+                if (this._patternState.pattern?.pattern !== 'random') {
+                    this._patternState.rotation = (this._patternState.rotation + 90) % 360;
+                    this._patternState.pattern = getPatternWithRotation(
+                        this._patternState.key,
+                        this._patternState.rotation
+                    );
+                    eventBus.emit('pattern:rotationChanged', {
+                        pattern: this._patternState.pattern,
+                        rotation: this._patternState.rotation
+                    });
                 }
                 break;
             case 'a':

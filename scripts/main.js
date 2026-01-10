@@ -6,6 +6,12 @@ class Application {
         this.responsiveController = null;
         this.patternManager = null;
 
+        this._appState = {
+            selectedPattern: null,
+            selectedPatternKey: null,
+            selectedPatternRotation: 0
+        };
+
         this._init();
     }
 
@@ -84,4 +90,45 @@ class Application {
 // Inicialización ÚNICA
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new Application();
+});
+
+// =========================================
+// BRIDGE TEMPORAL PARA COMPATIBILIDAD RETROACTIVA
+// Eliminar tras migrar completamente todo el código a eventos
+// =========================================
+
+// Solo crear el bridge después de que la app esté lista
+eventBus.on('app:ready', () => {
+    // Getter/Setter para selectedPattern
+    Object.defineProperty(window, 'selectedPattern', {
+        get: () => window.app?.uiController?._patternState?.pattern || null,
+        set: (val) => {
+            if (window.app?.uiController) {
+                window.app.uiController._patternState.pattern = val;
+            }
+        },
+        configurable: true
+    });
+
+    // Getter/Setter para selectedPatternKey
+    Object.defineProperty(window, 'selectedPatternKey', {
+        get: () => window.app?.uiController?._patternState?.key || null,
+        set: (val) => {
+            if (window.app?.uiController) {
+                window.app.uiController._patternState.key = val;
+            }
+        },
+        configurable: true
+    });
+
+    // Getter/Setter para selectedPatternRotation
+    Object.defineProperty(window, 'selectedPatternRotation', {
+        get: () => window.app?.uiController?._patternState?.rotation || 0,
+        set: (val) => {
+            if (window.app?.uiController) {
+                window.app.uiController._patternState.rotation = val;
+            }
+        },
+        configurable: true
+    });
 });

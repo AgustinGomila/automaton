@@ -72,10 +72,19 @@ class CellularAutomaton {
         this.stop();
         if (this._cleanupResize) this._cleanupResize();
 
+        // Limpiar worker
+        if (this.worker) {
+            this.worker.terminate();
+            this.worker = null;
+        }
+
+        // Liberar buffers
         this.grid = null;
         this.prevGrid = null;
         this.dirtyCells.clear();
-        this.populationHistory = [];
+        this.dirtyCells = null;
+        this.populationHistory.clear();
+        this.populationHistory = null;
         this.ctx = null;
         this.canvas = null;
 

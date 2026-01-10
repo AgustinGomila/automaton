@@ -19,23 +19,18 @@ class PatternManager {
     _init() {
         this.renderPatterns();
 
-        // Suscribirse a eventos
+        // Suscribirse a eventos del bus UNA SOLA VEZ con handlers reutilizables
         this._cleanups.push(
-            eventBus.on('pattern:selected', () => this._updatePreviewOnEvent()),
-            eventBus.on('pattern:updated', () => this._updatePreviewOnEvent())
+            eventBus.on('pattern:selected', (data) => {
+                this._updatePatternInfo();
+            }),
+            eventBus.on('pattern:updated', (data) => {
+                this._updatePatternInfo();
+            }),
+            eventBus.on('pattern:rotationChanged', (data) => {
+                this._updatePatternInfo();
+            })
         );
-    }
-
-    _updatePreviewOnEvent() {
-        // Actualizar preview si el mouse está sobre el canvas
-        const canvas = document.getElementById('canvas');
-        if (canvas && this.isPreviewVisible) {
-            const rect = canvas.getBoundingClientRect();
-            this.showPatternPreview(
-                Math.floor(this.automaton.gridSize / 2),
-                Math.floor(this.automaton.gridSize / 2)
-            );
-        }
     }
 
     // =========================================
@@ -268,7 +263,10 @@ class PatternManager {
     hidePatternPreview() {
         const preview = document.getElementById('patternPreview');
         if (preview) {
-            preview.innerHTML = '';
+            // Limpiar hijos para liberar memoria
+            while (preview.firstChild) {
+                preview.removeChild(preview.firstChild);
+            }
             preview.style.display = 'none';
         }
         this.isPreviewVisible = false;
@@ -378,7 +376,10 @@ class PatternManager {
     hideInfluenceArea() {
         const influenceDiv = document.getElementById('influenceArea');
         if (influenceDiv) {
-            influenceDiv.innerHTML = '';
+            // Limpiar hijos para liberar memoria
+            while (influenceDiv.firstChild) {
+                influenceDiv.removeChild(influenceDiv.firstChild);
+            }
             influenceDiv.style.display = 'none';
             this.isInfluenceVisible = false;
         }
@@ -468,12 +469,11 @@ function getPatternWithRotation(patternKey, rotation = 0) {
 // COMPATIBILIDAD CON UI-CONTROLLER
 // =========================================
 
-// Función global que usa ui-controller.js
+// Función bridge temporal para mantener compatibilidad con código legacy
+// Esta función simplemente reenvía al manejador interno
 function updatePatternInfo() {
     if (window.patternManager) {
         window.patternManager._updatePatternInfo();
-    } else {
-        console.warn('PatternManager no disponible para updatePatternInfo');
     }
 }
 
@@ -1088,8 +1088,6 @@ const PATTERNS = {
 
 // Exportar al scope global
 window.updatePatternInfo = updatePatternInfo;
-
-// Exportar al scope global para que los event listeners puedan usarlo
 window.getPatternWithRotation = getPatternWithRotation;
 window.rotateMatrix = rotateMatrix;
 window.PATTERNS = PATTERNS;
