@@ -1,4 +1,3 @@
-// scripts/workers/automaton-worker.js
 self.onmessage = function (e) {
     const {
         grid,

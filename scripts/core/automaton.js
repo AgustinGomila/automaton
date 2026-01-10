@@ -26,7 +26,7 @@ class CellularAutomaton {
         this.resizeCanvas();
 
         // Estadísticas
-        this.populationHistory = [];
+        this.populationHistory = new CircularArray(100); // 100 es el maxSize
         this.maxHistoryLength = 100;
 
         // Vecindad
@@ -48,6 +48,7 @@ class CellularAutomaton {
         this._boundHandleResize = this._handleResize.bind(this);
         this._cleanupResize = this._addEventListener(window, 'resize', this._boundHandleResize);
 
+        // Worker
         this.worker = null;
         this.workerThreshold = 100; // Usar worker si gridSize >= 100
         this.isWorkerProcessing = false;
@@ -87,12 +88,49 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // AUTOMATON WEB WORKER
+    // WORKER CON HANDLER ÚNICO Y REUTILIZABLE
     // =========================================
     _initWorker() {
         if (this.gridSize >= this.workerThreshold && window.Worker) {
             try {
                 this.worker = new Worker('scripts/workers/automaton-worker.js');
+
+                this.worker.onmessage = (e) => {
+                    const {newGrid, changedCells, population, density, generation} = e.data;
+
+                    // Aplicar resultados solo si el worker aún está activo
+                    if (!this.worker) return;
+
+                    this.grid = newGrid;
+                    this.generation = generation;
+                    this._lastPopulation = population;
+
+                    // Marcar celdas modificadas
+                    this.dirtyCells.clear();
+                    changedCells.forEach(({x, y}) => this.dirtyCells.add(`${x},${y}`));
+
+                    // Actualizar estadísticas y límites
+                    this.updateStats();
+                    this.checkLimits();
+
+                    // Renderizar
+                    this.render();
+
+                    this.isWorkerProcessing = false;
+                    console.log(`🔄 Worker: G${generation} P${population} D${density}%`);
+                };
+
+                this.worker.onerror = (error) => {
+                    console.error('❌ Worker error:', error);
+                    this.isWorkerProcessing = false;
+
+                    // Fallback inmediato a main thread
+                    this.worker.terminate();
+                    this.worker = null;
+                    this._markAllDirty();
+                    this.render();
+                };
+
                 console.log(`✅ Worker creado para grid ${this.gridSize}x${this.gridSize}`);
             } catch (error) {
                 console.warn('❌ No se pudo crear worker, usando main thread:', error);
@@ -154,41 +192,6 @@ class CellularAutomaton {
 
         // Enviar al worker (sin transferibles por simplicidad)
         this.worker.postMessage(messageData);
-
-        // Manejar respuesta
-        this.worker.onmessage = (e) => {
-            const {newGrid, changedCells, population, density, generation} = e.data;
-
-            // Aplicar resultados
-            this.grid = newGrid;
-            this.generation = generation;
-            this._lastPopulation = population;
-
-            // Marcar celdas modificadas
-            this.dirtyCells.clear();
-            changedCells.forEach(({x, y}) => this.dirtyCells.add(`${x},${y}`));
-
-            // Actualizar UI
-            this.updateStats();
-            this.checkLimits();
-
-            // Renderizar
-            this.render();
-
-            this.isWorkerProcessing = false;
-
-            console.log(`🔄 Worker: G${generation} P${population} D${density}%`);
-        };
-
-        this.worker.onerror = (error) => {
-            console.error('❌ Worker error:', error);
-            this.isWorkerProcessing = false;
-
-            // Fallback a main thread
-            this.worker.terminate();
-            this.worker = null;
-            this.nextGeneration();
-        };
     }
 
     // =========================================
@@ -560,9 +563,6 @@ class CellularAutomaton {
         const density = (population / (this.gridSize * this.gridSize) * 100).toFixed(1);
 
         this.populationHistory.push(population);
-        if (this.populationHistory.length > this.maxHistoryLength) {
-            this.populationHistory = this.populationHistory.slice(-this.maxHistoryLength);
-        }
 
         eventBus.emit('stats:updated', {
             generation: this.generation,
@@ -768,6 +768,7 @@ class CellularAutomaton {
         }
         this.generation = 0;
         this.isLimitReached = false;
+        this.populationHistory.clear();
         if (changed) {
             this.updateStats();
             this.render();
@@ -784,6 +785,7 @@ class CellularAutomaton {
         }
         this.generation = 0;
         this.isLimitReached = false;
+        this.populationHistory.clear();
         if (changed) {
             this.updateStats();
             this.render();
@@ -847,5 +849,54 @@ class CellularAutomaton {
 
     _handleResize() {
         setTimeout(() => this.render(), 100);
+    }
+}
+
+class CircularArray {
+    constructor(maxSize) {
+        this.maxSize = maxSize;
+        this.buffer = new Array(maxSize);
+        this.head = 0;
+        this.tail = 0;
+        this.size = 0;
+    }
+
+    get length() {
+        return this.size;
+    }
+
+    push(item) {
+        if (this.size < this.maxSize) {
+            this.buffer[this.tail] = item;
+            this.tail = (this.tail + 1) % this.maxSize;
+            this.size++;
+        } else {
+            // Sobrescribe el elemento más antiguo
+            this.buffer[this.tail] = item;
+            this.tail = (this.tail + 1) % this.maxSize;
+            this.head = this.tail;
+        }
+    }
+
+    get(index) {
+        if (index < 0 || index >= this.size) return undefined;
+        return this.buffer[(this.head + index) % this.maxSize];
+    }
+
+    toArray() {
+        return Array.from(this); // Usa el iterador
+    }
+
+    clear() {
+        this.head = 0;
+        this.tail = 0;
+        this.size = 0;
+    }
+
+    // Soporte para iteración y spread operator
+    * [Symbol.iterator]() {
+        for (let i = 0; i < this.size; i++) {
+            yield this.get(i);
+        }
     }
 }

@@ -12,6 +12,9 @@ class UIController {
         this.patternsCompactView = false;
         this.rulesLoaded = false;
 
+        this._gridSizeDebounceTimer = null;
+        this._gridSizePendingValue = null;
+
         this.isMouseDown = false;
         this.lastCell = null;
         this.isSelecting = false;
@@ -78,6 +81,10 @@ class UIController {
         this._cleanups = [];
 
         if (this._mouseTimeout) clearTimeout(this._mouseTimeout);
+
+        if (this._gridSizeDebounceTimer) {
+            clearTimeout(this._gridSizeDebounceTimer);
+        }
 
         this._removeSelectionVisual();
         this._removeDragPreview();
@@ -876,10 +883,32 @@ class UIController {
         const display = document.getElementById('gridSizeValue');
         if (display) display.textContent = `${value}×${value}`;
 
+        // Cancelar timer anterior
+        if (this._gridSizeDebounceTimer) {
+            clearTimeout(this._gridSizeDebounceTimer);
+        }
+
+        // Guardar valor pendiente
+        this._gridSizePendingValue = value;
+
+        // Crear nuevo timer de 500ms
+        this._gridSizeDebounceTimer = setTimeout(() => {
+            this._applyGridSizeChange();
+        }, 500);
+    }
+
+    _applyGridSizeChange() {
+        if (this._gridSizePendingValue === null) return;
+
+        const value = this._gridSizePendingValue;
+        this._gridSizePendingValue = null;
+
         if (!this.automaton.isRunning || confirm('Cambiar el tamaño detendrá la simulación. ¿Continuar?')) {
             if (this.automaton.isRunning) this.togglePlay();
             this.automaton.resizeGrid(value);
         }
+
+        this._gridSizeDebounceTimer = null;
     }
 
     updateGridSizeDisplay() {
