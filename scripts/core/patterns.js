@@ -796,7 +796,7 @@ const PATTERNS = {
         ]
     },
 
-    // === PATRONES ORIGINALES ===
+    // === PATRONES KAUFFMAN ===
     pattern1: {
         name: "KI",
         description: "---",

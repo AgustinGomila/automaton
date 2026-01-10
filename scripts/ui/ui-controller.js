@@ -99,12 +99,12 @@ class UIController {
             return;
         }
 
-        console.log('🔔 UIController: Suscribiendo a eventos...');
+        console.log('🔔 UIController: Suscribiendo a eventos del automata...');
 
         const weakThis = new WeakRef(this);
 
         this._cleanups.push(
-            // ESTE es el listener que faltaba para STATS
+            // ESTADÍSTICAS
             eventBus.on('stats:updated', (stats) => {
                 const ui = weakThis.deref();
                 if (ui) {
@@ -112,12 +112,12 @@ class UIController {
                 }
             }),
 
-            // ESTE es para actualizar el header cuando cambia la regla
+            // REGLAS
             eventBus.on('automaton:ruleChanged', () => {
                 weakThis.deref()?.updateHeaderInfo();
             }),
 
-            // ESTE es para vecindad
+            // VECINDAD
             eventBus.on('automaton:neighborhoodChanged', () => {
                 const ui = weakThis.deref();
                 if (ui) {
@@ -126,8 +126,17 @@ class UIController {
                 }
             }),
 
-            // ESTE es para radio
+            // RADIO
             eventBus.on('automaton:radiusChanged', () => {
+                const ui = weakThis.deref();
+                if (ui) {
+                    ui.updateHeaderInfo();
+                    ui.updateNeighborhoodInfo();
+                }
+            }),
+
+            // === WRAP (MUROS/TOROIDAL) ===
+            eventBus.on('automaton:wrapChanged', () => {
                 const ui = weakThis.deref();
                 if (ui) {
                     ui.updateHeaderInfo();
@@ -136,7 +145,7 @@ class UIController {
             })
         );
 
-        console.log('✅ UIController: Suscrito a 4 eventos');
+        console.log('✅ UIController: Suscrito a TODOS los eventos');
     }
 
     async _waitForRules() {
@@ -239,6 +248,38 @@ class UIController {
         // Toggle área de influencia
         this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
         this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
+
+        // Tablero toroidal o finito
+        const wrapToggle = document.getElementById('wrapToggle');
+        if (wrapToggle) {
+            this._addEventListener(wrapToggle, 'change', () => {
+                this.automaton.wrapEdges = wrapToggle.checked;
+                this.automaton.generation = 0;
+                this.automaton.updateStats();
+                this.automaton._markAllDirty();
+                this.automaton.render();
+                this.updateNeighborhoodInfo(); // ACTUALIZAR INMEDIATAMENTE
+
+                // Emitir evento para cualquier otro listener
+                eventBus.emit('automaton:wrapChanged', {wrap: wrapToggle.checked});
+            });
+        }
+
+        // Web workers
+        const workerToggle = document.getElementById('workerToggle');
+        if (workerToggle) {
+            workerToggle.checked = this.automaton.worker !== null;
+            this._addEventListener(workerToggle, 'change', (e) => {
+                if (e.target.checked) {
+                    this.automaton._initWorker();
+                } else {
+                    if (this.automaton.worker) {
+                        this.automaton.worker.terminate();
+                        this.automaton.worker = null;
+                    }
+                }
+            });
+        }
 
         // Controles
         this._addEventListener(document.getElementById('speedControl'), 'input', () => this.updateSpeed());
@@ -954,7 +995,7 @@ class UIController {
             customRuleGroup.style.display = 'none';
             if (window.RULES?.[selector.value]) {
                 this.automaton.setRule(window.RULES[selector.value].survival, window.RULES[selector.value].birth);
-                this.updateHeaderInfo(); // ASEGURAR esté aquí
+                this.updateHeaderInfo();
             }
         }
     }
@@ -972,15 +1013,35 @@ class UIController {
         }
     }
 
+    toggleWrapMode() {
+        this.automaton.wrapEdges = !this.automaton.wrapEdges;
+
+        if (this.automaton.isRunning) {
+            this.automaton.stop();
+        }
+
+        this.automaton.generation = 0;
+        this.automaton.isLimitReached = false;
+
+        this.automaton._markAllDirty();
+        this.automaton.updateStats();
+        this.automaton.render();
+
+        // Actualizar UI
+        const status = this.automaton.wrapEdges ? 'Toroidal' : 'Paredes Duras';
+        console.log(`🔲 Modo de frontera: ${status}`);
+
+        eventBus.emit('automaton:wrapChanged', {wrap: this.automaton.wrapEdges});
+    }
 
     changeNeighborhoodType(type) {
         this.automaton.setNeighborhoodType(type);
-        this.updateHeaderInfo(); // ASEGURAR esté aquí
+        this.updateHeaderInfo();
     }
 
     changeNeighborhoodRadius(radius) {
         this.automaton.setNeighborhoodRadius(radius);
-        this.updateHeaderInfo(); // ASEGURAR esté aquí
+        this.updateHeaderInfo();
         const radiusValue = document.getElementById('radiusValue');
         if (radiusValue) radiusValue.textContent = radius;
     }
@@ -1050,9 +1111,11 @@ class UIController {
 
         const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
         const radius = this.automaton.neighborhoodRadius;
-        infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (radio ${radius})`;
+        const wrap = this.automaton.wrapEdges ? '∞' : '▏▕'; // Símbolos visuales
 
-        console.log(`🏘️ Neighborhood info actualizada: ${type} radio ${radius}`);
+        infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (R${radius}) ${wrap}`;
+
+        console.log(`🏘️ Neighborhood info actualizada: ${type} radio ${radius} ${wrap}`);
     }
 
     _bindPatternsControls() {
@@ -1191,9 +1254,9 @@ class UIController {
             return;
         }
 
-        genEl.textContent = stats.generation.toLocaleString();
-        popEl.textContent = stats.population.toLocaleString();
-        densEl.textContent = `${stats.density}%`;
+        genEl.textContent = (stats.generation || 0).toLocaleString();
+        popEl.textContent = (stats.population || 0).toLocaleString();
+        densEl.textContent = `${stats.density || 0}%`;
 
         console.log(`📊 Stats actualizadas: G${stats.generation} P${stats.population}`);
     }

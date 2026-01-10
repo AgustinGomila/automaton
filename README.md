@@ -11,7 +11,7 @@ Louis Kauffman y otras configuraciones clásicas.
 
 ### Reglas Disponibles
 
-- **Kauffman B37/S4567** - Regla original presentada por Louis Kauffman
+- **Kauffman B37/S4567** - Regla presentada por Louis Kauffman
 - **Conway's Life B3/S23** - El autómata celular más famoso
 - **HighLife B36/S23** - Variación con replicador
 - **Day & Night B3678/S34678** - Simétrico con comportamiento interesante

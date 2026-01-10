@@ -29,7 +29,7 @@ class CellularAutomaton {
         this.populationHistory = [];
         this.maxHistoryLength = 100;
 
-        // Vecindad optimizada
+        // Vecindad
         this.neighborhoodType = 'moore';
         this.neighborhoodRadius = 1;
         this._neighborOffsets = this._precomputeNeighborOffsets();
@@ -41,10 +41,17 @@ class CellularAutomaton {
         this.limitValue = 1000;
         this.isLimitReached = false;
 
+        this.wrapEdges = true; // true = toroidal, false = paredes duras
+
         // Bind y event listeners
         this._boundAnimate = this._animate.bind(this);
         this._boundHandleResize = this._handleResize.bind(this);
         this._cleanupResize = this._addEventListener(window, 'resize', this._boundHandleResize);
+
+        this.worker = null;
+        this.workerThreshold = 100; // Usar worker si gridSize >= 100
+        this.isWorkerProcessing = false;
+        this._initWorker();
 
         // Inicializar
         this._initRule().then(() => {
@@ -80,7 +87,112 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // OPTIMIZACIÓN DE VECINDAD
+    // AUTOMATON WEB WORKER
+    // =========================================
+    _initWorker() {
+        if (this.gridSize >= this.workerThreshold && window.Worker) {
+            try {
+                this.worker = new Worker('scripts/workers/automaton-worker.js');
+                console.log(`✅ Worker creado para grid ${this.gridSize}x${this.gridSize}`);
+            } catch (error) {
+                console.warn('❌ No se pudo crear worker, usando main thread:', error);
+                this.worker = null;
+            }
+        } else {
+            this.worker = null;
+        }
+    }
+
+    _nextGenerationMainThread() {
+        const newGrid = this.createEmptyGrid();
+        let changes = 0;
+
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                const neighbors = this._countNeighbors(x, y);
+                const isAlive = this.grid[x][y];
+                const willBeAlive = isAlive
+                    ? this.rule.survival.includes(neighbors)
+                    : this.rule.birth.includes(neighbors);
+
+                newGrid[x][y] = willBeAlive;
+                if (willBeAlive !== isAlive) {
+                    changes++;
+                    this.dirtyCells.add(`${x},${y}`);
+                }
+            }
+        }
+
+        this.grid = newGrid;
+        this.generation++;
+        this._lastPopulation = this.countPopulation();
+        this.updateStats();
+        this.checkLimits();
+
+        return changes;
+    }
+
+    _nextGenerationWorker() {
+        if (this.isWorkerProcessing) {
+            console.warn('Worker ocupado, saltando frame');
+            return;
+        }
+
+        this.isWorkerProcessing = true;
+
+        // Preparar datos para worker
+        const messageData = {
+            grid: this.grid,
+            gridSize: this.gridSize,
+            rule: this.rule,
+            wrapEdges: this.wrapEdges,
+            neighborhoodType: this.neighborhoodType,
+            neighborhoodRadius: this.neighborhoodRadius,
+            neighborOffsets: this._neighborOffsets,
+            generation: this.generation
+        };
+
+        // Enviar al worker (sin transferibles por simplicidad)
+        this.worker.postMessage(messageData);
+
+        // Manejar respuesta
+        this.worker.onmessage = (e) => {
+            const {newGrid, changedCells, population, density, generation} = e.data;
+
+            // Aplicar resultados
+            this.grid = newGrid;
+            this.generation = generation;
+            this._lastPopulation = population;
+
+            // Marcar celdas modificadas
+            this.dirtyCells.clear();
+            changedCells.forEach(({x, y}) => this.dirtyCells.add(`${x},${y}`));
+
+            // Actualizar UI
+            this.updateStats();
+            this.checkLimits();
+
+            // Renderizar
+            this.render();
+
+            this.isWorkerProcessing = false;
+
+            console.log(`🔄 Worker: G${generation} P${population} D${density}%`);
+        };
+
+        this.worker.onerror = (error) => {
+            console.error('❌ Worker error:', error);
+            this.isWorkerProcessing = false;
+
+            // Fallback a main thread
+            this.worker.terminate();
+            this.worker = null;
+            this.nextGeneration();
+        };
+    }
+
+    // =========================================
+    // VECINDAD
     // =========================================
 
     _precomputeNeighborOffsets() {
@@ -97,22 +209,25 @@ class CellularAutomaton {
         return offsets;
     }
 
-    _countNeighborsOptimized(x, y) {
+    _countNeighbors(x, y) {
         let count = 0;
         const size = this.gridSize;
-        const grid = this.grid; // Cache local para velocidad
 
         for (const {dx, dy} of this._neighborOffsets) {
-            const nx = x + dx;
-            const ny = y + dy;
+            if (this.wrapEdges) {
+                // === MODO TOROIDAL ===
+                const nx = (x + dx + size) % size;
+                const ny = (y + dy + size) % size;
+                if (this.grid[nx][ny]) count++;
+            } else {
+                // === MODO PAREDES DURAS ===
+                const nx = x + dx;
+                const ny = y + dy;
 
-            // Evitar módulo si no es necesario (más rápido)
-            if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
-                if (grid[nx][ny]) count++;
-            } else if (this.limitType === 'wrap') { // Si añades wrap como opción
-                const wrappedX = (nx + size) % size;
-                const wrappedY = (ny + size) % size;
-                if (grid[wrappedX][wrappedY]) count++;
+                // Solo contar si está dentro de los límites
+                if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+                    if (this.grid[nx][ny]) count++;
+                }
             }
         }
 
@@ -150,7 +265,7 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // RENDER OPTIMIZADO
+    // RENDER
     // =========================================
 
     render() {
@@ -280,7 +395,7 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // GENERACIÓN OPTIMIZADA
+    // GENERACIÓN
     // =========================================
 
     async _initRule() {
@@ -301,42 +416,19 @@ class CellularAutomaton {
         this.prevGrid = this.grid.map(row => [...row]);
         this.dirtyCells.clear();
 
-        const newGrid = this.createEmptyGrid();
-        let changes = 0;
+        // === DECIDIR: Worker o main thread ===
+        const useWorker = this.worker && this.gridSize >= this.workerThreshold;
 
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                const neighbors = this._countNeighborsOptimized(x, y);
-                const isAlive = this.grid[x][y];
-                const willBeAlive = isAlive
-                    ? this.rule.survival.includes(neighbors)
-                    : this.rule.birth.includes(neighbors);
-
-                newGrid[x][y] = willBeAlive;
-                if (willBeAlive !== isAlive) {
-                    changes++;
-                    this.dirtyCells.add(`${x},${y}`);
-                }
-            }
+        if (useWorker) {
+            this._nextGenerationWorker();
+            return 0; // Retorna 0 temporalmente, se actualizará async
+        } else {
+            return this._nextGenerationMainThread();
         }
-
-        this.grid = newGrid;
-        this.generation++;
-        this._lastPopulation = this.countPopulation();
-        this.updateStats();
-        this.checkLimits();
-
-        eventBus.emit('automaton:generation', {
-            generation: this.generation,
-            population: this._lastPopulation,
-            changes
-        });
-
-        return changes;
     }
 
     // =========================================
-    // MÉTODOS PÚBLICOS COMPLETOS
+    // MÉTODOS PÚBLICOS
     // =========================================
 
     setRule(survival, birth) {
@@ -414,6 +506,7 @@ class CellularAutomaton {
         this.render();
 
         eventBus.emit('automaton:neighborhoodChanged', {type});
+        eventBus.emit('automaton:wrapChanged', {wrap: this.wrapEdges});
     }
 
     setNeighborhoodRadius(radius) {
@@ -427,6 +520,7 @@ class CellularAutomaton {
         this.render();
 
         eventBus.emit('automaton:radiusChanged', {radius: newRadius});
+        eventBus.emit('automaton:wrapChanged', {wrap: this.wrapEdges});
     }
 
     resizeCanvas() {
@@ -458,16 +552,17 @@ class CellularAutomaton {
         return ((this._lastPopulation / (this.gridSize * this.gridSize)) * 100).toFixed(1);
     }
 
-    updateStats() {
-        const population = this.countPopulation();
-        const density = this.getDensity();
+    updateStats(populationOverride = null) {
+        const population = populationOverride !== null
+            ? populationOverride
+            : this.countPopulation();
+
+        const density = (population / (this.gridSize * this.gridSize) * 100).toFixed(1);
 
         this.populationHistory.push(population);
         if (this.populationHistory.length > this.maxHistoryLength) {
             this.populationHistory = this.populationHistory.slice(-this.maxHistoryLength);
         }
-
-        console.log(`📡 Emitiendo stats: G${this.generation} P${population} D${density}%`);
 
         eventBus.emit('stats:updated', {
             generation: this.generation,
@@ -498,15 +593,19 @@ class CellularAutomaton {
     setLimit(type, value) {
         this.limitType = type;
 
-        if (type === 'none') {
-            this.maxGenerations = null;
-            this.maxPopulation = null;
-        } else if (type === 'generations') {
-            this.maxGenerations = parseInt(value);
-            this.maxPopulation = null;
-        } else if (type === 'population') {
-            this.maxPopulation = parseInt(value);
-            this.maxGenerations = null;
+        switch (type) {
+            case 'none':
+                this.maxGenerations = null;
+                this.maxPopulation = null;
+                break;
+            case 'generations':
+                this.maxGenerations = parseInt(value);
+                this.maxPopulation = null;
+                break;
+            case 'population':
+                this.maxPopulation = parseInt(value);
+                this.maxGenerations = null;
+                break;
         }
 
         this.limitValue = value;
@@ -515,7 +614,7 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // MÉTODOS DE EDICIÓN COMPLETOS
+    // MÉTODOS DE EDICIÓN
     // =========================================
 
     getCellFromMouse(e) {
