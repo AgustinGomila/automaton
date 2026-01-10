@@ -117,7 +117,7 @@ class CellularAutomaton {
                     this.render();
 
                     this.isWorkerProcessing = false;
-                    console.log(`🔄 Worker: G${generation} P${population} D${density}%`);
+                    console.debug(`🔄 Worker: G${generation} P${population} D${density}%`);
                 };
 
                 this.worker.onerror = (error) => {
@@ -131,7 +131,7 @@ class CellularAutomaton {
                     this.render();
                 };
 
-                console.log(`✅ Worker creado para grid ${this.gridSize}x${this.gridSize}`);
+                console.debug(`✅ Worker creado para grid ${this.gridSize}x${this.gridSize}`);
             } catch (error) {
                 console.warn('❌ No se pudo crear worker, usando main thread:', error);
                 this.worker = null;
@@ -800,7 +800,7 @@ class CellularAutomaton {
 
     start() {
         if (this.intervalId) return;
-        console.log('▶️ Simulación iniciada - Intervalo:', this.updateInterval);
+        console.debug('▶️ Simulación iniciada - Intervalo:', this.updateInterval);
         this.intervalId = setInterval(() => this._animate(), this.updateInterval);
     }
 
@@ -812,7 +812,7 @@ class CellularAutomaton {
     }
 
     _animate() {
-        console.log('🔄 Generación', this.generation + 1);
+        console.debug('🔄 Generación', this.generation + 1);
         this.nextGeneration();
 
         // === Emitir evento para que UI se actualice en cada paso ===

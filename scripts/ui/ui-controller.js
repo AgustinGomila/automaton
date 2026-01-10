@@ -42,7 +42,7 @@ class UIController {
     }
 
     async _waitForRulesAndInit() {
-        console.log('UIController: Esperando reglas...');
+        console.debug('UIController: Esperando reglas...');
 
         let attempts = 0;
         while ((!window.RULES || Object.keys(window.RULES).length === 0) && attempts < 100) {
@@ -50,7 +50,7 @@ class UIController {
             attempts++;
         }
 
-        console.log(`✅ UIController: ${Object.keys(window.RULES).length} reglas disponibles`);
+        console.debug(`✅ UIController: ${Object.keys(window.RULES).length} reglas disponibles`);
 
         this._init().then()
     }
@@ -106,7 +106,7 @@ class UIController {
             return;
         }
 
-        console.log('🔔 UIController: Suscribiendo a eventos del automata...');
+        console.debug('🔔 UIController: Suscribiendo a eventos del automata...');
 
         const weakThis = new WeakRef(this);
 
@@ -152,7 +152,7 @@ class UIController {
             })
         );
 
-        console.log('✅ UIController: Suscrito a TODOS los eventos');
+        console.debug('✅ UIController: Suscrito a TODOS los eventos');
     }
 
     async _waitForRules() {
@@ -175,9 +175,9 @@ class UIController {
     }
 
     loadRules() {
-        console.log('=== loadRules() EJECUTÁNDOSE ===');
-        console.log('window.RULES:', window.RULES);
-        console.log('Cantidad:', Object.keys(window.RULES || {}).length);
+        console.debug('=== loadRules() EJECUTÁNDOSE ===');
+        console.debug('window.RULES:', window.RULES);
+        console.debug('Cantidad:', Object.keys(window.RULES || {}).length);
 
         const selector = document.getElementById('ruleSelector');
         if (!selector) {
@@ -196,10 +196,10 @@ class UIController {
             option.value = key;
             option.textContent = `${rule.name} (${rule.ruleString})`;
             selector.appendChild(option);
-            console.log(`✅ Regla ${index + 1}: ${rule.name}`);
+            console.debug(`✅ Regla ${index + 1}: ${rule.name}`);
         });
 
-        console.log(`=== ${Object.keys(window.RULES).length} reglas cargadas ===`);
+        console.debug(`=== ${Object.keys(window.RULES).length} reglas cargadas ===`);
 
         if (window.RULES.conway) {
             selector.value = 'conway';
@@ -1058,7 +1058,7 @@ class UIController {
 
         // Actualizar UI
         const status = this.automaton.wrapEdges ? 'Toroidal' : 'Paredes Duras';
-        console.log(`🔲 Modo de frontera: ${status}`);
+        console.debug(`🔲 Modo de frontera: ${status}`);
 
         eventBus.emit('automaton:wrapChanged', {wrap: this.automaton.wrapEdges});
     }
@@ -1076,7 +1076,7 @@ class UIController {
     }
 
     updateHeaderInfo() {
-        console.log('🔄 updateHeaderInfo() ejecutándose...');
+        console.debug('🔄 updateHeaderInfo() ejecutándose...');
 
         const selector = document.getElementById('ruleSelector');
         if (!selector) {
@@ -1087,11 +1087,11 @@ class UIController {
         const ruleKey = selector.value;
         if (window.RULES?.[ruleKey]) {
             this.updateRuleInfo(window.RULES[ruleKey]);
-            console.log('✅ Header de regla actualizado:', window.RULES[ruleKey].name);
+            console.debug('✅ Header de regla actualizado:', window.RULES[ruleKey].name);
         }
 
         this.updateNeighborhoodInfo();
-        console.log('✅ Header de vecindad actualizado');
+        console.debug('✅ Header de vecindad actualizado');
     }
 
     updateRuleInfo(rule) {
@@ -1144,7 +1144,7 @@ class UIController {
 
         infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (R${radius}) ${wrap}`;
 
-        console.log(`🏘️ Neighborhood info actualizada: ${type} radio ${radius} ${wrap}`);
+        console.debug(`🏘️ Neighborhood info actualizada: ${type} radio ${radius} ${wrap}`);
     }
 
     _bindPatternsControls() {
@@ -1216,15 +1216,15 @@ class UIController {
         // Escuchar eventos DEL EVENTBUS (nueva arquitectura)
         this._cleanups.push(
             eventBus.on('pattern:selected', () => {
-                console.log('UIController: Evento pattern:selected recibido');
+                console.debug('UIController: Evento pattern:selected recibido');
                 this.updateDrawModeIndicator();
             }),
             eventBus.on('pattern:updated', () => {
-                console.log('UIController: Evento pattern:updated recibido');
+                console.debug('UIController: Evento pattern:updated recibido');
                 this.updateDrawModeIndicator();
             }),
             eventBus.on('pattern:cleared', () => {
-                console.log('UIController: Evento pattern:cleared recibido');
+                console.debug('UIController: Evento pattern:cleared recibido');
                 this.updateDrawModeIndicator();
             })
         );
@@ -1287,6 +1287,6 @@ class UIController {
         popEl.textContent = (stats.population || 0).toLocaleString();
         densEl.textContent = `${stats.density || 0}%`;
 
-        console.log(`📊 Stats actualizadas: G${stats.generation} P${stats.population}`);
+        console.debug(`📊 Stats actualizadas: G${stats.generation} P${stats.population}`);
     }
 }

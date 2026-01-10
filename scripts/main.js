@@ -38,7 +38,7 @@ class Application {
             // 7. Cleanup global
             this._setupGlobalCleanup();
 
-            console.log('✅ Aplicación inicializada completamente');
+            console.debug('✅ Aplicación inicializada completamente');
             eventBus.emit('app:ready');
 
         } catch (error) {
