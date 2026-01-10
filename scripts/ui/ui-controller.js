@@ -1,13 +1,17 @@
-// UI Controller - Versión simplificada y funcional
 class UIController {
+    constructor(automatonInstance) {
+        // Requerir automaton en el momento de crear la instancia
+        if (!automatonInstance) {
+            throw new Error('UIController requiere una instancia de CellularAutomaton');
+        }
 
-    constructor() {
+        this.automaton = automatonInstance;
+
         this.showInfluenceArea = false;
         this.patternsTwoRows = false;
         this.patternsCompactView = false;
         this.rulesLoaded = false;
 
-        // Estados de edición
         this.isMouseDown = false;
         this.lastCell = null;
         this.isSelecting = false;
@@ -15,87 +19,171 @@ class UIController {
         this.selectionContent = null;
         this.isDragging = false;
         this.isCopying = false;
+        this.dragOffset = null;
 
-        // Estado de teclas
         this.ctrlPressed = false;
         this.shiftPressed = false;
 
-        // Inicializar sin patrón seleccionado
+        this._throttledMouseMove = this._throttle(this._handleMouseMove.bind(this), 16);
+        this._cleanups = [];
+        this._mouseTimeout = null;
+
         window.selectedPatternKey = null;
         window.selectedPattern = null;
         window.selectedPatternRotation = 0;
 
-        // Escuchar eventos de cambio de patrón
-        this.bindPatternEvents();
+        // Suscribirse AHORA, ANTES de que automata empiece a emitir
+        this._subscribeToAutomatonEvents();
 
-        // Inicializar
-        this.initUi().then(() => console.log('UI Controller inicializado.'));
+        this._waitForRulesAndInit().then();
     }
 
-    async initUi() {
-        await this.waitForRules();
-        this.bindEvents();
-        this.bindKeyboardEvents();
+    async _waitForRulesAndInit() {
+        console.log('UIController: Esperando reglas...');
+
+        let attempts = 0;
+        while ((!window.RULES || Object.keys(window.RULES).length === 0) && attempts < 100) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            attempts++;
+        }
+
+        console.log(`✅ UIController: ${Object.keys(window.RULES).length} reglas disponibles`);
+
+        this._init().then()
+    }
+
+    async _init() {
+        await this._waitForRules();
+        this._bindEvents();
+        this._bindKeyboardEvents();
+        this._bindPatternEvents();
+        this._bindNeighborhoodEvents();
+        this._bindPatternsControls();
+
         this.updateSpeedDisplay();
         this.updateGridSizeDisplay();
         this.updateCellSizeDisplay();
-        this.loadRules();
-        this.bindNeighborhoodEvents();
-        this.bindPatternsControls();
         this.updateNeighborhoodInfo();
+        this.loadRules();
 
-        const selector = document.getElementById('ruleSelector');
-        if (selector && selector.value && window.RULES) {
-            const ruleKey = selector.value;
-            const rule = window.RULES[ruleKey];
-            if (rule) {
-                this.updateRuleInfo(rule);
-            }
-        }
+        eventBus.emit('ui:ready');
     }
 
-    async waitForRules() {
+    // =========================================
+    // LIFECYCLE & CLEANUP
+    // =========================================
+
+    destroy() {
+        this._cleanups.forEach(cleanup => cleanup());
+        this._cleanups = [];
+
+        if (this._mouseTimeout) clearTimeout(this._mouseTimeout);
+
+        this._removeSelectionVisual();
+        this._removeDragPreview();
+        this._hideSelectionInfo();
+
+        eventBus.emit('ui:destroyed');
+    }
+
+    _addEventListener(target, event, handler, options) {
+        target.addEventListener(event, handler, options);
+        const cleanup = () => target.removeEventListener(event, handler, options);
+        this._cleanups.push(cleanup);
+        return cleanup;
+    }
+
+    _subscribeToAutomatonEvents() {
+        if (!this.automaton) {
+            console.warn('UIController: No hay autómata para suscribirse');
+            return;
+        }
+
+        console.log('🔔 UIController: Suscribiendo a eventos...');
+
+        const weakThis = new WeakRef(this);
+
+        this._cleanups.push(
+            // ESTE es el listener que faltaba para STATS
+            eventBus.on('stats:updated', (stats) => {
+                const ui = weakThis.deref();
+                if (ui) {
+                    ui._updateStatsDisplay(stats);
+                }
+            }),
+
+            // ESTE es para actualizar el header cuando cambia la regla
+            eventBus.on('automaton:ruleChanged', () => {
+                weakThis.deref()?.updateHeaderInfo();
+            }),
+
+            // ESTE es para vecindad
+            eventBus.on('automaton:neighborhoodChanged', () => {
+                const ui = weakThis.deref();
+                if (ui) {
+                    ui.updateHeaderInfo();
+                    ui.updateNeighborhoodInfo();
+                }
+            }),
+
+            // ESTE es para radio
+            eventBus.on('automaton:radiusChanged', () => {
+                const ui = weakThis.deref();
+                if (ui) {
+                    ui.updateHeaderInfo();
+                    ui.updateNeighborhoodInfo();
+                }
+            })
+        );
+
+        console.log('✅ UIController: Suscrito a 4 eventos');
+    }
+
+    async _waitForRules() {
         if (window.RULES && Object.keys(window.RULES).length > 0) {
             this.rulesLoaded = true;
             return;
         }
 
-        console.log('Esperando carga de reglas...');
-
-        if (window.rulesLoader) {
-            await window.rulesLoader.load();
-            this.rulesLoaded = true;
-        } else {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (window.RULES) {
-                this.rulesLoaded = true;
-            } else {
-                await window.rulesLoader.loadEmbeddedRules();
-                this.rulesLoaded = true;
-            }
-        }
+        await new Promise(resolve => {
+            const check = () => {
+                if (window.RULES && Object.keys(window.RULES).length > 0) {
+                    this.rulesLoaded = true;
+                    resolve();
+                } else {
+                    setTimeout(check, 100);
+                }
+            };
+            check();
+        });
     }
 
     loadRules() {
-        const selector = document.getElementById('ruleSelector');
-        if (!selector) return;
+        console.log('=== loadRules() EJECUTÁNDOSE ===');
+        console.log('window.RULES:', window.RULES);
+        console.log('Cantidad:', Object.keys(window.RULES || {}).length);
 
-        if (!window.RULES) {
-            this.showRuleLoadError();
+        const selector = document.getElementById('ruleSelector');
+        if (!selector) {
+            console.error('❌ SELECTOR NO ENCONTRADO EN DOM');
             return;
         }
 
-        while (selector.options.length > 1) {
-            selector.remove(1);
+        // Limpiar y llenar
+        while (selector.options.length > 0) {
+            selector.remove(0);
         }
 
-        Object.keys(window.RULES).forEach(key => {
+        Object.keys(window.RULES).forEach((key, index) => {
             const rule = window.RULES[key];
             const option = document.createElement('option');
             option.value = key;
             option.textContent = `${rule.name} (${rule.ruleString})`;
             selector.appendChild(option);
+            console.log(`✅ Regla ${index + 1}: ${rule.name}`);
         });
+
+        console.log(`=== ${Object.keys(window.RULES).length} reglas cargadas ===`);
 
         if (window.RULES.conway) {
             selector.value = 'conway';
@@ -103,226 +191,234 @@ class UIController {
         }
     }
 
-    showRuleLoadError() {
-        const selector = document.getElementById('ruleSelector');
-        const errorOption = document.createElement('option');
-        errorOption.value = 'error';
-        errorOption.textContent = 'Error cargando reglas';
-        errorOption.disabled = true;
-        selector.appendChild(errorOption);
+    // =========================================
+    // THROTTLING
+    // =========================================
+
+    _throttle(func, limit) {
+        let inThrottle = false;
+        let lastArgs = null, lastContext = null;
+
+        return (...args) => {
+            if (!inThrottle) {
+                func.apply(this, args);
+                inThrottle = true;
+                setTimeout(() => {
+                    inThrottle = false;
+                    if (lastArgs) {
+                        func.apply(lastContext, lastArgs);
+                        lastArgs = lastContext = null;
+                    }
+                }, limit);
+            } else {
+                lastArgs = args;
+                lastContext = this;
+            }
+        };
     }
 
-    bindEvents() {
-        // Botones de control
-        document.getElementById('playBtn').addEventListener('click', this.togglePlay.bind(this));
-        document.getElementById('stepBtn').addEventListener('click', this.step.bind(this));
-        document.getElementById('randomBtn').addEventListener('click', this.randomize.bind(this));
-        document.getElementById('clearBtn').addEventListener('click', this.clear.bind(this));
-        document.getElementById('cancelPatternBtn').addEventListener('click', () => {
+    // =========================================
+    // BINDING DE EVENTOS
+    // =========================================
+
+    _bindEvents() {
+        // Controles principales
+        this._addEventListener(document.getElementById('playBtn'), 'click', () => this.togglePlay());
+        this._addEventListener(document.getElementById('stepBtn'), 'click', () => this.step());
+        this._addEventListener(document.getElementById('randomBtn'), 'click', () => this.randomize());
+        this._addEventListener(document.getElementById('clearBtn'), 'click', () => this.clear());
+        this._addEventListener(document.getElementById('cancelPatternBtn'), 'click', () => {
             this.deselectPattern();
             window.selectedPatternRotation = 0;
         });
 
         // Reglas
-        document.getElementById('ruleSelector').addEventListener('change', this.changeRule.bind(this));
-        document.getElementById('applyCustomRuleBtn').addEventListener('click', () => {
-            this.applyCustomRule();
-        });
+        this._addEventListener(document.getElementById('ruleSelector'), 'change', () => this.changeRule());
+        this._addEventListener(document.getElementById('applyCustomRuleBtn'), 'click', () => this.applyCustomRule());
 
-        // Área de influencia
-        document.getElementById('influenceToggle').addEventListener('change', this.toggleInfluenceArea.bind(this));
-        document.getElementById('quickInfluenceToggle').addEventListener('click', this.quickToggleInfluenceArea.bind(this));
+        // Toggle área de influencia
+        this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
+        this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
 
         // Controles
-        document.getElementById('speedControl').addEventListener('input', this.updateSpeed.bind(this));
-        document.getElementById('speedDown').addEventListener('click', this.decreaseSpeed.bind(this));
-        document.getElementById('speedUp').addEventListener('click', this.increaseSpeed.bind(this));
-        document.getElementById('gridSize').addEventListener('input', this.updateGridSize.bind(this));
-        document.getElementById('cellSize').addEventListener('input', this.updateCellSize.bind(this));
-        document.getElementById('gridToggle').addEventListener('click', this.toggleGrid.bind(this));
+        this._addEventListener(document.getElementById('speedControl'), 'input', () => this.updateSpeed());
+        this._addEventListener(document.getElementById('speedDown'), 'click', () => this.decreaseSpeed());
+        this._addEventListener(document.getElementById('speedUp'), 'click', () => this.increaseSpeed());
+        this._addEventListener(document.getElementById('gridSize'), 'input', () => this.updateGridSize());
+        this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
+        this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
 
         // Exportación
-        document.getElementById('exportBtn').addEventListener('click', this.exportPattern.bind(this));
+        this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
 
         // Scroll de patrones
-        document.getElementById('scrollLeft').addEventListener('click', () => this.scrollPatterns(-100));
-        document.getElementById('scrollRight').addEventListener('click', () => this.scrollPatterns(100));
+        this._addEventListener(document.getElementById('scrollLeft'), 'click', () => this.scrollPatterns(-100));
+        this._addEventListener(document.getElementById('scrollRight'), 'click', () => this.scrollPatterns(100));
 
-        // Controles de límite
-        document.getElementById('limitType').addEventListener('change', this.updateLimitType.bind(this));
-        document.getElementById('limitValue').addEventListener('input', this.updateLimitValue.bind(this));
+        // Límites
+        this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
+        this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
-        // Interacción con canvas
-        this.bindCanvasEvents();
+        // Canvas
+        this._bindCanvasEvents();
     }
 
-    bindCanvasEvents() {
+    _bindCanvasEvents() {
         const canvas = document.getElementById('canvas');
+        if (!canvas) return;
 
-        // MOUSE DOWN
-        canvas.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return; // Solo botón izquierdo
+        this._addEventListener(canvas, 'mousedown', (e) => this._handleMouseDown(e));
+        this._addEventListener(canvas, 'mousemove', this._throttledMouseMove);
+        this._addEventListener(canvas, 'mouseup', (e) => this._handleMouseUp(e));
+        this._addEventListener(canvas, 'mouseleave', () => this._handleMouseLeave());
+        this._addEventListener(canvas, 'contextmenu', (e) => this._handleRightClick(e));
 
-            e.preventDefault();
-            this.isMouseDown = true;
-
-            const {x, y} = automaton.getCellFromMouse(e);
-            this.lastCell = {x, y};
-
-            // Determinar acción
-            if (this.shiftPressed && !this.ctrlPressed && !this.selection) {
-                // Nueva selección
-                this.startSelection(x, y);
-                return;
-            }
-
-            if (this.selection && this.isPointInSelection(x, y)) {
-                // Arrastrar selección
-                this.startDrag(x, y, this.ctrlPressed && this.shiftPressed);
-                return;
-            }
-
-            // Si HAY patrón seleccionado, colocarlo
-            if (window.selectedPattern) {
-                automaton.importPattern(window.selectedPattern, x, y);
-                return;
-            }
-
-            // Si NO hay patrón seleccionado, dibujar/borrar
-            automaton.grid[x][y] = !this.ctrlPressed;
-            automaton.updateStats();
-            automaton.render();
-        });
-
-        // MOUSE MOVE
-        canvas.addEventListener('mousemove', (e) => {
-            const {x, y} = automaton.getCellFromMouse(e);
-            this.updateMouseCoords(x, y);
-
-            // Vista previa solo si HAY patrón seleccionado
-            if (window.selectedPattern) {
-                showPatternPreview(x, y);
-                if (this.showInfluenceArea) showInfluenceArea(x, y);
-            } else {
-                // Si NO hay patrón seleccionado, ocultar preview
-                hidePatternPreview();
-                if (this.showInfluenceArea && !this.selection) showInfluenceArea(x, y);
-            }
-
-            // Si mouse está presionado
-            if (this.isMouseDown) {
-                if (this.isSelecting) {
-                    this.updateSelection(x, y);
-                } else if (this.isDragging) {
-                    this.updateDrag(x, y);
-                } else if (!window.selectedPattern) {
-                    // Solo dibujo continuo si NO hay patrón seleccionado
-                    this.handleContinuousDrawing(x, y);
-                }
-            }
-        });
-
-        // MOUSE UP
-        canvas.addEventListener('mouseup', (e) => {
-            if (e.button !== 0) return;
-
-            this.isMouseDown = false;
-
-            if (this.isSelecting) {
-                this.endSelection();
-            }
-
-            if (this.isDragging) {
-                this.endDrag();
-            }
-
-            this.lastCell = null;
-        });
-
-        // MOUSE LEAVE
-        canvas.addEventListener('mouseleave', () => {
-            this.isMouseDown = false;
-
-            if (this.isSelecting) {
-                this.endSelection();
-            }
-
-            if (this.isDragging) {
-                this.endDrag();
-            }
-
-            hidePatternPreview();
-            if (!this.showInfluenceArea) {
-                hideInfluenceArea();
-            }
-
-            this.lastCell = null;
-        });
-
-        // CONTEXT MENU - Rotar patrón
-        canvas.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
-                window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-                window.selectedPattern = getPatternWithRotation(
-                    window.selectedPatternKey,
-                    window.selectedPatternRotation
-                );
-                updatePatternInfo();
-
-                const {x, y} = automaton.getCellFromMouse(e);
-                showPatternPreview(x, y);
-            }
-            return false;
-        });
-
-        // Eventos táctiles
-        this.setupTouchEvents();
+        this._setupTouchEvents();
     }
 
+    _handleMouseDown(e) {
+        if (e.button !== 0) return;
+        e.preventDefault();
+
+        this.isMouseDown = true;
+        const {x, y} = this.automaton.getCellFromMouse(e);
+        this.lastCell = {x, y};
+
+        if (this.shiftPressed && !this.ctrlPressed && !this.selection) {
+            this.startSelection(x, y);
+            return;
+        }
+
+        if (this.selection && this.isPointInSelection(x, y)) {
+            this.startDrag(x, y, this.ctrlPressed && this.shiftPressed);
+            return;
+        }
+
+        if (window.selectedPattern) {
+            this.automaton.importPattern(window.selectedPattern, x, y);
+            return;
+        }
+
+        const changed = this.automaton.setCell(x, y, !this.ctrlPressed);
+        if (changed) {
+            this.automaton.updateStats();
+            this.automaton.render();
+        }
+    }
+
+    _handleMouseMove(e) {
+        const {x, y} = this.automaton.getCellFromMouse(e);
+        this.updateMouseCoords(x, y);
+
+        if (window.selectedPattern) {
+            showPatternPreview(x, y);
+            if (this.showInfluenceArea) showInfluenceArea(x, y);
+        } else {
+            hidePatternPreview();
+            if (this.showInfluenceArea && !this.selection) showInfluenceArea(x, y);
+        }
+
+        if (this.isMouseDown) {
+            if (this.isSelecting) {
+                this.updateSelection(x, y);
+            } else if (this.isDragging) {
+                this.updateDrag(x, y);
+            } else if (!window.selectedPattern) {
+                this.handleContinuousDrawing(x, y);
+            }
+        }
+    }
+
+    _handleMouseUp(e) {
+        if (e.button !== 0) return;
+
+        this.isMouseDown = false;
+
+        if (this.isSelecting) {
+            this.endSelection();
+        }
+
+        if (this.isDragging) {
+            this.endDrag();
+        }
+
+        this.lastCell = null;
+    }
+
+    _handleMouseLeave() {
+        this.isMouseDown = false;
+        if (this.isSelecting) this.endSelection();
+        if (this.isDragging) this.endDrag();
+
+        hidePatternPreview();
+        if (!this.showInfluenceArea) hideInfluenceArea();
+
+        this.lastCell = null;
+    }
+
+    _handleRightClick(e) {
+        e.preventDefault();
+
+        if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
+            window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
+            window.selectedPattern = getPatternWithRotation(
+                window.selectedPatternKey,
+                window.selectedPatternRotation
+            );
+
+            // Actualizar info del patrón
+            updatePatternInfo();
+
+            // Obtener coordenadas del mouse
+            const {x, y} = this.automaton.getCellFromMouse(e);
+
+            // Actualizar preview del patrón
+            showPatternPreview(x, y);
+
+            // === Actualizar área de influencia SIEMPRE si está activa ===
+            if (this.showInfluenceArea) {
+                showInfluenceArea(x, y);
+            }
+        }
+
+        return false;
+    }
+
+    // =========================================
     // DIBUJO CONTINUO
+    // =========================================
+
     handleContinuousDrawing(x, y) {
-        if (!this.lastCell) {
+        if (!this.lastCell || (this.lastCell.x === x && this.lastCell.y === y)) {
             this.lastCell = {x, y};
             return;
         }
 
-        if (this.lastCell.x === x && this.lastCell.y === y) {
-            return;
-        }
-
-        const drawMode = this.ctrlPressed ? 'erase' : 'draw';
-        const state = drawMode !== 'erase';
+        const cells = this._getLineCells(this.lastCell.x, this.lastCell.y, x, y);
         let needsRender = false;
 
-        const cells = this.getLineCells(this.lastCell.x, this.lastCell.y, x, y);
+        for (const cell of cells) {
+            if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) continue;
 
-        cells.forEach(cell => {
-            if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) {
-                return;
-            }
-
-            // Usar función optimizada
-            if (automaton.setCellAndRender(cell.x, cell.y, state)) {
-                needsRender = true;
-            }
-        });
+            const state = !this.ctrlPressed;
+            const changed = this.automaton.setCell(cell.x, cell.y, state);
+            if (changed) needsRender = true;
+        }
 
         this.lastCell = {x, y};
 
-        // Solo renderizar si hubo cambios
         if (needsRender) {
-            automaton.updateStats();
-            automaton.render();
+            this.automaton.updateStats();
+            this.automaton.render();
         }
     }
 
-    getLineCells(x0, y0, x1, y1) {
+    _getLineCells(x0, y0, x1, y1) {
         const cells = [];
         const dx = Math.abs(x1 - x0);
         const dy = Math.abs(y1 - y0);
-        const sx = (x0 < x1) ? 1 : -1;
-        const sy = (y0 < y1) ? 1 : -1;
+        const sx = x0 < x1 ? 1 : -1;
+        const sy = y0 < y1 ? 1 : -1;
         let err = dx - dy;
 
         while (true) {
@@ -343,71 +439,64 @@ class UIController {
         return cells;
     }
 
-    // SELECCIÓN
+    // =========================================
+    // SELECCIÓN Y ARRASTRE
+    // =========================================
+
     startSelection(x, y) {
         this.clearSelection();
         this.isSelecting = true;
-        this.selection = {
-            startX: x,
-            startY: y,
-            endX: x,
-            endY: y
-        };
-        this.updateSelectionVisual();
+        this.selection = {startX: x, startY: y, endX: x, endY: y};
+        this._updateSelectionVisual();
     }
 
     updateSelection(x, y) {
         if (!this.isSelecting || !this.selection) return;
         this.selection.endX = x;
         this.selection.endY = y;
-        this.updateSelectionVisual();
+        this._updateSelectionVisual();
     }
 
     endSelection() {
         if (!this.isSelecting || !this.selection) return;
 
         this.isSelecting = false;
-
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const maxX = Math.max(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
 
-        this.selectionContent = automaton.copyArea(minX, minY, maxX, maxY);
-        this.showSelectionInfo();
+        this.selectionContent = this.automaton.copyArea(minX, minY, maxX, maxY);
+        this._showSelectionInfo();
     }
 
     clearSelection() {
         this.selection = null;
         this.selectionContent = null;
-        this.hideSelectionVisual();
-        this.hideSelectionInfo();
+        this._removeSelectionVisual();
+        this._hideSelectionInfo();
     }
 
     isPointInSelection(x, y) {
         if (!this.selection) return false;
-
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const maxX = Math.max(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
-
         return x >= minX && x <= maxX && y >= minY && y <= maxY;
     }
 
     deleteSelection() {
         if (!this.selection) return;
-
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const maxX = Math.max(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
 
-        automaton.clearArea(minX, minY, maxX, maxY);
+        this.automaton.clearArea(minX, minY, maxX, maxY);
         this.clearSelection();
     }
 
-    // ARRASTRE Y COPIA
     startDrag(x, y, isCopy) {
         if (!this.selection || !this.selectionContent) return;
 
@@ -416,12 +505,9 @@ class UIController {
 
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
-        this.dragOffset = {
-            x: x - minX,
-            y: y - minY
-        };
+        this.dragOffset = {x: x - minX, y: y - minY};
 
-        this.createDragPreview();
+        this._createDragPreview();
     }
 
     updateDrag(x, y) {
@@ -429,8 +515,7 @@ class UIController {
 
         const targetX = x - this.dragOffset.x;
         const targetY = y - this.dragOffset.y;
-
-        this.updateDragPreview(targetX, targetY);
+        this._updateDragPreview(targetX, targetY);
     }
 
     endDrag() {
@@ -448,40 +533,41 @@ class UIController {
         const maxX = Math.max(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
-
         const width = maxX - minX + 1;
         const height = maxY - minY + 1;
 
-        // Si no es copia, borrar área original
         if (!this.isCopying) {
-            automaton.clearArea(minX, minY, maxX, maxY);
+            this.automaton.clearArea(minX, minY, maxX, maxY);
         }
 
-        // Pegar en nueva posición
-        automaton.pasteArea(this.selectionContent, targetX, targetY);
+        this.automaton.pasteArea(this.selectionContent, targetX, targetY);
 
-        // Actualizar selección
         if (this.isCopying) {
-            // Mantener selección original
-            this.selectionContent = automaton.copyArea(targetX, targetY, targetX + width - 1, targetY + height - 1);
+            this.selectionContent = this.automaton.copyArea(targetX, targetY, targetX + width - 1, targetY + height - 1);
         } else {
-            // Mover selección
             this.selection.startX = targetX;
             this.selection.startY = targetY;
             this.selection.endX = targetX + width - 1;
             this.selection.endY = targetY + height - 1;
-            this.selectionContent = automaton.copyArea(targetX, targetY, targetX + width - 1, targetY + height - 1);
+            this.selectionContent = this.automaton.copyArea(targetX, targetY, targetX + width - 1, targetY + height - 1);
         }
 
-        this.removeDragPreview();
-        this.updateSelectionVisual();
-        this.showSelectionInfo();
+        this._removeDragPreview();
+        this._updateSelectionVisual();
+        this._showSelectionInfo();
     }
 
+    // =========================================
     // VISUALIZACIÓN
-    updateSelectionVisual() {
+    // =========================================
+
+    _removeSelectionVisual() {
+        document.getElementById('selectionOverlay')?.remove();
+    }
+
+    _updateSelectionVisual() {
         if (!this.selection) {
-            this.hideSelectionVisual();
+            this._removeSelectionVisual();
             return;
         }
 
@@ -490,62 +576,50 @@ class UIController {
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
 
-        const width = maxX - minX + 1;
-        const height = maxY - minY + 1;
-
-        let selectionDiv = document.getElementById('selectionOverlay');
-        if (!selectionDiv) {
-            selectionDiv = document.createElement('div');
-            selectionDiv.id = 'selectionOverlay';
-            selectionDiv.className = 'selection-overlay';
-            document.getElementById('canvas-container').appendChild(selectionDiv);
+        let overlay = document.getElementById('selectionOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'selectionOverlay';
+            overlay.className = 'selection-overlay';
+            document.getElementById('canvas-container')?.appendChild(overlay);
         }
 
-        const cellSize = automaton.cellSize;
-        const canvas = document.getElementById('canvas');
-        const container = document.getElementById('canvas-container');
-        const canvasRect = canvas.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
+        const cellSize = this.automaton.cellSize;
+        const canvasRect = this.automaton.canvas.getBoundingClientRect();
+        const containerRect = document.getElementById('canvas-container')?.getBoundingClientRect();
+        if (!containerRect) return;
 
-        const offsetX = canvasRect.left - containerRect.left;
-        const offsetY = canvasRect.top - containerRect.top;
-        const scaleX = canvas.width / canvasRect.width;
-        const scaleY = canvas.height / canvasRect.height;
+        const scaleX = this.automaton.canvas.width / canvasRect.width;
+        const scaleY = this.automaton.canvas.height / canvasRect.height;
 
-        selectionDiv.style.display = 'block';
-        selectionDiv.style.left = (offsetX + minX * cellSize / scaleX) + 'px';
-        selectionDiv.style.top = (offsetY + minY * cellSize / scaleY) + 'px';
-        selectionDiv.style.width = (width * cellSize / scaleX) + 'px';
-        selectionDiv.style.height = (height * cellSize / scaleY) + 'px';
+        overlay.style.cssText = `
+      display: block;
+      position: absolute;
+      left: ${canvasRect.left - containerRect.left + minX * cellSize / scaleX}px;
+      top: ${canvasRect.top - containerRect.top + minY * cellSize / scaleY}px;
+      width: ${(maxX - minX + 1) * cellSize / scaleX}px;
+      height: ${(maxY - minY + 1) * cellSize / scaleY}px;
+      border: 2px solid #3b82f6;
+      pointer-events: none;
+      z-index: 10;
+    `;
     }
 
-    hideSelectionVisual() {
-        const selectionDiv = document.getElementById('selectionOverlay');
-        if (selectionDiv) {
-            selectionDiv.style.display = 'none';
-        }
-    }
-
-    createDragPreview() {
-        this.removeDragPreview();
-
+    _createDragPreview() {
+        this._removeDragPreview();
         if (!this.selectionContent) return;
 
         const dragPreview = document.createElement('div');
         dragPreview.id = 'dragPreview';
         dragPreview.className = 'drag-preview';
 
-        // Crear canvas para mostrar contenido
         const canvas = document.createElement('canvas');
         const width = this.selectionContent.width;
         const height = this.selectionContent.height;
-
-        canvas.width = width * automaton.cellSize;
-        canvas.height = height * automaton.cellSize;
+        canvas.width = width * this.automaton.cellSize;
+        canvas.height = height * this.automaton.cellSize;
 
         const ctx = canvas.getContext('2d');
-
-        // Dibujar contenido
         ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -553,26 +627,21 @@ class UIController {
             for (let y = 0; y < height; y++) {
                 if (this.selectionContent.grid[x][y]) {
                     ctx.fillStyle = '#3b82f6';
-                    ctx.fillRect(
-                        x * automaton.cellSize + 1,
-                        y * automaton.cellSize + 1,
-                        automaton.cellSize - 2,
-                        automaton.cellSize - 2
-                    );
+                    ctx.fillRect(x * this.automaton.cellSize + 1, y * this.automaton.cellSize + 1,
+                        this.automaton.cellSize - 2, this.automaton.cellSize - 2);
                 }
             }
         }
 
         dragPreview.appendChild(canvas);
-        document.getElementById('canvas-container').appendChild(dragPreview);
+        document.getElementById('canvas-container')?.appendChild(dragPreview);
 
-        // Posicionar inicialmente
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
-        this.updateDragPreview(minX, minY);
+        this._updateDragPreview(minX, minY);
     }
 
-    updateDragPreview(targetX, targetY) {
+    _updateDragPreview(targetX, targetY) {
         const dragPreview = document.getElementById('dragPreview');
         if (!dragPreview) return;
 
@@ -581,43 +650,37 @@ class UIController {
 
         const width = this.selectionContent.width;
         const height = this.selectionContent.height;
+        const cellSize = this.automaton.cellSize;
+        const canvasRect = this.automaton.canvas.getBoundingClientRect();
+        const containerRect = document.getElementById('canvas-container')?.getBoundingClientRect();
+        if (!containerRect) return;
 
-        const cellSize = automaton.cellSize;
-        const canvas = document.getElementById('canvas');
-        const container = document.getElementById('canvas-container');
-        const canvasRect = canvas.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
+        const scaleX = this.automaton.canvas.width / canvasRect.width;
+        const scaleY = this.automaton.canvas.height / canvasRect.height;
 
-        const offsetX = canvasRect.left - containerRect.left;
-        const offsetY = canvasRect.top - containerRect.top;
-        const scaleX = canvas.width / canvasRect.width;
-        const scaleY = canvas.height / canvasRect.height;
-
-        dragPreview.style.position = 'absolute';
-        dragPreview.style.left = (offsetX + targetX * cellSize / scaleX) + 'px';
-        dragPreview.style.top = (offsetY + targetY * cellSize / scaleY) + 'px';
-        dragPreview.style.width = (width * cellSize / scaleX) + 'px';
-        dragPreview.style.height = (height * cellSize / scaleY) + 'px';
-        dragPreview.style.border = this.isCopying ? '2px dashed #10b981' : '2px solid #3b82f6';
-        dragPreview.style.zIndex = '5';
-        dragPreview.style.pointerEvents = 'none';
+        dragPreview.style.cssText = `
+      position: absolute;
+      left: ${canvasRect.left - containerRect.left + targetX * cellSize / scaleX}px;
+      top: ${canvasRect.top - containerRect.top + targetY * cellSize / scaleY}px;
+      width: ${width * cellSize / scaleX}px;
+      height: ${height * cellSize / scaleY}px;
+      border: 2px ${this.isCopying ? 'dashed #10b981' : 'solid #3b82f6'};
+      z-index: 5;
+      pointer-events: none;
+    `;
     }
 
-    removeDragPreview() {
-        const dragPreview = document.getElementById('dragPreview');
-        if (dragPreview) {
-            dragPreview.remove();
-        }
+    _removeDragPreview() {
+        document.getElementById('dragPreview')?.remove();
     }
 
-    showSelectionInfo() {
+    _showSelectionInfo() {
         if (!this.selection) return;
 
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const maxX = Math.max(this.selection.startX, this.selection.endX);
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
-
         const width = maxX - minX + 1;
         const height = maxY - minY + 1;
 
@@ -626,148 +689,123 @@ class UIController {
             infoDiv = document.createElement('div');
             infoDiv.id = 'selectionInfo';
             infoDiv.className = 'selection-info';
-            document.querySelector('.canvas-controls').appendChild(infoDiv);
+            document.querySelector('.canvas-controls')?.appendChild(infoDiv);
         }
 
         infoDiv.innerHTML = `
-            <div class="selection-info-content">
-                <span><i class="fas fa-vector-square"></i> ${width}×${height}</span>
-                <button id="deleteSelectionBtn" class="btn-small"><i class="fas fa-trash"></i></button>
-                <button id="clearSelectionBtn" class="btn-small"><i class="fas fa-times"></i></button>
-            </div>
-        `;
+      <div class="selection-info-content">
+        <span><i class="fas fa-vector-square"></i> ${width}×${height}</span>
+        <button id="deleteSelectionBtn" class="btn-small"><i class="fas fa-trash"></i></button>
+        <button id="clearSelectionBtn" class="btn-small"><i class="fas fa-times"></i></button>
+      </div>
+    `;
 
-        document.getElementById('deleteSelectionBtn').addEventListener('click', () => {
-            this.deleteSelection();
-        });
-
-        document.getElementById('clearSelectionBtn').addEventListener('click', () => {
-            this.clearSelection();
-        });
-
+        document.getElementById('deleteSelectionBtn')?.addEventListener('click', () => this.deleteSelection());
+        document.getElementById('clearSelectionBtn')?.addEventListener('click', () => this.clearSelection());
         infoDiv.style.display = 'block';
     }
 
-    hideSelectionInfo() {
-        const infoDiv = document.getElementById('selectionInfo');
-        if (infoDiv) {
-            infoDiv.style.display = 'none';
-        }
+    _hideSelectionInfo() {
+        document.getElementById('selectionInfo')?.remove();
     }
 
-    // TECLADO
-    bindKeyboardEvents() {
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Control') this.ctrlPressed = true;
-            if (e.key === 'Shift') this.shiftPressed = true;
+    // =========================================
+    // EVENTOS DE TECLADO
+    // =========================================
 
-            if (e.key === 'Escape') {
+    _bindKeyboardEvents() {
+        this._addEventListener(document, 'keydown', (e) => this._handleKeyDown(e));
+        this._addEventListener(document, 'keyup', (e) => this._handleKeyUp(e));
+    }
+
+    _handleKeyDown(e) {
+        if (e.key === 'Control') this.ctrlPressed = true;
+        if (e.key === 'Shift') this.shiftPressed = true;
+
+        switch (e.key.toLowerCase()) {
+            case 'escape':
                 this.deselectPattern();
                 this.clearSelection();
                 window.selectedPatternRotation = 0;
-            }
-            if (e.key === ' ') {
+                break;
+            case ' ':
                 e.preventDefault();
                 this.togglePlay();
-            }
-            if (e.key === 's' || e.key === 'S') this.step();
-            if (e.key === 'r' || e.key === 'R') {
-                e.preventDefault();
-                if (window.selectedPattern && window.selectedPattern.pattern !== 'random') {
+                break;
+            case 's':
+                this.step();
+                break;
+            case 'r':
+                if (window.selectedPattern?.pattern !== 'random') {
                     window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-                    window.selectedPattern = getPatternWithRotation(
-                        window.selectedPatternKey,
-                        window.selectedPatternRotation
-                    );
+                    window.selectedPattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
                     updatePatternInfo();
                 }
-            }
-            if (e.key === 'a' || e.key === 'A') this.randomize();
-            if (e.key === 'c' || e.key === 'C') this.clear();
-            if (e.key === 'Delete' && this.selection) {
-                e.preventDefault();
-                this.deleteSelection();
-            }
-        });
-
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'Control') this.ctrlPressed = false;
-            if (e.key === 'Shift') this.shiftPressed = false;
-        });
-    }
-
-    deselectPattern() {
-        window.selectedPattern = null;
-        window.selectedPatternKey = null;
-        window.selectedPatternRotation = 0;
-
-        document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
-            btn.classList.remove('active');
-        });
-
-        const miniEl = document.getElementById('patternNameMini');
-        if (miniEl) miniEl.textContent = 'Selecciona un patrón';
-
-        hidePatternPreview();
-        hideInfluenceArea();
-
-        // Actualizar indicador de modo
-        this.updateDrawModeIndicator();
-    }
-
-    updateMouseCoords(x, y) {
-        const coords = document.getElementById('mouseCoords');
-        if (coords) {
-            coords.textContent = `X: ${x}, Y: ${y}`;
+                break;
+            case 'a':
+                this.randomize();
+                break;
+            case 'c':
+                this.clear();
+                break;
+            case 'delete':
+                if (this.selection) {
+                    e.preventDefault();
+                    this.deleteSelection();
+                }
+                break;
         }
     }
+
+    _handleKeyUp(e) {
+        if (e.key === 'Control') this.ctrlPressed = false;
+        if (e.key === 'Shift') this.shiftPressed = false;
+    }
+
+    // =========================================
+    // CONTROL PRINCIPAL
+    // =========================================
 
     togglePlay() {
-        if (automaton.isLimitReached) {
-            automaton.isLimitReached = false;
-            automaton.generation = 0;
-            automaton.updateStats();
+        if (this.automaton.isLimitReached) {
+            this.automaton.isLimitReached = false;
+            this.automaton.generation = 0;
+            this.automaton.updateStats();
         }
 
-        const isRunning = automaton.toggleRunning();
+        const isRunning = this.automaton.toggleRunning();
         const playIcon = document.getElementById('playIcon');
         const playText = document.getElementById('playText');
         const stepBtn = document.getElementById('stepBtn');
 
-        if (isRunning) {
-            playIcon.className = 'fas fa-pause';
-            playText.textContent = 'Pausar';
-            stepBtn.disabled = true;
-        } else {
-            playIcon.className = 'fas fa-play';
-            playText.textContent = 'Ejecutar';
-            stepBtn.disabled = false;
-        }
+        if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
+        if (playText) playText.textContent = isRunning ? 'Pausar' : 'Ejecutar';
+        if (stepBtn) stepBtn.disabled = isRunning;
     }
 
     step() {
-        automaton.nextGeneration();
-        automaton.render();
+        this.automaton.nextGeneration();
+        this.automaton.render();
     }
 
     randomize() {
-        automaton.randomize();
+        this.automaton.randomize();
     }
 
     clear() {
-        automaton.clear();
+        this.automaton.clear();
     }
 
     updateSpeed() {
         const slider = document.getElementById('speedControl');
         const value = parseInt(slider.value);
-        automaton.setSpeed(value);
+        this.automaton.setSpeed(value);
         this.updateSpeedDisplay();
     }
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value.toString()) - 1;
+        let value = parseInt(slider.value) - 1;
         if (value < 1) value = 1;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -775,7 +813,7 @@ class UIController {
 
     increaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value.toString()) + 1;
+        let value = parseInt(slider.value) + 1;
         if (value > 10) value = 10;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -784,51 +822,50 @@ class UIController {
     updateSpeedDisplay() {
         const slider = document.getElementById('speedControl');
         const value = parseInt(slider.value);
-
-        // Array de textos para cada grupo de 2 valores
         const speedTexts = ['Muy Lento', 'Lento', 'Normal', 'Rápido', 'Muy Rápido'];
+        const index = Math.min(Math.max(Math.floor((value - 1) / 2), 0), speedTexts.length - 1);
 
-        // Calcular índice
-        const index = Math.floor((value - 1) / 2);
-        const clampedIndex = Math.min(Math.max(index, 0), speedTexts.length - 1);
-
-        // Mostrar texto y valor numérico
-        document.getElementById('speedValue').textContent =
-            `${speedTexts[clampedIndex]} (${value}/10)`;
+        const display = document.getElementById('speedValue');
+        if (display) display.textContent = `${speedTexts[index]} (${value}/10)`;
     }
 
     updateGridSize() {
         const slider = document.getElementById('gridSize');
         const value = parseInt(slider.value);
-        document.getElementById('gridSizeValue').textContent = `${value}×${value}`;
+        const display = document.getElementById('gridSizeValue');
+        if (display) display.textContent = `${value}×${value}`;
 
-        if (!automaton.isRunning || confirm('Cambiar el tamaño detendrá la simulación. ¿Continuar?')) {
-            if (automaton.isRunning) this.togglePlay();
-            automaton.resizeGrid(value);
+        if (!this.automaton.isRunning || confirm('Cambiar el tamaño detendrá la simulación. ¿Continuar?')) {
+            if (this.automaton.isRunning) this.togglePlay();
+            this.automaton.resizeGrid(value);
         }
     }
 
     updateGridSizeDisplay() {
         const slider = document.getElementById('gridSize');
         const value = parseInt(slider.value);
-        document.getElementById('gridSizeValue').textContent = `${value}×${value}`;
+        const display = document.getElementById('gridSizeValue');
+        if (display) display.textContent = `${value}×${value}`;
     }
 
     updateCellSize() {
         const slider = document.getElementById('cellSize');
         const value = parseInt(slider.value);
-        document.getElementById('cellSizeValue').textContent = `${value}px`;
-        automaton.setCellSize(value);
+        const display = document.getElementById('cellSizeValue');
+        if (display) display.textContent = `${value}px`;
+
+        this.automaton.setCellSize(value);
     }
 
     updateCellSizeDisplay() {
         const slider = document.getElementById('cellSize');
         const value = parseInt(slider.value);
-        document.getElementById('cellSizeValue').textContent = `${value}px`;
+        const display = document.getElementById('cellSizeValue');
+        if (display) display.textContent = `${value}px`;
     }
 
     toggleGrid() {
-        automaton.toggleGrid();
+        this.automaton.toggleGrid();
     }
 
     toggleInfluenceArea() {
@@ -837,13 +874,8 @@ class UIController {
 
         const quickToggle = document.getElementById('quickInfluenceToggle');
         if (quickToggle) {
-            if (this.showInfluenceArea) {
-                quickToggle.classList.add('active');
-                quickToggle.style.color = 'var(--secondary)';
-            } else {
-                quickToggle.classList.remove('active');
-                quickToggle.style.color = '';
-            }
+            quickToggle.className = this.showInfluenceArea ? 'btn-toggle active' : 'btn-toggle';
+            quickToggle.style.color = this.showInfluenceArea ? 'var(--secondary)' : '';
         }
 
         if (!this.showInfluenceArea) {
@@ -852,37 +884,25 @@ class UIController {
     }
 
     quickToggleInfluenceArea() {
-        const toggle = document.getElementById('influenceToggle');
         this.showInfluenceArea = !this.showInfluenceArea;
-        toggle.checked = this.showInfluenceArea;
-
-        const quickToggle = document.getElementById('quickInfluenceToggle');
-        if (this.showInfluenceArea) {
-            quickToggle.classList.add('active');
-            quickToggle.style.color = 'var(--secondary)';
-        } else {
-            quickToggle.classList.remove('active');
-            quickToggle.style.color = '';
-            hideInfluenceArea();
-        }
+        const toggle = document.getElementById('influenceToggle');
+        if (toggle) toggle.checked = this.showInfluenceArea;
+        this.toggleInfluenceArea();
     }
 
     scrollPatterns(direction) {
         const container = document.getElementById('patternsContainer');
-        if (container) {
-            container.scrollLeft += direction;
-        }
+        if (container) container.scrollLeft += direction;
     }
 
     exportPattern() {
-        const pattern = automaton.exportPattern();
+        const pattern = this.automaton.exportPattern();
         if (pattern) {
-            const patternStr = JSON.stringify(pattern, null, 2);
-            const blob = new Blob([patternStr], {type: 'application/json'});
+            const blob = new Blob([JSON.stringify(pattern, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `my-pattern-${new Date().getTime()}.json`;
+            a.download = `my-pattern-${Date.now()}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -900,13 +920,13 @@ class UIController {
 
         if (select.value === 'none') {
             valueGroup.style.display = 'none';
-            automaton.setLimit('none', 0);
+            this.automaton.setLimit('none', 0);
         } else {
             valueGroup.style.display = 'block';
-            automaton.setLimit(select.value, parseInt(limitValue.value));
+            this.automaton.setLimit(select.value, parseInt(limitValue.value));
         }
 
-        automaton.isLimitReached = false;
+        this.automaton.isLimitReached = false;
     }
 
     updateLimitValue() {
@@ -914,30 +934,27 @@ class UIController {
         const slider = document.getElementById('limitValue');
         const value = parseInt(slider.value);
 
-        document.getElementById('limitValueDisplay').textContent = value.toLocaleString();
+        const display = document.getElementById('limitValueDisplay');
+        if (display) display.textContent = value.toLocaleString();
 
         if (select.value !== 'none') {
-            automaton.setLimit(select.value, value);
+            this.automaton.setLimit(select.value, value);
         }
     }
 
     changeRule() {
         const selector = document.getElementById('ruleSelector');
-        const ruleKey = selector.value;
         const customRuleGroup = document.getElementById('customRuleGroup');
 
-        if (ruleKey === 'custom') {
+        if (selector.value === 'custom') {
             customRuleGroup.style.display = 'block';
-            document.getElementById('birthInput').value = automaton.rule.birth.join(',');
-            document.getElementById('survivalInput').value = automaton.rule.survival.join(',');
+            document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
+            document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');
         } else {
             customRuleGroup.style.display = 'none';
-            if (automaton && window.RULES && window.RULES[ruleKey]) {
-                automaton.setRuleByKey(ruleKey);
-                this.updateHeaderInfo();
-                if (automaton.isRunning) {
-                    this.togglePlay();
-                }
+            if (window.RULES?.[selector.value]) {
+                this.automaton.setRule(window.RULES[selector.value].survival, window.RULES[selector.value].birth);
+                this.updateHeaderInfo(); // ASEGURAR esté aquí
             }
         }
     }
@@ -948,61 +965,57 @@ class UIController {
 
         try {
             const customRule = parseCustomRule(birthInput, survivalInput);
-            automaton.setRule(customRule.survival, customRule.birth);
+            this.automaton.setRule(customRule.survival, customRule.birth);
             alert(`Regla personalizada aplicada: B${customRule.birth.join('')}/S${customRule.survival.join('')}`);
         } catch (error) {
             alert(`Error: ${error.message}`);
         }
     }
 
+
     changeNeighborhoodType(type) {
-        if (automaton) {
-            automaton.setNeighborhoodType(type);
-            this.updateNeighborhoodInfo();
-            if (automaton.isRunning) {
-                this.togglePlay();
-            }
-        }
+        this.automaton.setNeighborhoodType(type);
+        this.updateHeaderInfo(); // ASEGURAR esté aquí
     }
 
     changeNeighborhoodRadius(radius) {
+        this.automaton.setNeighborhoodRadius(radius);
+        this.updateHeaderInfo(); // ASEGURAR esté aquí
         const radiusValue = document.getElementById('radiusValue');
-        if (radiusValue) {
-            radiusValue.textContent = radius;
-        }
-
-        if (automaton) {
-            automaton.setNeighborhoodRadius(radius);
-            this.updateNeighborhoodInfo();
-            if (automaton.isRunning) {
-                this.togglePlay();
-            }
-        }
+        if (radiusValue) radiusValue.textContent = radius;
     }
 
     updateHeaderInfo() {
+        console.log('🔄 updateHeaderInfo() ejecutándose...');
+
         const selector = document.getElementById('ruleSelector');
-        if (selector && selector.value && window.RULES) {
-            const ruleKey = selector.value;
-            const rule = window.RULES[ruleKey];
-            if (rule) {
-                this.updateRuleInfo(rule);
-            }
+        if (!selector) {
+            console.warn('Selector de reglas no encontrado');
+            return;
         }
+
+        const ruleKey = selector.value;
+        if (window.RULES?.[ruleKey]) {
+            this.updateRuleInfo(window.RULES[ruleKey]);
+            console.log('✅ Header de regla actualizado:', window.RULES[ruleKey].name);
+        }
+
         this.updateNeighborhoodInfo();
+        console.log('✅ Header de vecindad actualizado');
     }
 
     updateRuleInfo(rule) {
         const rulesSpecific = document.getElementById('rulesSpecific');
-        if (!rulesSpecific) return;
+        if (!rulesSpecific) {
+            console.warn('Elemento rulesSpecific no encontrado');
+            return;
+        }
 
         rulesSpecific.innerHTML = `
-        <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${rule.birth.join(', ')} vecinos</p>
-        <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${rule.survival.join(', ')} vecinos</p>
-        <p class="notation">
-            Notación: <span class="highlight">${rule.ruleString}</span>
-        </p>
-    `;
+    <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${rule.birth.join(', ')} vecinos</p>
+    <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${rule.survival.join(', ')} vecinos</p>
+    <p class="notation">Notación: <span class="highlight">${rule.ruleString}</span></p>
+  `;
 
         document.title = `Autómata Celular - ${rule.name} ${rule.ruleString}`;
         const headerTitle = document.querySelector('h1');
@@ -1011,140 +1024,143 @@ class UIController {
         }
     }
 
-    bindNeighborhoodEvents() {
+    _bindNeighborhoodEvents() {
         const typeSelect = document.getElementById('neighborhoodType');
         const radiusSlider = document.getElementById('neighborhoodRadius');
 
         if (typeSelect) {
-            typeSelect.addEventListener('change', (e) => {
-                this.changeNeighborhoodType(e.target.value);
-            });
+            this._addEventListener(typeSelect, 'change', (e) => this.changeNeighborhoodType(e.target.value));
         }
 
         if (radiusSlider) {
-            radiusSlider.addEventListener('input', (e) => {
+            this._addEventListener(radiusSlider, 'input', (e) => {
                 this.changeNeighborhoodRadius(parseInt(e.target.value));
+                const radiusValue = document.getElementById('radiusValue');
+                if (radiusValue) radiusValue.textContent = e.target.value;
             });
         }
     }
 
     updateNeighborhoodInfo() {
         const infoElement = document.getElementById('neighborhoodInfo');
-        if (!infoElement || !automaton) return;
+        if (!infoElement || !this.automaton) {
+            console.warn('❌ Elemento neighborhoodInfo o automaton no encontrado');
+            return;
+        }
 
-        const type = automaton.neighborhoodType === 'moore' ? 'Moore' : 'von Neumann';
-        const radius = automaton.neighborhoodRadius;
+        const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
+        const radius = this.automaton.neighborhoodRadius;
         infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (radio ${radius})`;
+
+        console.log(`🏘️ Neighborhood info actualizada: ${type} radio ${radius}`);
     }
 
-    bindPatternsControls() {
+    _bindPatternsControls() {
         const toggleRowsBtn = document.getElementById('patternsToggleRows');
         const toggleCompactBtn = document.getElementById('patternsToggleCompact');
         const container = document.getElementById('patternsContainer');
 
         if (toggleRowsBtn && container) {
-            toggleRowsBtn.addEventListener('click', () => {
+            this._addEventListener(toggleRowsBtn, 'click', () => {
                 this.patternsTwoRows = !this.patternsTwoRows;
                 container.classList.toggle('two-rows', this.patternsTwoRows);
                 const icon = toggleRowsBtn.querySelector('i');
-                if (this.patternsTwoRows) {
-                    icon.className = 'fas fa-grip-lines-vertical';
-                    toggleRowsBtn.title = 'Cambiar a 1 fila';
-                } else {
-                    icon.className = 'fas fa-grip-lines';
-                    toggleRowsBtn.title = 'Cambiar a 2 filas';
-                }
+                if (icon) icon.className = this.patternsTwoRows ? 'fas fa-grip-lines-vertical' : 'fas fa-grip-lines';
             });
         }
 
         if (toggleCompactBtn && container) {
-            toggleCompactBtn.addEventListener('click', () => {
+            this._addEventListener(toggleCompactBtn, 'click', () => {
                 this.patternsCompactView = !this.patternsCompactView;
                 container.classList.toggle('compact-view', this.patternsCompactView);
                 document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
                     btn.classList.toggle('compact', this.patternsCompactView);
                 });
                 const icon = toggleCompactBtn.querySelector('i');
-                if (this.patternsCompactView) {
-                    icon.className = 'fas fa-expand-alt';
-                    toggleCompactBtn.title = 'Vista normal';
-                } else {
-                    icon.className = 'fas fa-compress';
-                    toggleCompactBtn.title = 'Vista compacta';
-                }
+                if (icon) icon.className = this.patternsCompactView ? 'fas fa-expand-alt' : 'fas fa-compress';
             });
         }
     }
 
-    setupTouchEvents() {
+    _setupTouchEvents() {
         const canvas = document.getElementById('canvas');
-        let isTouchDrawing = false;
-        let touchStartTime = 0;
+        if (!canvas) return;
 
-        canvas.addEventListener('touchstart', (e) => {
+        let isTouchDrawing = false;
+
+        this._addEventListener(canvas, 'touchstart', (e) => {
             if (e.touches.length !== 1) return;
             e.preventDefault();
             const touch = e.touches[0];
-            touchStartTime = Date.now();
-            const {x, y} = automaton.getCellFromMouse(touch);
+            const {x, y} = this.automaton.getCellFromMouse(touch);
 
             if (window.selectedPattern) {
-                automaton.importPattern(window.selectedPattern, x, y);
+                this.automaton.importPattern(window.selectedPattern, x, y);
             } else {
                 isTouchDrawing = true;
-                automaton.grid[x][y] = !automaton.grid[x][y];
-                automaton.updateStats();
-                automaton.render();
+                this.automaton.setCell(x, y, !this.automaton.grid[x][y]);
+                this.automaton.updateStats();
+                this.automaton.render();
             }
         });
 
-        canvas.addEventListener('touchmove', (e) => {
-            if (!isTouchDrawing || !e.touches[0]) return;
+        this._addEventListener(canvas, 'touchmove', (e) => {
+            if (!isTouchDrawing || e.touches.length !== 1) return;
             e.preventDefault();
             const touch = e.touches[0];
-            const {x, y} = automaton.getCellFromMouse(touch);
-            const touchTime = Date.now() - touchStartTime;
-            if (touchTime > 50) {
-                automaton.grid[x][y] = true;
-                automaton.updateStats();
-                automaton.render();
-            }
+            const {x, y} = this.automaton.getCellFromMouse(touch);
+            this.automaton.setCell(x, y, true);
+            this.automaton.updateStats();
+            this.automaton.render();
         });
 
-        canvas.addEventListener('touchend', (e) => {
+        this._addEventListener(canvas, 'touchend', (e) => {
             e.preventDefault();
             isTouchDrawing = false;
         });
     }
 
-    bindPatternEvents() {
-        // Cuando se selecciona un patrón
-        document.addEventListener('patternSelected', () => {
-            this.onPatternSelected();
-        });
+    _bindPatternEvents() {
+        // Escuchar eventos DEL EVENTBUS (nueva arquitectura)
+        this._cleanups.push(
+            eventBus.on('pattern:selected', () => {
+                console.log('UIController: Evento pattern:selected recibido');
+                this.updateDrawModeIndicator();
+            }),
+            eventBus.on('pattern:updated', () => {
+                console.log('UIController: Evento pattern:updated recibido');
+                this.updateDrawModeIndicator();
+            }),
+            eventBus.on('pattern:cleared', () => {
+                console.log('UIController: Evento pattern:cleared recibido');
+                this.updateDrawModeIndicator();
+            })
+        );
 
-        // Cuando se actualiza un patrón (rotación, etc.)
-        document.addEventListener('patternUpdated', () => {
-            this.updateDrawModeIndicator();
-        });
-
-        // Cuando se de-selecciona un patrón
-        document.addEventListener('patternDeselected', () => {
-            this.updateDrawModeIndicator();
-        });
-
-        // Cuando se cancela un patrón (disparado por el botón Cancelar)
-        document.getElementById('cancelPatternBtn').addEventListener('click', () => {
-            this.updateDrawModeIndicator();
-        });
+        // Botón Cancelar (evento DOM directo)
+        const cancelBtn = document.getElementById('cancelPatternBtn');
+        if (cancelBtn) {
+            this._addEventListener(cancelBtn, 'click', () => {
+                this.deselectPattern();
+            });
+        }
     }
 
-    onPatternSelected() {
-        // Actualizar indicador de modo
-        this.updateDrawModeIndicator();
+    deselectPattern() {
+        window.selectedPattern = null;
+        window.selectedPatternKey = null;
+        window.selectedPatternRotation = 0;
 
-        // También actualizar las instrucciones si es necesario
-        this.updateInstructions();
+        document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        const miniEl = document.getElementById('patternNameMini');
+        if (miniEl) miniEl.textContent = 'Selecciona un patrón';
+
+        hidePatternPreview();
+        hideInfluenceArea();
+        this.updateDrawModeIndicator();
     }
 
     updateDrawModeIndicator() {
@@ -1160,28 +1176,25 @@ class UIController {
         }
     }
 
-    updateInstructions() {
-        // No necesitamos cambiar las instrucciones, ya están completas
-        // Pero podemos resaltar el modo actual si queremos
-        const instructions = document.querySelector('.instructions p');
-        if (instructions && window.selectedPattern) {
-            instructions.innerHTML = instructions.innerHTML.replace(
-                'Modo: Dibujo libre',
-                `<strong>Modo: Patrón - ${window.selectedPattern.name}</strong>`
-            );
+    updateMouseCoords(x, y) {
+        const coords = document.getElementById('mouseCoords');
+        if (coords) coords.textContent = `X: ${x}, Y: ${y}`;
+    }
+
+    _updateStatsDisplay(stats) {
+        const genEl = document.getElementById('generation');
+        const popEl = document.getElementById('population');
+        const densEl = document.getElementById('density');
+
+        if (!genEl || !popEl || !densEl) {
+            console.warn('❌ Elementos de estadísticas no encontrados');
+            return;
         }
+
+        genEl.textContent = stats.generation.toLocaleString();
+        popEl.textContent = stats.population.toLocaleString();
+        densEl.textContent = `${stats.density}%`;
+
+        console.log(`📊 Stats actualizadas: G${stats.generation} P${stats.population}`);
     }
 }
-
-// Inicializar
-document.addEventListener('DOMContentLoaded', () => {
-    const uiController = new UIController();
-
-    // Hacer disponible globalmente si es necesario
-    window.uiController = uiController;
-
-    // Inicializar indicador de modo después de un breve delay
-    setTimeout(() => {
-        uiController.updateDrawModeIndicator();
-    }, 100);
-});

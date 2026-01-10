@@ -1,6 +1,6 @@
 // Cargador de reglas desde JSON
-
 class RulesLoader {
+
     constructor() {
         this.RULES = {};
         this.isLoaded = false;
@@ -8,38 +8,22 @@ class RulesLoader {
 
     async load() {
         try {
-            console.log('Cargando reglas desde rules.json...');
-
-            // Intentar cargar desde el archivo JSON
             const response = await fetch('assets/rules.json');
-
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status}`);
-            }
-
             const data = await response.json();
             this.RULES = data.rules || {};
             this.isLoaded = true;
-
-            console.log(`✓ ${Object.keys(this.RULES).length} reglas cargadas correctamente`);
-
-            // Exportar a ventana global
             window.RULES = this.RULES;
 
+            // === Emitir evento ===
+            eventBus.emit('rules:loaded', {rules: this.RULES});
             return this.RULES;
 
         } catch (error) {
-            console.warn('No se pudo cargar rules.json, usando reglas embebidas:', error.message);
-
-            // Cargar reglas embebidas como fallback
             await this.loadEmbeddedRules();
-
-            return this.RULES;
         }
     }
 
     async loadEmbeddedRules() {
-        // Reglas embebidas mínimas como fallback
         this.RULES = {
             custom: {
                 name: "Personalizada",
@@ -69,13 +53,28 @@ class RulesLoader {
                 birth: [3]
             },
         };
-
         this.isLoaded = true;
         window.RULES = this.RULES;
 
-        console.log('✓ Reglas embebidas cargadas como fallback');
+        // === Emitir evento ===
+        eventBus.emit('rules:loaded', {rules: this.RULES});
     }
 }
 
 // Crear instancia global
+if (typeof window.eventBus === 'undefined') {
+    console.warn('EventBus no disponible, creando instancia temporal');
+    window.eventBus = new (class {
+        emit() {
+        }
+
+        on() {
+            return () => {
+            };
+        }
+
+        destroy() {
+        }
+    })();
+}
 window.rulesLoader = new RulesLoader();

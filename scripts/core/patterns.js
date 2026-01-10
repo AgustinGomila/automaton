@@ -1,3 +1,482 @@
+class PatternManager {
+    constructor(automatonInstance) {
+        this.automaton = automatonInstance;
+        this.isPreviewVisible = false;
+        this.isInfluenceVisible = false;
+        this._cleanups = [];
+
+        this._init();
+    }
+
+    destroy() {
+        this._cleanups.forEach(cleanup => cleanup());
+        this._cleanups = [];
+        this.hidePatternPreview();
+        this.hideInfluenceArea();
+        window.patternManager = null;
+    }
+
+    _init() {
+        this.renderPatterns();
+
+        // Suscribirse a eventos
+        this._cleanups.push(
+            eventBus.on('pattern:selected', () => this._updatePreviewOnEvent()),
+            eventBus.on('pattern:updated', () => this._updatePreviewOnEvent())
+        );
+    }
+
+    _updatePreviewOnEvent() {
+        // Actualizar preview si el mouse está sobre el canvas
+        const canvas = document.getElementById('canvas');
+        if (canvas && this.isPreviewVisible) {
+            const rect = canvas.getBoundingClientRect();
+            this.showPatternPreview(
+                Math.floor(this.automaton.gridSize / 2),
+                Math.floor(this.automaton.gridSize / 2)
+            );
+        }
+    }
+
+    // =========================================
+    // RENDERIZADO DE PATRONES
+    // =========================================
+
+    renderPatterns() {
+        const container = document.getElementById('patternsContainer');
+        if (!container) return;
+
+        container.innerHTML = '';
+
+        const sortedPatterns = Object.keys(PATTERNS).sort((a, b) => {
+            const patternA = PATTERNS[a];
+            const patternB = PATTERNS[b];
+            if (patternA.pattern === 'random') return 1;
+            if (patternB.pattern === 'random') return -1;
+            return patternA.cellCount - patternB.cellCount;
+        });
+
+        sortedPatterns.forEach(key => {
+            const pattern = PATTERNS[key];
+            const patternBtn = document.createElement('button');
+            patternBtn.className = 'pattern-btn-horizontal';
+            patternBtn.dataset.patternKey = key;
+
+            const categoryText = pattern.category ? `[${pattern.category}]\n` : '';
+            const cellCountText = pattern.cellCount ? `\nCélulas: ${pattern.cellCount}` : '';
+            patternBtn.dataset.tooltip = `${categoryText}${pattern.description}${cellCountText}\n\nClic derecho para rotar 90°`;
+
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'pattern-thumb-horizontal';
+
+            if (pattern.pattern === 'random') {
+                thumbnail.innerHTML = '🎲';
+                thumbnail.style.fontSize = '1.5rem';
+                thumbnail.style.color = '#8b5cf6';
+            } else {
+                const canvas = document.createElement('canvas');
+                canvas.width = 40;
+                canvas.height = 40;
+                canvas.className = 'pattern-canvas-horizontal';
+                const ctx = canvas.getContext('2d');
+                this._renderPatternToCanvas(ctx, pattern.pattern, pattern.color);
+                thumbnail.appendChild(canvas);
+            }
+
+            const label = document.createElement('div');
+            label.className = 'pattern-label-horizontal';
+            label.textContent = pattern.name;
+
+            if (pattern.cellCount && pattern.pattern !== 'random') {
+                const sizeBadge = document.createElement('div');
+                sizeBadge.className = 'pattern-size-badge';
+                sizeBadge.textContent = pattern.cellCount;
+                patternBtn.appendChild(sizeBadge);
+            }
+
+            patternBtn.appendChild(thumbnail);
+            patternBtn.appendChild(label);
+
+            patternBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => btn.classList.remove('active'));
+                patternBtn.classList.add('active');
+
+                window.selectedPatternRotation = 0;
+                window.selectedPatternKey = key;
+                window.selectedPattern = getPatternWithRotation(key, 0);
+
+                this._updatePatternInfo();
+                eventBus.emit('pattern:selected', {patternKey: key, pattern: PATTERNS[key]});
+            });
+
+            patternBtn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (patternBtn.classList.contains('active') && pattern.pattern !== 'random') {
+                    window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
+                    window.selectedPattern = getPatternWithRotation(key, window.selectedPatternRotation);
+
+                    const canvas = thumbnail.querySelector('canvas');
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, 40, 40);
+                        const rotatedPattern = getPatternWithRotation(key, window.selectedPatternRotation);
+                        this._renderPatternToCanvas(ctx, rotatedPattern.pattern, pattern.color);
+                    }
+
+                    this._updatePatternInfo();
+                    eventBus.emit('pattern:updated', {pattern: window.selectedPattern});
+                }
+
+                return false;
+            });
+
+            container.appendChild(patternBtn);
+        });
+
+        window.selectedPatternKey = null;
+        window.selectedPattern = null;
+        window.selectedPatternRotation = 0;
+        this._updatePatternInfo();
+    }
+
+    _renderPatternToCanvas(ctx, patternData, color) {
+        if (!patternData || patternData === 'random') return;
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, 40, 40);
+
+        const rows = patternData.length;
+        const cols = patternData[0].length;
+        const maxDim = Math.max(rows, cols);
+        const cellSize = Math.min(30 / maxDim, 5);
+
+        const offsetX = (40 - cols * cellSize) / 2;
+        const offsetY = (40 - rows * cellSize) / 2;
+
+        ctx.fillStyle = color || '#10b981';
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                if (patternData[row][col] === 1) {
+                    ctx.fillRect(offsetX + col * cellSize, offsetY + row * cellSize, cellSize, cellSize);
+                }
+            }
+        }
+    }
+
+    _updatePatternInfo() {
+        if (!window.selectedPatternKey) {
+            const nameEl = document.getElementById('patternNameMini');
+            const detailsEl = document.getElementById('patternDetailsMini');
+            if (nameEl) nameEl.textContent = 'Selecciona un patrón';
+            if (detailsEl) detailsEl.textContent = 'Clic en un patrón para seleccionarlo';
+
+            eventBus.emit('pattern:cleared');
+            return;
+        }
+
+        const pattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
+        const nameEl = document.getElementById('patternNameMini');
+        const detailsEl = document.getElementById('patternDetailsMini');
+
+        if (nameEl && detailsEl && pattern) {
+            const originalPattern = PATTERNS[window.selectedPatternKey];
+            const rotationText = window.selectedPatternRotation > 0 ? ` (${window.selectedPatternRotation}°)` : '';
+            nameEl.textContent = `${pattern.name}${rotationText}`;
+
+            const categoryText = originalPattern.category ? `Categoría: ${originalPattern.category}` : '';
+            const cellCountText = originalPattern.cellCount ? ` | Células: ${originalPattern.cellCount}` : '';
+            detailsEl.textContent = `${categoryText}${cellCountText}`;
+        }
+
+        window.selectedPattern = pattern;
+        eventBus.emit('pattern:updated', {pattern});
+    }
+
+    // =========================================
+    // PREVIEW DE PATRONES
+    // =========================================
+
+    showPatternPreview(x, y) {
+        const preview = document.getElementById('patternPreview');
+        const pattern = window.selectedPattern;
+
+        if (!pattern?.pattern || pattern.pattern === 'random') {
+            this.hidePatternPreview();
+            return;
+        }
+
+        const canvas = document.getElementById('canvas');
+        const container = document.getElementById('canvas-container');
+        if (!canvas || !container) return;
+
+        const cellSize = this.automaton.cellSize;
+        const canvasRect = canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        const scaleX = this.automaton.canvas.width / canvasRect.width;
+        const scaleY = this.automaton.canvas.height / canvasRect.height;
+
+        const patternData = pattern.pattern;
+        const patternOffsetX = Math.floor(patternData[0].length / 2);
+        const patternOffsetY = Math.floor(patternData.length / 2);
+
+        preview.innerHTML = '';
+        preview.style.cssText = `
+      position: absolute;
+      left: ${canvasRect.left - containerRect.left}px;
+      top: ${canvasRect.top - containerRect.top}px;
+      width: ${canvasRect.width}px;
+      height: ${canvasRect.height}px;
+      display: block;
+      pointer-events: none;
+      z-index: 3;
+    `;
+
+        for (let row = 0; row < patternData.length; row++) {
+            for (let col = 0; col < patternData[row].length; col++) {
+                if (patternData[row][col] === 1) {
+                    const gridX = x - patternOffsetX + col;
+                    const gridY = y - patternOffsetY + row;
+
+                    if (gridX >= 0 && gridX < this.automaton.gridSize && gridY >= 0 && gridY < this.automaton.gridSize) {
+                        const cell = document.createElement('div');
+                        cell.className = 'pattern-preview-cell';
+                        cell.style.cssText = `
+              position: absolute;
+              left: ${gridX * cellSize / scaleX}px;
+              top: ${gridY * cellSize / scaleY}px;
+              width: ${cellSize / scaleX}px;
+              height: ${cellSize / scaleY}px;
+              background: #3b82f6;
+              border-radius: 2px;
+              opacity: 0.8;
+            `;
+                        preview.appendChild(cell);
+                    }
+                }
+            }
+        }
+
+        this.isPreviewVisible = true;
+    }
+
+    hidePatternPreview() {
+        const preview = document.getElementById('patternPreview');
+        if (preview) {
+            preview.innerHTML = '';
+            preview.style.display = 'none';
+        }
+        this.isPreviewVisible = false;
+    }
+
+    // =========================================
+    // ÁREA DE INFLUENCIA
+    // =========================================
+
+    showInfluenceArea(x, y) {
+        const influenceDiv = document.getElementById('influenceArea');
+        if (!influenceDiv) return;
+
+        influenceDiv.innerHTML = '';
+        const canvas = document.getElementById('canvas');
+        const container = document.getElementById('canvas-container');
+        if (!canvas || !container) return;
+
+        const canvasRect = canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const cellSize = this.automaton.cellSize;
+        const scaleX = this.automaton.canvas.width / canvasRect.width;
+        const scaleY = this.automaton.canvas.height / canvasRect.height;
+
+        influenceDiv.style.cssText = `
+      position: absolute;
+      left: ${canvasRect.left - containerRect.left}px;
+      top: ${canvasRect.top - containerRect.top}px;
+      width: ${canvasRect.width}px;
+      height: ${canvasRect.height}px;
+      display: block;
+      pointer-events: none;
+      z-index: 2;
+    `;
+
+        const radius = this.automaton.neighborhoodRadius;
+        const type = this.automaton.neighborhoodType;
+
+        const getNeighborhood = (cx, cy) => {
+            const neighbors = [];
+            for (let i = -radius; i <= radius; i++) {
+                for (let j = -radius; j <= radius; j++) {
+                    if (i === 0 && j === 0) continue;
+                    if (type === 'neumann' && Math.abs(i) + Math.abs(j) > radius) continue;
+
+                    const nx = (cx + i + this.automaton.gridSize) % this.automaton.gridSize;
+                    const ny = (cy + j + this.automaton.gridSize) % this.automaton.gridSize;
+                    neighbors.push({x: nx, y: ny});
+                }
+            }
+            return neighbors;
+        };
+
+        const pattern = window.selectedPattern?.pattern;
+        let cellsToHighlight = [];
+
+        if (!pattern || pattern === 'random') {
+            cellsToHighlight = getNeighborhood(x, y);
+        } else {
+            const patternOffsetX = Math.floor(pattern[0].length / 2);
+            const patternOffsetY = Math.floor(pattern.length / 2);
+            const patternCells = new Set();
+
+            for (let row = 0; row < pattern.length; row++) {
+                for (let col = 0; col < pattern[row].length; col++) {
+                    if (pattern[row][col] === 1) {
+                        const gridX = x - patternOffsetX + col;
+                        const gridY = y - patternOffsetY + row;
+                        if (gridX >= 0 && gridX < this.automaton.gridSize && gridY >= 0 && gridY < this.automaton.gridSize) {
+                            patternCells.add(`${gridX},${gridY}`);
+                        }
+                    }
+                }
+            }
+
+            const influenceMap = new Set();
+            patternCells.forEach(key => {
+                const [cx, cy] = key.split(',').map(Number);
+                getNeighborhood(cx, cy).forEach(n => influenceMap.add(`${n.x},${n.y}`));
+            });
+
+            patternCells.forEach(key => influenceMap.delete(key));
+            cellsToHighlight = Array.from(influenceMap).map(key => {
+                const [x, y] = key.split(',').map(Number);
+                return {x, y};
+            });
+        }
+
+        cellsToHighlight.forEach(({x, y}) => {
+            const cell = document.createElement('div');
+            cell.className = `influence-cell ${type} radius-${radius}`;
+            cell.style.cssText = `
+        position: absolute;
+        left: ${x * cellSize / scaleX}px;
+        top: ${y * cellSize / scaleY}px;
+        width: ${cellSize / scaleX}px;
+        height: ${cellSize / scaleY}px;
+        background: rgba(59, 130, 246, 0.2);
+        pointer-events: none;
+      `;
+            influenceDiv.appendChild(cell);
+        });
+
+        this.isInfluenceVisible = true;
+    }
+
+    hideInfluenceArea() {
+        const influenceDiv = document.getElementById('influenceArea');
+        if (influenceDiv) {
+            influenceDiv.innerHTML = '';
+            influenceDiv.style.display = 'none';
+            this.isInfluenceVisible = false;
+        }
+    }
+}
+
+// Funciones globales para compatibilidad retroactiva
+function showPatternPreview(x, y) {
+    if (window.patternManager) {
+        window.patternManager.showPatternPreview(x, y);
+    }
+}
+
+function hidePatternPreview() {
+    if (window.patternManager) {
+        window.patternManager.hidePatternPreview();
+    }
+}
+
+function showInfluenceArea(x, y) {
+    if (window.patternManager) {
+        window.patternManager.showInfluenceArea(x, y);
+    }
+}
+
+function hideInfluenceArea() {
+    if (window.patternManager) {
+        window.patternManager.hideInfluenceArea();
+    }
+}
+
+// =========================================
+// EXPORTAR FUNCIONES GLOBALES NECESARIAS
+// =========================================
+
+// Función que necesitan los botones de patrón
+function rotateMatrix(matrix) {
+    if (!matrix || matrix === 'random') return matrix;
+
+    const rows = matrix.length;
+    const cols = matrix[0].length;
+    const rotated = [];
+
+    for (let col = 0; col < cols; col++) {
+        const newRow = [];
+        for (let row = rows - 1; row >= 0; row--) {
+            newRow.push(matrix[row][col]);
+        }
+        rotated.push(newRow);
+    }
+
+    return rotated;
+}
+
+// Función que necesitan los botones de patrón
+function getPatternWithRotation(patternKey, rotation = 0) {
+    if (!PATTERNS[patternKey]) return null;
+
+    const original = PATTERNS[patternKey];
+    if (original.pattern === 'random' || rotation === 0) {
+        return {
+            name: original.name,
+            description: original.description,
+            color: original.color,
+            pattern: original.pattern,
+            rotation: 0
+        };
+    }
+
+    let rotatedPattern = original.pattern;
+    const rotations = rotation / 90;
+
+    for (let i = 0; i < rotations; i++) {
+        rotatedPattern = rotateMatrix(rotatedPattern);
+    }
+
+    return {
+        name: original.name,
+        description: original.description,
+        color: original.color,
+        pattern: rotatedPattern,
+        rotation: rotation
+    };
+}
+
+// =========================================
+// COMPATIBILIDAD CON UI-CONTROLLER
+// =========================================
+
+// Función global que usa ui-controller.js
+function updatePatternInfo() {
+    if (window.patternManager) {
+        window.patternManager._updatePatternInfo();
+    } else {
+        console.warn('PatternManager no disponible para updatePatternInfo');
+    }
+}
+
 // Definición de patrones predefinidos
 const PATTERNS = {
     // === PATRONES PEQUEÑOS (hasta 10 células) ===
@@ -607,573 +1086,10 @@ const PATTERNS = {
     },
 };
 
-// Función para contar células en un patrón
-function countPatternCells(pattern) {
-    if (!pattern || pattern === 'random') return 0;
+// Exportar al scope global
+window.updatePatternInfo = updatePatternInfo;
 
-    let count = 0;
-    for (let row = 0; row < pattern.length; row++) {
-        for (let col = 0; col < pattern[row].length; col++) {
-            if (pattern[row][col] === 1) count++;
-        }
-    }
-    return count;
-}
-
-// Calcular cellCount para patrones que no lo tengan
-Object.keys(PATTERNS).forEach(key => {
-    const pattern = PATTERNS[key];
-    if (pattern.pattern !== 'random' && !pattern.cellCount) {
-        pattern.cellCount = countPatternCells(pattern.pattern);
-    }
-});
-
-// Función para rotar una matriz 90° en sentido horario
-function rotateMatrix(matrix) {
-    if (!matrix || matrix === 'random') return matrix;
-
-    const rows = matrix.length;
-    const cols = matrix[0].length;
-    const rotated = [];
-
-    for (let col = 0; col < cols; col++) {
-        const newRow = [];
-        for (let row = rows - 1; row >= 0; row--) {
-            newRow.push(matrix[row][col]);
-        }
-        rotated.push(newRow);
-    }
-
-    return rotated;
-}
-
-// Función para obtener patrón con rotación aplicada
-function getPatternWithRotation(patternKey, rotation = 0) {
-    if (!PATTERNS[patternKey]) return null;
-
-    const original = PATTERNS[patternKey];
-
-    // Si es random o rotación 0, devolver original
-    if (original.pattern === 'random' || rotation === 0) {
-        return {
-            name: original.name,
-            description: original.description,
-            color: original.color,
-            pattern: original.pattern,
-            rotation: 0
-        };
-    }
-
-    // Aplicar rotaciones sucesivas
-    let rotatedPattern = original.pattern;
-    const rotations = rotation / 90;
-
-    for (let i = 0; i < rotations; i++) {
-        rotatedPattern = rotateMatrix(rotatedPattern);
-    }
-
-    return {
-        name: original.name,
-        description: original.description,
-        color: original.color,
-        pattern: rotatedPattern,
-        rotation: rotation
-    };
-}
-
-// Variables globales para estado
-window.selectedPatternKey = null;
-window.selectedPatternRotation = 0;
-
-function renderPatterns() {
-    const container = document.getElementById('patternsContainer');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    // Ordenar patrones por cantidad de células (de menor a mayor)
-    const sortedPatterns = Object.keys(PATTERNS).sort((a, b) => {
-        const patternA = PATTERNS[a];
-        const patternB = PATTERNS[b];
-
-        // El aleatorio va al final
-        if (patternA.pattern === 'random') return 1;
-        if (patternB.pattern === 'random') return -1;
-
-        return patternA.cellCount - patternB.cellCount;
-    });
-
-    sortedPatterns.forEach(key => {
-        if (!PATTERNS[key]) return;
-
-        const pattern = PATTERNS[key];
-        const patternBtn = document.createElement('button');
-        patternBtn.className = 'pattern-btn-horizontal';
-        patternBtn.dataset.patternKey = key;
-
-        // Crear tooltip informativo
-        const categoryText = pattern.category ? `[${pattern.category}]\n` : '';
-        const cellCountText = pattern.cellCount ? `\nCélulas: ${pattern.cellCount}` : '';
-        patternBtn.dataset.tooltip = `${categoryText}${pattern.description}${cellCountText}\n\nClic derecho para rotar 90°`;
-
-        // Miniatura
-        const thumbnail = document.createElement('div');
-        thumbnail.className = 'pattern-thumb-horizontal';
-
-        if (pattern.pattern === 'random') {
-            thumbnail.innerHTML = '🎲';
-            thumbnail.style.fontSize = '1.5rem';
-            thumbnail.style.color = '#8b5cf6';
-        } else {
-            const canvas = document.createElement('canvas');
-            canvas.width = 40;
-            canvas.height = 40;
-            canvas.className = 'pattern-canvas-horizontal';
-            const ctx = canvas.getContext('2d');
-            renderPatternToCanvas(ctx, pattern.pattern, pattern.color);
-            thumbnail.appendChild(canvas);
-        }
-
-        // Etiqueta
-        const label = document.createElement('div');
-        label.className = 'pattern-label-horizontal';
-        label.textContent = pattern.name;
-
-        // Añadir badge de tamaño celular
-        if (pattern.cellCount && pattern.pattern !== 'random') {
-            const sizeBadge = document.createElement('div');
-            sizeBadge.className = 'pattern-size-badge';
-            sizeBadge.textContent = pattern.cellCount;
-            patternBtn.appendChild(sizeBadge);
-        }
-
-        patternBtn.appendChild(thumbnail);
-        patternBtn.appendChild(label);
-
-        // Clic izquierdo - seleccionar
-        patternBtn.addEventListener('click', (e) => {
-            if (e.button !== 0) return;
-
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Deseleccionar todos
-            document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            // Seleccionar este
-            patternBtn.classList.add('active');
-
-            // Resetear rotación al seleccionar nuevo patrón
-            window.selectedPatternRotation = 0;
-            window.selectedPatternKey = key;
-
-            // Actualizar vista previa e información
-            updatePatternInfo();
-
-            // Disparar un evento personalizado para notificar el cambio
-            document.dispatchEvent(new CustomEvent('patternSelected', {
-                detail: {
-                    patternKey: key,
-                    pattern: PATTERNS[key]
-                }
-            }));
-        });
-
-        // Clic derecho - rotar
-        patternBtn.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Solo rotar si es el patrón seleccionado
-            if (patternBtn.classList.contains('active') && pattern.pattern !== 'random') {
-                window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-
-                // Actualizar miniatura
-                const canvas = thumbnail.querySelector('canvas');
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, 40, 40);
-                    const rotatedPattern = getPatternWithRotation(key, window.selectedPatternRotation);
-                    renderPatternToCanvas(ctx, rotatedPattern.pattern, pattern.color);
-                }
-
-                // Actualizar info
-                updatePatternInfo();
-            }
-
-            return false;
-        });
-
-        container.appendChild(patternBtn);
-    });
-
-    // Dejar que el usuario empiece dibujando libremente
-    window.selectedPatternKey = null;
-    window.selectedPattern = null;
-    window.selectedPatternRotation = 0;
-
-    // Actualizar la información del patrón para mostrar "Selecciona un patrón"
-    updatePatternInfo();
-}
-
-function renderPatternToCanvas(ctx, patternData, color) {
-    if (!patternData || patternData === 'random') return;
-
-    // Fondo
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, 40, 40);
-
-    const rows = patternData.length;
-    const cols = patternData[0].length;
-
-    // Tamaño de celda
-    const maxDim = Math.max(rows, cols);
-    const cellSize = Math.min(30 / maxDim, 5);
-
-    // Centrar
-    const offsetX = (40 - cols * cellSize) / 2;
-    const offsetY = (40 - rows * cellSize) / 2;
-
-    // Color
-    ctx.fillStyle = color || '#10b981';
-
-    // Dibujar
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            if (patternData[row][col] === 1) {
-                ctx.fillRect(
-                    offsetX + col * cellSize,
-                    offsetY + row * cellSize,
-                    cellSize,
-                    cellSize
-                );
-            }
-        }
-    }
-}
-
-function updatePatternInfo() {
-    // Si no hay patrón seleccionado
-    if (!window.selectedPatternKey) {
-        const nameEl = document.getElementById('patternNameMini');
-        const detailsEl = document.getElementById('patternDetailsMini');
-        if (nameEl) nameEl.textContent = 'Selecciona un patrón';
-        if (detailsEl) detailsEl.textContent = 'Clic en un patrón para seleccionarlo';
-        window.selectedPattern = null;
-
-        // Disparar evento de patrón de-seleccionado
-        document.dispatchEvent(new CustomEvent('patternDeselected'));
-        return;
-    }
-
-    // Si hay patrón seleccionado
-    const pattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
-    const nameEl = document.getElementById('patternNameMini');
-    const detailsEl = document.getElementById('patternDetailsMini');
-
-    if (nameEl && detailsEl && pattern) {
-        const originalPattern = PATTERNS[window.selectedPatternKey];
-        const rotationText = window.selectedPatternRotation > 0 ? ` (${window.selectedPatternRotation}°)` : '';
-        nameEl.textContent = `${pattern.name}${rotationText}`;
-
-        const categoryText = originalPattern.category ? `Categoría: ${originalPattern.category}` : '';
-        const cellCountText = originalPattern.cellCount ? ` | Células: ${originalPattern.cellCount}` : '';
-        detailsEl.textContent = `${categoryText}${cellCountText}`;
-    }
-
-    // Actualizar patrón seleccionado globalmente
-    window.selectedPattern = pattern;
-
-    // Disparar evento de patrón actualizado
-    document.dispatchEvent(new CustomEvent('patternUpdated', {
-        detail: {pattern: pattern}
-    }));
-}
-
-function showPatternPreview(x, y) {
-    const preview = document.getElementById('patternPreview');
-    const pattern = window.selectedPattern;
-
-    if (!pattern || !pattern.pattern || pattern.pattern === 'random') {
-        preview.style.display = 'none';
-        return;
-    }
-
-    if (!automaton) return;
-
-    const canvas = document.getElementById('canvas');
-    const container = document.getElementById('canvas-container');
-    const cellSize = automaton.cellSize;
-
-    // Obtener dimensiones reales del contenedor (sin padding)
-    const containerRect = container.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
-
-    // Calcular offset del canvas dentro del contenedor
-    const offsetX = canvasRect.left - containerRect.left;
-    const offsetY = canvasRect.top - containerRect.top;
-
-    const patternData = pattern.pattern;
-    const patternOffsetX = Math.floor(patternData[0].length / 2);
-    const patternOffsetY = Math.floor(patternData.length / 2);
-
-    preview.innerHTML = '';
-    preview.style.position = 'absolute';
-    preview.style.left = offsetX + 'px';
-    preview.style.top = offsetY + 'px';
-    preview.style.width = canvasRect.width + 'px';
-    preview.style.height = canvasRect.height + 'px';
-    preview.style.display = 'block';
-    preview.style.pointerEvents = 'none';
-    preview.style.zIndex = '3';
-
-    // Calcular escala del canvas
-    const scaleX = canvas.width / canvasRect.width;
-    const scaleY = canvas.height / canvasRect.height;
-
-    for (let row = 0; row < patternData.length; row++) {
-        for (let col = 0; col < patternData[row].length; col++) {
-            if (patternData[row][col] === 1) {
-                const gridX = x - patternOffsetX + col;
-                const gridY = y - patternOffsetY + row;
-
-                // Solo mostrar celdas dentro del grid
-                if (gridX >= 0 && gridX < automaton.gridSize &&
-                    gridY >= 0 && gridY < automaton.gridSize) {
-
-                    const cell = document.createElement('div');
-                    cell.className = 'pattern-preview-cell';
-                    cell.style.position = 'absolute';
-                    // Aplicar escala CSS inversa para posicionamiento correcto
-                    cell.style.left = (gridX * cellSize / scaleX) + 'px';
-                    cell.style.top = (gridY * cellSize / scaleY) + 'px';
-                    cell.style.width = (cellSize / scaleX) + 'px';
-                    cell.style.height = (cellSize / scaleY) + 'px';
-                    cell.style.borderRadius = '2px';
-
-                    preview.appendChild(cell);
-                }
-            }
-        }
-    }
-}
-
-function hidePatternPreview() {
-    const preview = document.getElementById('patternPreview');
-    preview.innerHTML = '';
-    preview.style.display = 'none';
-}
-
-function showInfluenceArea(x, y) {
-    const influenceDiv = document.getElementById('influenceArea');
-    if (!influenceDiv || !automaton) return;
-
-    influenceDiv.innerHTML = '';
-    influenceDiv.style.display = 'block';
-
-    const canvas = document.getElementById('canvas');
-    const container = document.getElementById('canvas-container');
-    const cellSize = automaton.cellSize;
-    const containerRect = container.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
-    const offsetX = canvasRect.left - containerRect.left;
-    const offsetY = canvasRect.top - containerRect.top;
-    const scaleX = canvas.width / canvasRect.width;
-    const scaleY = canvas.height / canvasRect.height;
-
-    influenceDiv.style.position = 'absolute';
-    influenceDiv.style.left = offsetX + 'px';
-    influenceDiv.style.top = offsetY + 'px';
-    influenceDiv.style.width = canvasRect.width + 'px';
-    influenceDiv.style.height = canvasRect.height + 'px';
-
-    const radius = automaton.neighborhoodRadius;
-    const type = automaton.neighborhoodType;
-
-    // Función para calcular vecindad de una celda
-    function getNeighborhood(cx, cy) {
-        const neighbors = [];
-        for (let i = -radius; i <= radius; i++) {
-            for (let j = -radius; j <= radius; j++) {
-                if (i === 0 && j === 0) continue;
-
-                if (type === 'moore' ||
-                    (type === 'neumann' && Math.abs(i) + Math.abs(j) <= radius)) {
-
-                    const nx = cx + i;
-                    const ny = cy + j;
-
-                    if (nx >= 0 && nx < automaton.gridSize &&
-                        ny >= 0 && ny < automaton.gridSize) {
-                        neighbors.push({x: nx, y: ny});
-                    }
-                }
-            }
-        }
-        return neighbors;
-    }
-
-    // Para una sola celda
-    if (!window.selectedPattern || !window.selectedPattern.pattern || window.selectedPattern.pattern === 'random') {
-        const neighbors = getNeighborhood(x, y);
-        neighbors.forEach(neighbor => {
-            const cell = document.createElement('div');
-            cell.className = `influence-cell ${type} radius-${radius}`;
-            cell.style.position = 'absolute';
-            cell.style.left = (neighbor.x * cellSize / scaleX) + 'px';
-            cell.style.top = (neighbor.y * cellSize / scaleY) + 'px';
-            cell.style.width = (cellSize / scaleX) + 'px';
-            cell.style.height = (cellSize / scaleY) + 'px';
-            influenceDiv.appendChild(cell);
-        });
-    } else {
-        // Para un patrón
-        const pattern = window.selectedPattern.pattern;
-        const patternOffsetX = Math.floor(pattern[0].length / 2);
-        const patternOffsetY = Math.floor(pattern.length / 2);
-
-        // Crear un mapa de las celdas del patrón
-        const patternMap = new Set();
-        const patternCells = [];
-
-        for (let row = 0; row < pattern.length; row++) {
-            for (let col = 0; col < pattern[row].length; col++) {
-                if (pattern[row][col] === 1) {
-                    const gridX = x - patternOffsetX + col;
-                    const gridY = y - patternOffsetY + row;
-
-                    if (gridX >= 0 && gridX < automaton.gridSize &&
-                        gridY >= 0 && gridY < automaton.gridSize) {
-                        patternCells.push({x: gridX, y: gridY});
-                        patternMap.add(`${gridX},${gridY}`);
-                    }
-                }
-            }
-        }
-
-        // Calcular vecindad total (sin duplicados y excluyendo celdas del patrón)
-        const influenceMap = new Set();
-
-        patternCells.forEach(cell => {
-            const neighbors = getNeighborhood(cell.x, cell.y);
-            neighbors.forEach(neighbor => {
-                const key = `${neighbor.x},${neighbor.y}`;
-                if (!patternMap.has(key)) {
-                    influenceMap.add(key);
-                }
-            });
-        });
-
-        // Dibujar área de influencia
-        influenceMap.forEach(key => {
-            const [gridX, gridY] = key.split(',').map(Number);
-            const cell = document.createElement('div');
-            cell.className = `influence-cell ${type} radius-${radius}`;
-            cell.style.position = 'absolute';
-            cell.style.left = (gridX * cellSize / scaleX) + 'px';
-            cell.style.top = (gridY * cellSize / scaleY) + 'px';
-            cell.style.width = (cellSize / scaleX) + 'px';
-            cell.style.height = (cellSize / scaleY) + 'px';
-            influenceDiv.appendChild(cell);
-        });
-
-        // Dibujar borde del área de influencia
-        if (influenceMap.size > 0 || patternCells.length > 0) {
-            // Calcular área total (patrón + influencia)
-            const allCells = [
-                ...patternCells,
-                ...Array.from(influenceMap).map(key => {
-                    const [x, y] = key.split(',').map(Number);
-                    return {x, y};
-                })
-            ];
-
-            if (allCells.length > 0) {
-                let minX = Math.min(...allCells.map(c => c.x));
-                let minY = Math.min(...allCells.map(c => c.y));
-                let maxX = Math.max(...allCells.map(c => c.x));
-                let maxY = Math.max(...allCells.map(c => c.y));
-
-                const borderDiv = document.createElement('div');
-                borderDiv.className = 'influence-border';
-                borderDiv.style.position = 'absolute';
-                borderDiv.style.left = (minX * cellSize / scaleX - 1) + 'px';
-                borderDiv.style.top = (minY * cellSize / scaleY - 1) + 'px';
-                borderDiv.style.width = ((maxX - minX + 1) * cellSize / scaleX + 2) + 'px';
-                borderDiv.style.height = ((maxY - minY + 1) * cellSize / scaleY + 2) + 'px';
-                borderDiv.style.border = '1px dashed rgba(59, 130, 246, 0.5)';
-                influenceDiv.appendChild(borderDiv);
-            }
-        }
-    }
-}
-
-function hideInfluenceArea() {
-    const influenceDiv = document.getElementById('influenceArea');
-    if (influenceDiv) {
-        influenceDiv.innerHTML = '';
-        influenceDiv.style.display = 'none';
-    }
-}
-
-// Inicializar
-document.addEventListener('DOMContentLoaded', renderPatterns);
-
-// Exportar funciones
+// Exportar al scope global para que los event listeners puedan usarlo
 window.getPatternWithRotation = getPatternWithRotation;
-
-// Función para colocar un patrón en la cuadrícula
-function placePattern(grid, pattern, centerX, centerY) {
-    if (!pattern || !pattern.pattern) return grid;
-
-    const newGrid = [...grid.map(row => [...row])];
-    const patternData = pattern.pattern;
-
-    if (patternData === 'random') {
-        // Manejar patrón aleatorio
-        for (let x = 0; x < grid.length; x++) {
-            for (let y = 0; y < grid[0].length; y++) {
-                newGrid[x][y] = Math.random() < 0.3;
-            }
-        }
-        return newGrid;
-    }
-
-    // Calcular desplazamiento para centrar
-    const offsetX = Math.floor(patternData[0].length / 2);
-    const offsetY = Math.floor(patternData.length / 2);
-
-    console.log(`Placing pattern at ${centerX},${centerY} with offset ${offsetX},${offsetY}`);
-
-    // Colocar cada célula del patrón
-    for (let row = 0; row < patternData.length; row++) {
-        for (let col = 0; col < patternData[row].length; col++) {
-            if (patternData[row][col] === 1) {
-                const gridX = centerX - offsetX + col;
-                const gridY = centerY - offsetY + row;
-
-                // Verificar que esté dentro de los límites
-                if (gridX >= 0 && gridX < newGrid.length &&
-                    gridY >= 0 && gridY < newGrid[0].length) {
-                    newGrid[gridX][gridY] = true;
-                }
-            }
-        }
-    }
-
-    return newGrid;
-}
-
-// Llamar cuando el DOM esté listo
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderPatterns);
-} else {
-    renderPatterns();
-}
-
-// Exportar funciones
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {PATTERNS, renderPatterns, placePattern, showPatternPreview};
-}
+window.rotateMatrix = rotateMatrix;
+window.PATTERNS = PATTERNS;

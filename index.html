@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
-    <title>Autómata Celular de Kauffman B37/S4567</title>
+    <title>Autómata Celular</title>
     <link href="styles/main.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -14,7 +14,7 @@
             <i class="fas fa-bars"></i>
         </button>
 
-        <h1><i class="fas fa-cogs"></i> Autómata de Kauffman</h1>
+        <h1><i class="fas fa-cogs"></i> Autómata - Conway's Life</h1>
 
         <div class="rules-mobile-toggle" id="rulesToggle">
             <i class="fas fa-info-circle"></i>
@@ -23,10 +23,10 @@
         <div class="rules" id="rulesPanel">
             <!-- Reglas específicas -->
             <div class="rules-specific" id="rulesSpecific">
-                <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 o 7 vecinos</p>
-                <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 4, 5, 6 o 7 vecinos</p>
+                <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 vecinos</p>
+                <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 2 o 3 vecinos</p>
                 <p class="notation">
-                    Notación: <span class="highlight">B37/S4567</span>
+                    Notación: <span class="highlight">B3/S23</span>
                 </p>
             </div>
 
@@ -98,9 +98,9 @@
                     <div class="config-group">
                         <label for="gridSize">
                             <i class="fas fa-border-all"></i> Tamaño:
-                            <span class="value-display" id="gridSizeValue">60×60</span>
+                            <span class="value-display" id="gridSizeValue">100×100</span>
                         </label>
-                        <input id="gridSize" max="100" min="20" step="5" type="range" value="60">
+                        <input id="gridSize" max="200" min="20" step="5" type="range" value="100">
                         <div class="range-ticks">
                             <span>Pequeño</span>
                             <span>Medio</span>
@@ -124,9 +124,9 @@
                     <div class="config-group">
                         <label for="cellSize">
                             <i class="fas fa-expand-alt"></i> Zoom:
-                            <span class="value-display" id="cellSizeValue">8px</span>
+                            <span class="value-display" id="cellSizeValue">6px</span>
                         </label>
-                        <input id="cellSize" max="20" min="4" step="2" type="range" value="8">
+                        <input id="cellSize" max="20" min="4" step="2" type="range" value="6">
                     </div>
 
                     <!-- Toggle para área de influencia -->
@@ -260,11 +260,6 @@
                         <i class="fas fa-times"></i> Botón <strong>"Cancelar"</strong> para volver a dibujo libre
                     </p>
                 </div>
-
-                <div class="mode-indicator" id="modeIndicator">
-                    <i class="fas fa-pencil-alt"></i>
-                    <span id="modeText">Modo: Dibujar (Ctrl para borrar)</span>
-                </div>
             </div>
         </div>
     </main>
@@ -321,58 +316,13 @@
         </div>
     </footer>
 </div>
-
+<script src="scripts/core/event-bus.js"></script>
 <script src="scripts/core/rules-loader.js"></script>
 <script src="scripts/core/rules.js"></script>
 <script src="scripts/core/patterns.js"></script>
 <script src="scripts/core/automaton.js"></script>
 <script src="scripts/ui/ui-controller.js"></script>
 <script src="scripts/ui/responsive-controller.js"></script>
-
-<script>
-    // Actualizar indicador de modo
-    document.addEventListener('keydown', (e) => {
-        const indicator = document.getElementById('modeIndicator');
-        const modeText = document.getElementById('modeText');
-
-        if (!indicator || !modeText) return;
-
-        if (e.key === 'Control' || e.ctrlKey) {
-            indicator.className = 'mode-indicator erase';
-            modeText.textContent = 'Modo: Borrar (suelta Ctrl para dibujar)';
-            indicator.querySelector('i').className = 'fas fa-eraser';
-        }
-    });
-
-    document.addEventListener('keyup', (e) => {
-        const indicator = document.getElementById('modeIndicator');
-        const modeText = document.getElementById('modeText');
-
-        if (!indicator || !modeText) return;
-
-        if (e.key === 'Control' || !e.ctrlKey) {
-            indicator.className = 'mode-indicator';
-            modeText.textContent = 'Modo: Dibujar (Ctrl para borrar)';
-            indicator.querySelector('i').className = 'fas fa-pencil-alt';
-        }
-    });
-
-    // Inicialización para asegurar que el dibujo continuo funcione desde el inicio
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-            // Forzar una primera actualización del estado
-            const canvas = document.getElementById('canvas');
-            if (canvas) {
-                canvas.addEventListener('mousedown', function initDraw(e) {
-                    // Este evento se ejecuta una vez para inicializar
-                    console.log('Dibujo inicializado correctamente');
-                    // Remover el listener después de la primera ejecución
-                    canvas.removeEventListener('mousedown', initDraw);
-                }, {once: true});
-            }
-        }, 1000);
-    });
-</script>
-
+<script src="scripts/main.js"></script>
 </body>
 </html>
