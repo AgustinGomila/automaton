@@ -6,7 +6,7 @@ class CellularAutomaton {
 
         // Estado interno
         this.grid = this.createEmptyGrid();
-        this.prevGrid = null;
+        this.dirtyFlags = new Uint8Array(this.gridSize * this.gridSize);  // 0=desconocido, 1=viva
         this.generation = 0;
         this.isRunning = false;
         this.updateInterval = 100;
@@ -14,7 +14,10 @@ class CellularAutomaton {
         this.showGrid = true;
 
         // Sistema de dirty rendering
+        this.renderFlags = new Uint8Array(this.gridSize * this.gridSize);  // Estado actual renderizado
+        this.prevFlags = new Uint8Array(this.gridSize * this.gridSize);    // Estado de la generación anterior
         this.dirtyCells = new Set();
+
         this._lastPopulation = 0;
 
         // Canvas
@@ -26,8 +29,8 @@ class CellularAutomaton {
         this.resizeCanvas();
 
         // Estadísticas
-        this.populationHistory = new CircularArray(100); // 100 es el maxSize
-        this.maxHistoryLength = 100;
+        const maxHistoryLength = 100;
+        this.populationHistory = new CircularArray(maxHistoryLength);
 
         // Vecindad
         this.neighborhoodType = 'moore';
@@ -80,7 +83,7 @@ class CellularAutomaton {
 
         // Liberar buffers
         this.grid = null;
-        this.prevGrid = null;
+        this.dirtyFlags = null;
         this.dirtyCells.clear();
         this.dirtyCells = null;
         this.populationHistory.clear();
@@ -252,7 +255,7 @@ class CellularAutomaton {
 
     createEmptyGrid() {
         return Array.from({length: this.gridSize}, () =>
-            Array.from({length: this.gridSize}, () => false)
+            new Uint8Array(this.gridSize)
         );
     }
 
@@ -313,15 +316,22 @@ class CellularAutomaton {
     _renderCell(x, y) {
         const cellSize = this.cellSize;
         const isAlive = this.grid[x][y];
-        const prevAlive = this.prevGrid?.[x]?.[y] ?? false;
+        const cellIndex = y * this.gridSize + x;
 
-        // Si no cambió y no es la primera generación, no renderizar
-        if (isAlive === prevAlive && this.generation > 0) return;
+        // Usar prevFlags para detectar cambio vs generación anterior
+        const prevAlive = this.prevFlags[cellIndex] === 1;
+        const changed = isAlive !== prevAlive;
 
-        // 1. Limpiar TODA el área de la celda (incluyendo líneas)
+        // Actualizar renderFlags con estado actual
+        this.renderFlags[cellIndex] = isAlive ? 1 : 0;
+
+        // Si no cambió y no es primera generación, no renderizar
+        if (!changed && this.generation > 0) return;
+
+        // 1. Limpiar celda
         this.ctx.clearRect(x * cellSize, y * cellSize, cellSize, cellSize);
 
-        // 2. Si la cuadrícula está activa, redibujar su línea PRIMERO
+        // 2. Dibujar grid si está activo
         if (this.showGrid) {
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             this.ctx.lineWidth = 1;
@@ -330,36 +340,31 @@ class CellularAutomaton {
 
         // 3. Dibujar celda si está viva
         if (isAlive) {
-            this._drawSingleCell(x, y);
+            this._drawSingleCell(x, y, changed);  // Pasar 'changed' como parámetro
         }
     }
 
-    _drawSingleCell(x, y) {
+    _drawSingleCell(x, y, changed) {
         const cellSize = this.cellSize;
         const centerX = x * cellSize + cellSize / 2;
         const centerY = y * cellSize + cellSize / 2;
 
-        // Verificar si la celda cambió en la última generación
-        const changed = this.prevGrid?.[x]?.[y] !== this.grid[x][y];
-
-        // Colores según actividad
-        const activeColor = '#b9b610'; // Amarillo para activa
-        const stableColor = '#059669'; // Verde para estable
+        // Colores
+        const activeColor = '#b9b610';
+        const stableColor = '#059669';
         const highlightColor = 'rgba(255, 255, 255, 0.3)';
 
-        // Gradient dinámico basado en actividad
+        // Gradient según actividad
         const gradient = this.ctx.createRadialGradient(
             centerX, centerY, 0,
             centerX, centerY, cellSize / 2
         );
 
         if (changed) {
-            // CELDA ACTIVA (cambió recientemente)
             gradient.addColorStop(0, activeColor);
             gradient.addColorStop(0.7, stableColor);
             gradient.addColorStop(1, 'rgba(5, 150, 105, 0.8)');
         } else {
-            // CELDA ESTABLE
             gradient.addColorStop(0, stableColor);
             gradient.addColorStop(1, stableColor);
         }
@@ -372,7 +377,7 @@ class CellularAutomaton {
             cellSize - 2
         );
 
-        // Efecto de brillo en borde superior
+        // Brillo en bordes si es activa
         if (changed) {
             this.ctx.fillStyle = highlightColor;
             this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
@@ -425,7 +430,7 @@ class CellularAutomaton {
     nextGeneration() {
         if (this.checkLimits()) return 0;
 
-        this.prevGrid = this.grid.map(row => [...row]);
+        this.prevFlags.set(this.renderFlags);
         this.dirtyCells.clear();
 
         // === DECIDIR: Worker o main thread ===
@@ -727,6 +732,8 @@ class CellularAutomaton {
             this.updateStats();
             this.render();
         }
+
+        this.resetDirtyFlags();
     }
 
     exportPattern() {
@@ -778,9 +785,24 @@ class CellularAutomaton {
         this.generation = 0;
         this.isLimitReached = false;
         this.populationHistory.clear();
+
         if (changed) {
             this.updateStats();
             this.render();
+        }
+
+        this.resetDirtyFlags();
+        this.prevFlags.set(this.renderFlags);
+    }
+
+    resetDirtyFlags() {
+        this.dirtyFlags.fill(0);
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                if (this.grid[x][y]) {
+                    this.dirtyFlags[y * this.gridSize + x] = 1;
+                }
+            }
         }
     }
 
@@ -799,6 +821,8 @@ class CellularAutomaton {
             this.updateStats();
             this.render();
         }
+
+        this.prevFlags.set(this.renderFlags);
     }
 
     toggleRunning() {
