@@ -245,31 +245,27 @@ class UIController {
     }
 
     loadRules() {
-        console.debug('=== loadRules() EJECUTÁNDOSE ===');
-        console.debug('window.RULES:', window.RULES);
-        console.debug('Cantidad:', Object.keys(window.RULES || {}).length);
-
         const selector = document.getElementById('ruleSelector');
-        if (!selector) {
-            console.error('❌ SELECTOR NO ENCONTRADO EN DOM');
-            return;
-        }
+        if (!selector) return;
 
-        // Limpiar y llenar
         while (selector.options.length > 0) {
-            selector.remove(0);
+            selector.removeItem(0);
         }
 
         Object.keys(window.RULES).forEach((key, index) => {
             const rule = window.RULES[key];
             const option = document.createElement('option');
             option.value = key;
-            option.textContent = `${rule.name} (${rule.ruleString})`;
-            selector.appendChild(option);
-            console.debug(`✅ Regla ${index + 1}: ${rule.name}`);
-        });
 
-        console.debug(`=== ${Object.keys(window.RULES).length} reglas cargadas ===`);
+            // SI ES CUSTOM Y TIENE VALORES, MOSTRAR LA NOTACIÓN REAL
+            if (key === 'custom' && rule.birth.length > 0 && rule.survival.length > 0) {
+                option.textContent = `Personalizada (${rule.ruleString})`;
+            } else {
+                option.textContent = `${rule.name} (${rule.ruleString})`;
+            }
+
+            selector.appendChild(option);
+        });
 
         if (window.RULES.conway) {
             selector.value = 'conway';
@@ -1146,7 +1142,24 @@ class UIController {
         try {
             const customRule = parseCustomRule(birthInput, survivalInput);
             this.automaton.setRule(customRule.survival, customRule.birth);
-            alert(`Regla personalizada aplicada: B${customRule.birth.join('')}/S${customRule.survival.join('')}`);
+
+            // ACTUALIZAR EL OBJETO RULES.CUSTOM
+            if (window.RULES?.custom) {
+                window.RULES.custom.survival = customRule.survival;
+                window.RULES.custom.birth = customRule.birth;
+                window.RULES.custom.ruleString = `B${customRule.birth.join('')}/S${customRule.survival.join('')}`;
+
+                // ACTUALIZAR EL SELECTOR VISUALMENTE
+                const selector = document.getElementById('ruleSelector');
+                const selectedOption = selector.options[selector.selectedIndex];
+                selectedOption.textContent = `Personalizada (${window.RULES.custom.ruleString})`;
+
+                // ACTUALIZAR EL HEADER INMEDIATAMENTE
+                this.updateRuleInfo(window.RULES.custom);
+
+                console.debug(`✅ Regla personalizada aplicada: ${window.RULES.custom.ruleString}`);
+            }
+
         } catch (error) {
             alert(`Error: ${error.message}`);
         }

@@ -17,8 +17,9 @@ class Application {
 
     async _init() {
         try {
-            // 1. Cargar reglas primero
+            // 1. Cargar reglas y patrones primero
             await this._loadRules();
+            await window.patternLoader.load();
 
             // 2. Crear autómata
             this.automaton = new CellularAutomaton();

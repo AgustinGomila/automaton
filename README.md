@@ -45,17 +45,6 @@ Louis Kauffman y otras configuraciones clásicas.
 - **Arrastrar**: Dibuja libremente mientras arrastras
 - **Escape**: Cancela la selección de patrón
 
-## 🧠 Contexto Teórico
-
-### Louis Kauffman
-
-El autómata incluye la regla **B37/S4567** presentada por Louis Kauffman, matemático conocido por su trabajo en:
-
-- **Teoría de nudos**
-- **Cálculo de formas** (Laws of Form)
-- **Sistemas autoorganizados**
-- **Cibernética de segundo orden**
-
 ### Reglas Clásicas
 
 Además de Kauffman, el simulador incluye autómatas celulares clásicos:
@@ -84,13 +73,5 @@ npx serve
 
 ## 📚 Referencias
 
-- **Louis Kauffman**: [Página personal](http://www.math.uic.edu/~kauffman/)
 - **Conway's Game of Life**: [Wikipedia](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
 - **Reglas de autómatas**: [LifeWiki](https://conwaylife.com/wiki/)
-- **Teoría de Autómatas Celulares**: Stephen Wolfram - *A New Kind of Science*
-
----
-
-**Explora la emergencia de patrones complejos a partir de reglas simples.**
-
-*"Toda distinción crea una frontera, y toda frontera procesa información." - Louis Kauffman*
