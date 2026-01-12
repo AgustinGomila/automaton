@@ -31,6 +31,10 @@ class CellularAutomaton {
         this._lastPopulation = 0;
         this.populationHistory = new CircularArray(maxHistoryLength);
 
+        // UndoManager
+        this.undoManager = new UndoManager(50);
+        this.undoManager.startTracking();
+
         // Vecindad
         this.neighborhoodType = 'moore';
         this.neighborhoodRadius = 1;
@@ -79,6 +83,12 @@ class CellularAutomaton {
 
         // Limpiar worker de forma segura
         this._cleanupWorker();
+
+        // limpiar UndoManager
+        if (this.undoManager) {
+            this.undoManager.clear();
+            this.undoManager = null;
+        }
 
         // Liberar buffers
         this.grid = null;
@@ -295,11 +305,12 @@ class CellularAutomaton {
         if (x < 0 || x >= this.gridSize || y < 0 || y >= this.gridSize) return false;
 
         if (this.grid[x][y] !== state) {
-            this.grid[x][y] = state;
+            // Guardar estado antes de modificar
+            this.undoManager.saveState(this.grid, this.generation);
 
             // Marcar siempre que cambie, sin condiciones
+            this.grid[x][y] = state;
             if (markDirty) this.dirtyCells.add(`${x},${y}`);
-
             return true;
         }
         return false;
@@ -757,6 +768,34 @@ class CellularAutomaton {
         }
     }
 
+    undo() {
+        const result = this.undoManager.undo(this.grid, this.generation);
+        if (result) {
+            this.grid = result.grid;
+            this.generation = result.generation;
+            this._markAllDirty();
+            this.updateStats();
+            this.render();
+            eventBus.emit('automaton:undo', {generation: this.generation});
+            return true;
+        }
+        return false;
+    }
+
+    redo() {
+        const result = this.undoManager.redo(this.grid, this.generation);
+        if (result) {
+            this.grid = result.grid;
+            this.generation = result.generation;
+            this._markAllDirty();
+            this.updateStats();
+            this.render();
+            eventBus.emit('automaton:redo', {generation: this.generation});
+            return true;
+        }
+        return false;
+    }
+
     importPattern(pattern, centerX, centerY) {
         if (!pattern?.pattern) {
             console.warn('No pattern to import');
@@ -767,6 +806,9 @@ class CellularAutomaton {
             this.randomize(0.3);
             return;
         }
+
+        // Guardar antes de importar
+        this.undoManager.saveState(this.grid, this.generation);
 
         const patternData = pattern.pattern;
         const offsetX = Math.floor(patternData[0].length / 2);
@@ -832,6 +874,9 @@ class CellularAutomaton {
     // =========================================
 
     randomize(density = 0.3) {
+        // Guardar antes de randomizar
+        this.undoManager.saveState(this.grid, this.generation);
+
         let changed = false;
         for (let x = 0; x < this.gridSize; x++) {
             for (let y = 0; y < this.gridSize; y++) {
@@ -843,13 +888,11 @@ class CellularAutomaton {
         this.generation = 0;
         this.isLimitReached = false;
         this.populationHistory.clear();
-
         if (changed) {
             this.updateStats();
             this.render();
         }
 
-        this.resetDirtyFlags();
         this.prevFlags.set(this.renderFlags);
     }
 
@@ -865,6 +908,9 @@ class CellularAutomaton {
     }
 
     clear() {
+        // Guardar antes de limpiar
+        this.undoManager.saveState(this.grid, this.generation);
+
         let changed = false;
         for (let x = 0; x < this.gridSize; x++) {
             for (let y = 0; y < this.gridSize; y++) {

@@ -860,6 +860,20 @@ class UIController {
         if (e.key === 'Control') this.ctrlPressed = true;
         if (e.key === 'Shift') this.shiftPressed = true;
 
+        // Ctrl+Z (Undo)
+        if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            this.undo();
+            return;
+        }
+
+        // Ctrl+Shift+Z (Redo)
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            this.redo();
+            return;
+        }
+
         switch (e.key.toLowerCase()) {
             case 'escape':
                 this.deselectPattern();
@@ -918,6 +932,14 @@ class UIController {
         }
 
         const isRunning = this.automaton.toggleRunning();
+
+        // Controlar seguimiento durante simulación
+        if (isRunning) {
+            this.automaton.undoManager.stopTracking();
+        } else {
+            this.automaton.undoManager.startTracking();
+        }
+
         const playIcon = document.getElementById('playIcon');
         const playText = document.getElementById('playText');
         const stepBtn = document.getElementById('stepBtn');
@@ -938,6 +960,36 @@ class UIController {
 
     clear() {
         this.automaton.clear();
+    }
+
+    /**
+     * Ejecuta undo y muestra feedback
+     */
+    undo() {
+        if (this.automaton.undoManager.undoCount === 0) {
+            this._showNotification('No hay acciones para deshacer', 'warning', 1500);
+            return;
+        }
+
+        if (this.automaton.undo()) {
+            console.debug('↶ Undo ejecutado');
+            this._showNotification('Deshacer ejecutado', 'info', 1000);
+        }
+    }
+
+    /**
+     * Ejecuta redo y muestra feedback
+     */
+    redo() {
+        if (this.automaton.undoManager.redoCount === 0) {
+            this._showNotification('No hay acciones para rehacer', 'warning', 1500);
+            return;
+        }
+
+        if (this.automaton.redo()) {
+            console.debug('↷ Redo ejecutado');
+            this._showNotification('Rehacer ejecutado', 'info', 1000);
+        }
     }
 
     updateSpeed() {
@@ -1184,6 +1236,53 @@ class UIController {
         console.debug(`🔲 Modo de frontera: ${status}`);
 
         eventBus.emit('automaton:wrapChanged', {wrap: this.automaton.wrapEdges});
+    }
+
+    /**
+     * Muestra una notificación flotante
+     * @private
+     */
+    _showNotification(message, type = 'info', duration = 2000) {
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+
+        // Estilos inline para evitar crear CSS nuevo
+        notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        background: ${type === 'warning' ? '#f59e0b' : '#10b981'};
+        color: white;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+        z-index: 10000;
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: opacity 0.3s, transform 0.3s;
+        pointer-events: none;
+    `;
+
+        document.body.appendChild(notification);
+
+        // Animar entrada
+        requestAnimationFrame(() => {
+            notification.style.opacity = '1';
+            notification.style.transform = 'translateY(0)';
+        });
+
+        // Auto-remover
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, duration);
     }
 
     changeNeighborhoodType(type) {
