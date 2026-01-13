@@ -313,6 +313,20 @@ class UIController {
             this.deselectPattern();
             window.selectedPatternRotation = 0;
         });
+        // Instrucciones
+        this._addEventListener(document.getElementById('instructionsBtn'), 'click', () => {
+            document.getElementById('instructionsModal').classList.add('show');
+        });
+        // Cerrar modal
+        this._addEventListener(document.getElementById('closeModalBtn'), 'click', () => {
+            document.getElementById('instructionsModal').classList.remove('show');
+        });
+        // Cerrar modal al hacer clic fuera
+        this._addEventListener(document.getElementById('instructionsModal'), 'click', (e) => {
+            if (e.target.id === 'instructionsModal') {
+                document.getElementById('instructionsModal').classList.remove('show');
+            }
+        });
 
         // Reglas
         this._addEventListener(document.getElementById('ruleSelector'), 'change', () => this.changeRule());
@@ -911,6 +925,11 @@ class UIController {
                     e.preventDefault();
                     this.deleteSelection();
                 }
+                break;
+            case 'h':
+            case '?':
+                e.preventDefault();
+                document.getElementById('instructionsModal').classList.add('show');
                 break;
         }
     }

@@ -272,22 +272,11 @@
                         <i class="fas fa-times"></i>
                         <span>Cancelar</span>
                     </button>
-                </div>
 
-                <div class="instructions">
-                    <p>
-                        <span class="pattern-mode-indicator free-draw" id="drawModeIndicator">Modo: Dibujo libre</span>
-                        |
-                        <i class="fas fa-mouse-pointer"></i> <strong>Clic + arrastrar</strong> para dibujar |
-                        <i class="fas fa-eraser"></i> <strong>Ctrl + clic + arrastrar</strong> para borrar |
-                        <i class="fas fa-vector-square"></i> <strong>Shift + arrastrar</strong> para seleccionar área |
-                        <br>
-                        <i class="fas fa-arrows-alt"></i> <strong>Ctrl + arrastrar</strong> selección para mover |
-                        <i class="fas fa-copy"></i> <strong>Ctrl+Shift + arrastrar</strong> selección para copiar |
-                        <i class="fas fa-trash"></i> <strong>Delete</strong> para borrar selección |
-                        <i class="fas fa-redo-alt"></i> <strong>Clic derecho</strong> en patrón para rotar |
-                        <i class="fas fa-times"></i> Botón <strong>"Cancelar"</strong> para volver a dibujo libre
-                    </p>
+                    <button class="btn-control" id="instructionsBtn">
+                        <i class="fas fa-question-circle"></i>
+                        <span>Ayuda</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -344,6 +333,67 @@
             </p>
         </div>
     </footer>
+
+    <div class="modal-overlay" id="instructionsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-question-circle"></i> Instrucciones</h3>
+                <button class="modal-close" id="closeModalBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="pattern-mode-indicator free-draw" id="drawModeIndicatorModal">Modo: Dibujo libre</div>
+                <div class="instructions-grid">
+                    <div class="instruction-item">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <strong>Clic + arrastrar</strong> para dibujar
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-eraser"></i>
+                        <strong>Ctrl + clic + arrastrar</strong> para borrar
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-vector-square"></i>
+                        <strong>Shift + arrastrar</strong> para seleccionar área
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-arrows-alt"></i>
+                        <strong>Ctrl + arrastrar</strong> selección para mover
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-copy"></i>
+                        <strong>Ctrl+Shift + arrastrar</strong> selección para copiar
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-trash"></i>
+                        <strong>Delete</strong> para borrar selección
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-redo-alt"></i>
+                        <strong>Clic derecho</strong> en patrón para rotar
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-times"></i>
+                        Botón <strong>"Cancelar"</strong> para volver a dibujo libre
+                    </div>
+                </div>
+                <div class="keyboard-shortcuts">
+                    <h4><i class="fas fa-keyboard"></i> Atajos de teclado</h4>
+                    <ul>
+                        <li><strong>ESPACIO</strong> - Play/Pausa</li>
+                        <li><strong>S</strong> - Siguiente paso</li>
+                        <li><strong>R</strong> - Rotar patrón</li>
+                        <li><strong>A</strong> - Aleatorio</li>
+                        <li><strong>C</strong> - Limpiar</li>
+                        <li><strong>ESC</strong> - Cancelar/Clear</li>
+                        <li><strong>Ctrl+Z</strong> - Deshacer</li>
+                        <li><strong>Ctrl+Shift+Z</strong> - Rehacer</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 <script src="scripts/core/event-bus.js"></script>
 <script src="scripts/core/rules-loader.js"></script>
