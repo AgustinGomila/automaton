@@ -53,22 +53,6 @@ Además de Kauffman, el simulador incluye autómatas celulares clásicos:
 - **Seeds, Mazes, Amoeba** - Variaciones con comportamientos únicos
 - **HighLife, Day & Night** - Autómatas bien estudiados
 
-## 💻 Instalación Local
-
-### Opción 1: Ejecutar directamente
-
-Simplemente abre `index.html` en tu navegador. No requiere servidor web.
-
-### Opción 2: Servidor local
-
-```bash
-# Con Python 3
-python -m http.server 8000
-
-# Con Node.js (npx)
-npx serve
-
-# Luego abre http://localhost:8000
 ```
 
 ## 📚 Referencias
