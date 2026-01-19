@@ -874,21 +874,41 @@ class CellularAutomaton {
     // =========================================
 
     randomize(density = 0.3) {
-        // Guardar antes de randomizar
+        // Guardar estado UNA SOLA VEZ antes de modificar
         this.undoManager.saveState(this.grid, this.generation);
 
+        // Deshabilitar tracking durante la operación masiva
+        const wasTracking = this.undoManager.isTracking;
+        this.undoManager.stopTracking();
+
         let changed = false;
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
+        const gridSize = this.gridSize;
+
+        // Modificar grid directamente sin overhead de setCell()
+        for (let x = 0; x < gridSize; x++) {
+            const row = this.grid[x];
+            for (let y = 0; y < gridSize; y++) {
                 const newState = Math.random() < density;
-                const cellChanged = this.setCell(x, y, newState);
-                if (cellChanged) changed = true;
+                if (row[y] !== newState) {
+                    row[y] = newState;
+                    changed = true;
+                }
             }
         }
+
+        // Restaurar tracking si estaba activo
+        if (wasTracking) {
+            this.undoManager.startTracking();
+        }
+
+        // Resetear estado
         this.generation = 0;
         this.isLimitReached = false;
         this.populationHistory.clear();
+
+        // Actualizar stats y render solo si hubo cambios
         if (changed) {
+            this._markAllDirty();
             this.updateStats();
             this.render();
         }

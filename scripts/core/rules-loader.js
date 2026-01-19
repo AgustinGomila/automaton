@@ -17,9 +17,9 @@ class RulesLoader {
             // === Emitir evento ===
             eventBus.emit('rules:loaded', {rules: this.RULES});
             return this.RULES;
-
         } catch (error) {
-            await this.loadEmbeddedRules();
+            console.warn('⚠️ Fetch fallido, usando embedded:', error.message);
+            return this.loadEmbeddedRules();
         }
     }
 

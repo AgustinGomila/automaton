@@ -1,4 +1,4 @@
-// scripts/main.js - VERSIÓN FINAL CORREGIDA
+// scripts/main.js
 class Application {
     constructor() {
         this.automaton = null;
