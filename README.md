@@ -33,7 +33,8 @@ Louis Kauffman y otras configuraciones clásicas.
 ### Controles Principales
 
 - **▶ Ejecutar/Pausar**: Inicia o detiene la simulación automática
-- **⏭ Paso**: Avanza una generación manualmente
+- **⏭️ Paso**: Avanza una generación manualmente
+- **⏮️ Atrás**: Retrocede una generación manualmente
 - **🎲 Aleatorio**: Genera un patrón inicial aleatorio
 - **↻ Limpiar**: Borra toda la cuadrícula
 - **⚙ Configuración**: Ajusta reglas, vecindad, límites y más
@@ -52,8 +53,6 @@ Además de Kauffman, el simulador incluye autómatas celulares clásicos:
 - **Conway's Game of Life** - El más famoso
 - **Seeds, Mazes, Amoeba** - Variaciones con comportamientos únicos
 - **HighLife, Day & Night** - Autómatas bien estudiados
-
-```
 
 ## 📚 Referencias
 

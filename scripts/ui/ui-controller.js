@@ -307,6 +307,7 @@ class UIController {
         // Controles principales
         this._addEventListener(document.getElementById('playBtn'), 'click', () => this.togglePlay());
         this._addEventListener(document.getElementById('stepBtn'), 'click', () => this.step());
+        this._addEventListener(document.getElementById('stepBackBtn'), 'click', () => this.undo());
         this._addEventListener(document.getElementById('randomBtn'), 'click', () => this.randomize());
         this._addEventListener(document.getElementById('clearBtn'), 'click', () => this.clear());
         this._addEventListener(document.getElementById('cancelPatternBtn'), 'click', () => {
@@ -381,10 +382,6 @@ class UIController {
 
         // Exportación
         this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
-
-        // Scroll de patrones
-        this._addEventListener(document.getElementById('scrollLeft'), 'click', () => this.scrollPatterns(-100));
-        this._addEventListener(document.getElementById('scrollRight'), 'click', () => this.scrollPatterns(100));
 
         // Límites
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
@@ -969,6 +966,9 @@ class UIController {
     }
 
     step() {
+        // Guardar estado para permitir retroceder este paso específico
+        this.automaton.undoManager.saveState(this.automaton.grid, this.automaton.generation);
+
         this.automaton.nextGeneration();
         this.automaton.render();
     }
