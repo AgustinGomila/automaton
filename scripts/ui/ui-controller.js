@@ -423,7 +423,15 @@ class UIController {
         }
 
         if (this._patternState.pattern) {
+            const wasRunning = this.automaton.isRunning;
+            if (wasRunning) this.togglePlay(); // Pausar
+
             this.automaton.importPattern(this._patternState.pattern, x, y);
+
+            if (wasRunning) {
+                // Reanudar después de renderizar
+                requestAnimationFrame(() => this.togglePlay());
+            }
             return;
         }
 
@@ -974,7 +982,15 @@ class UIController {
     }
 
     randomize() {
+        const wasRunning = this.automaton.isRunning;
+        if (wasRunning) this.togglePlay(); // Pausar
+
         this.automaton.randomize();
+
+        if (wasRunning) {
+            // Reanudar después de renderizar
+            requestAnimationFrame(() => this.togglePlay());
+        }
     }
 
     clear() {
