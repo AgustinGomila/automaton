@@ -173,17 +173,18 @@ class PatternManager {
     }
 
     _updatePatternInfo() {
+        const nameEl = document.getElementById('patternNameMini');
+        const detailsEl = document.getElementById('patternDetailsMini');
+        const descEl = document.getElementById('patternDescriptionMini');
+
         if (!window.selectedPatternKey) {
-            const nameEl = document.getElementById('patternNameMini');
-            const detailsEl = document.getElementById('patternDetailsMini');
             if (nameEl) nameEl.textContent = 'Selecciona un patrón';
             if (detailsEl) detailsEl.textContent = 'Clic en un patrón para seleccionarlo';
+            if (descEl) descEl.textContent = '';
             return;
         }
 
         const pattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
-        const nameEl = document.getElementById('patternNameMini');
-        const detailsEl = document.getElementById('patternDetailsMini');
 
         if (nameEl && detailsEl && pattern) {
             const originalPattern = PATTERNS[window.selectedPatternKey];
@@ -193,38 +194,13 @@ class PatternManager {
             const categoryText = originalPattern.category ? `Categoría: ${originalPattern.category}` : '';
             const cellCountText = originalPattern.cellCount ? ` | Células: ${originalPattern.cellCount}` : '';
             detailsEl.textContent = `${categoryText}${cellCountText}`;
+
+            if (descEl) {
+                descEl.textContent = originalPattern.description || '';
+            }
         }
 
         window.selectedPattern = pattern;
-    }
-
-    _updatePatternInfo2() {
-        if (!window.selectedPatternKey) {
-            const nameEl = document.getElementById('patternNameMini');
-            const detailsEl = document.getElementById('patternDetailsMini');
-            if (nameEl) nameEl.textContent = 'Selecciona un patrón';
-            if (detailsEl) detailsEl.textContent = 'Clic en un patrón para seleccionarlo';
-
-            eventBus.emit('pattern:cleared');
-            return;
-        }
-
-        const pattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
-        const nameEl = document.getElementById('patternNameMini');
-        const detailsEl = document.getElementById('patternDetailsMini');
-
-        if (nameEl && detailsEl && pattern) {
-            const originalPattern = PATTERNS[window.selectedPatternKey];
-            const rotationText = window.selectedPatternRotation > 0 ? ` (${window.selectedPatternRotation}°)` : '';
-            nameEl.textContent = `${pattern.name}${rotationText}`;
-
-            const categoryText = originalPattern.category ? `Categoría: ${originalPattern.category}` : '';
-            const cellCountText = originalPattern.cellCount ? ` | Células: ${originalPattern.cellCount}` : '';
-            detailsEl.textContent = `${categoryText}${cellCountText}`;
-        }
-
-        window.selectedPattern = pattern;
-        eventBus.emit('pattern:updated', {pattern});
     }
 
     // =========================================

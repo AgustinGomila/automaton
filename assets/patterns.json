@@ -72,7 +72,7 @@
     },
     "blinker": {
       "name": "Parpadeador",
-      "description": "Oscilador periodo 2 (3 células)",
+      "description": "Patrón oscilador periodo 2 (3 células)",
       "category": "oscilador",
       "cellCount": 3,
       "color": "#ef4444",
@@ -82,7 +82,7 @@
     },
     "toad": {
       "name": "Sapo",
-      "description": "Oscilador periodo 2",
+      "description": "Patrón oscilador periodo 2",
       "category": "oscilador",
       "cellCount": 6,
       "color": "#f50b49",
@@ -93,7 +93,7 @@
     },
     "beacon": {
       "name": "Baliza",
-      "description": "Oscilador periodo 2",
+      "description": "Patrón oscilador periodo 2",
       "category": "oscilador",
       "cellCount": 8,
       "color": "#10b981",
@@ -106,7 +106,7 @@
     },
     "pulsar": {
       "name": "Pulsar",
-      "description": "Oscilador periodo 3 (48 células)",
+      "description": "Patrón oscilador periodo 3 (48 células)",
       "category": "oscilador",
       "cellCount": 48,
       "color": "#8b5cf6",
@@ -128,7 +128,7 @@
     },
     "pentadecathlon": {
       "name": "Pentadecathlon",
-      "description": "Oscilador periodo 15 (22 células)",
+      "description": "Patrón oscilador periodo 15 (22 células)",
       "category": "oscilador",
       "cellCount": 22,
       "color": "#f59e0b",
@@ -370,7 +370,7 @@
     },
     "pattern1": {
       "name": "KI",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 8,
       "color": "#0666d4",
@@ -381,7 +381,7 @@
     },
     "pattern2": {
       "name": "KII",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 7,
       "color": "#8b5cf6",
@@ -405,7 +405,7 @@
     },
     "pattern4": {
       "name": "KIV",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 8,
       "color": "#f59e0b",
@@ -418,7 +418,7 @@
     },
     "pattern5": {
       "name": "KV",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 9,
       "color": "#d45506",
@@ -430,7 +430,7 @@
     },
     "pattern6": {
       "name": "KVI",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 10,
       "color": "#06b6d4",
@@ -443,7 +443,7 @@
     },
     "pattern7": {
       "name": "KVII",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 14,
       "color": "#3b82f6",
@@ -456,7 +456,7 @@
     },
     "pattern8": {
       "name": "KVIII",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 10,
       "color": "#ef4444",
@@ -469,7 +469,7 @@
     },
     "pattern9": {
       "name": "KIX",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 11,
       "color": "#f50b49",
@@ -482,7 +482,7 @@
     },
     "pattern10": {
       "name": "KX",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 12,
       "color": "#3b82f6",
@@ -496,7 +496,7 @@
     },
     "pattern11": {
       "name": "KXI",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 16,
       "color": "#f5bb0b",
@@ -510,7 +510,7 @@
     },
     "pattern12": {
       "name": "KXII",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 10,
       "color": "#63d406",
@@ -525,7 +525,7 @@
     },
     "pattern13": {
       "name": "KXIII",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 32,
       "color": "#10b981",
@@ -541,7 +541,7 @@
     },
     "pattern14": {
       "name": "KXIV",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 26,
       "color": "#d4069a",
@@ -557,7 +557,7 @@
     },
     "pattern15": {
       "name": "KXV",
-      "description": "---",
+      "description": "Patrón oscilador para reglas de Kauffman",
       "category": "oscilador",
       "cellCount": 36,
       "color": "#d44e06",
@@ -574,7 +574,7 @@
     },
     "pattern16": {
       "name": "KXVI",
-      "description": "---",
+      "description": "Patrón de vida estable para reglas de Kauffman",
       "category": "vida estable",
       "cellCount": 38,
       "color": "#d4b906",
@@ -592,7 +592,7 @@
     },
     "pattern17": {
       "name": "KXVII",
-      "description": "---",
+      "description": "Patrón de vida estable para reglas de Kauffman",
       "category": "vida estable",
       "cellCount": 44,
       "color": "#0636d4",
@@ -610,7 +610,7 @@
     },
     "pattern18": {
       "name": "KXVIII",
-      "description": "---",
+      "description": "Patrón de vida estable para reglas de Kauffman",
       "category": "vida estable",
       "cellCount": 42,
       "color": "#d406ab",
@@ -628,7 +628,7 @@
     },
     "pattern19": {
       "name": "KXIX",
-      "description": "---",
+      "description": "Patrón de vida estable para reglas de Kauffman",
       "category": "vida estable",
       "cellCount": 50,
       "color": "#06d42f",
@@ -647,7 +647,7 @@
     },
     "pattern20": {
       "name": "KXX",
-      "description": "---",
+      "description": "Patrón de vida estable para reglas de Kauffman",
       "category": "vida estable",
       "cellCount": 10,
       "color": "#b981ff",
@@ -661,7 +661,7 @@
     },
     "pattern21": {
       "name": "KXXI",
-      "description": "---",
+      "description": "Patrón de vida estable para reglas de Kauffman",
       "category": "vida estable",
       "cellCount": 156,
       "color": "#f59e0b",
@@ -681,7 +681,7 @@
     },
     "highlife_replicator": {
       "name": "HighLife Replicator",
-      "description": "---",
+      "description": "Patrón replicador mitótico para reglas HighLife",
       "category": "vida estable",
       "cellCount": 12,
       "color": "#3b82f6",
