@@ -16,6 +16,8 @@ class CellularAutomaton {
         // Sistema de dirty rendering
         this.renderFlags = new Uint8Array(this.gridSize * this.gridSize);  // Estado actual renderizado
         this.prevFlags = new Uint8Array(this.gridSize * this.gridSize);    // Estado de la generación anterior
+        this.activityAges = new Uint8Array(this.gridSize * this.gridSize); // 0 = recién cambiada
+        this.activityCooldown = 3; // Generaciones para pasar a verde plano
         this.dirtyCells = new Set();
 
         // Canvas
@@ -153,6 +155,13 @@ class CellularAutomaton {
                     this.updateStats();
                     this.checkLimits();
 
+                    // Marcar celdas modificadas
+                    this.dirtyCells.clear();
+                    changedCells.forEach(({x, y}) => this.dirtyCells.add(`${x},${y}`));
+
+                    // Actualizar edades de actividad antes de renderizar
+                    this._updateActivityAges(changedCells); // Pasar changedCells del worker
+
                     // Renderizar
                     this.render();
 
@@ -198,6 +207,7 @@ class CellularAutomaton {
     _nextGenerationMainThread() {
         const newGrid = this.createEmptyGrid();
         let changes = 0;
+        const changedCells = []; // Array para trackear cambios
 
         for (let x = 0; x < this.gridSize; x++) {
             for (let y = 0; y < this.gridSize; y++) {
@@ -211,6 +221,7 @@ class CellularAutomaton {
                 if (willBeAlive !== isAlive) {
                     changes++;
                     this.dirtyCells.add(`${x},${y}`);
+                    changedCells.push({x, y}); // Guardar cambio
                 }
             }
         }
@@ -220,6 +231,7 @@ class CellularAutomaton {
         this._lastPopulation = this.countPopulation();
         this.updateStats();
         this.checkLimits();
+        this._updateActivityAges(changedCells);
 
         return changes;
     }
@@ -310,6 +322,10 @@ class CellularAutomaton {
 
             // Marcar siempre que cambie, sin condiciones
             this.grid[x][y] = state;
+
+            // Resetear edad de actividad para celdas manualmente editadas
+            if (state) this.activityAges[y * this.gridSize + x] = 0;
+
             if (markDirty) this.dirtyCells.add(`${x},${y}`);
             return true;
         }
@@ -321,6 +337,37 @@ class CellularAutomaton {
         for (let x = 0; x < this.gridSize; x++) {
             for (let y = 0; y < this.gridSize; y++) {
                 this.dirtyCells.add(`${x},${y}`);
+            }
+        }
+    }
+
+    _updateActivityAges(changedCells) {
+        // changedCells: array de {x,y} que cambiaron de estado este turno
+        const changedSet = new Set((changedCells || []).map(c => `${c.x},${c.y}`));
+        const size = this.gridSize;
+        const cooldown = this.activityCooldown;
+
+        for (let x = 0; x < size; x++) {
+            for (let y = 0; y < size; y++) {
+                const cellIndex = y * size + x;
+
+                if (this.grid[x][y]) {
+                    // Si cambió este turno, resetear edad
+                    if (changedSet.has(`${x},${y}`)) {
+                        this.activityAges[cellIndex] = 0;
+                        // Ya está en dirtyCells por el cambio de estado
+                    } else if (this.activityAges[cellIndex] < cooldown) {
+                        // Envejecer celda viva
+                        this.activityAges[cellIndex]++;
+                        // Si JUSTO alcanzó el cooldown, marcar para redibujar cambio de color
+                        if (this.activityAges[cellIndex] === cooldown) {
+                            this.dirtyCells.add(`${x},${y}`);
+                        }
+                    }
+                } else {
+                    // Celdas muertas resetean edad
+                    this.activityAges[cellIndex] = 0;
+                }
             }
         }
     }
@@ -413,28 +460,24 @@ class CellularAutomaton {
         }
     }
 
-    _drawSingleCell(x, y, changed) {
+    _drawSingleCell(x, y) {
         const cellSize = this.cellSize;
         const centerX = x * cellSize + cellSize / 2;
         const centerY = y * cellSize + cellSize / 2;
+        const cellIndex = y * this.gridSize + x;
 
-        const activeColor = '#b9b610';
-        const stableColor = '#059669';
-        const highlightColor = 'rgba(255, 255, 255, 0.3)';
+        const isRecentlyActive = this.activityAges[cellIndex] < this.activityCooldown;
 
-        const gradient = this.ctx.createRadialGradient(
-            centerX, centerY, 0,
-            centerX, centerY, cellSize / 2
-        );
+        const gradient = this.ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, cellSize / 2);
 
-        // Solo usar gradiente de actividad si showActivityEffect está activo
-        if (changed && this.showActivityEffect) {
-            gradient.addColorStop(0, activeColor);
-            gradient.addColorStop(0.7, stableColor);
+        // Usar color activo solo si cambió recientemente (últimas 3 gens)
+        if (isRecentlyActive && this.showActivityEffect) {
+            gradient.addColorStop(0, '#b9b610'); // Amarillo (actividad)
+            gradient.addColorStop(0.7, '#059669'); // Verde
             gradient.addColorStop(1, 'rgba(5, 150, 105, 0.8)');
         } else {
-            gradient.addColorStop(0, stableColor);
-            gradient.addColorStop(1, stableColor);
+            gradient.addColorStop(0, '#059669'); // Verde plano estable
+            gradient.addColorStop(1, '#059669');
         }
 
         this.ctx.fillStyle = gradient;
@@ -445,9 +488,9 @@ class CellularAutomaton {
             cellSize - 2
         );
 
-        // Brillo solo si showActivityEffect está activo
-        if (changed && this.showActivityEffect) {
-            this.ctx.fillStyle = highlightColor;
+        // Brillo solo si es reciente
+        if (isRecentlyActive && this.showActivityEffect) {
+            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
         }
     }
@@ -559,6 +602,7 @@ class CellularAutomaton {
 
         this.gridSize = size;
         this.grid = this.createEmptyGrid();
+        this.activityAges = new Uint8Array(this.gridSize * this.gridSize);
         this.resizeCanvas();
         this.generation = 0;
         this.isLimitReached = false;
@@ -876,6 +920,7 @@ class CellularAutomaton {
     randomize(density = 0.3) {
         // Guardar estado UNA SOLA VEZ antes de modificar
         this.undoManager.saveState(this.grid, this.generation);
+        this.activityAges = new Uint8Array(this.gridSize * this.gridSize);
 
         // Deshabilitar tracking durante la operación masiva
         const wasTracking = this.undoManager.isTracking;
@@ -930,6 +975,7 @@ class CellularAutomaton {
     clear() {
         // Guardar antes de limpiar
         this.undoManager.saveState(this.grid, this.generation);
+        this.activityAges = new Uint8Array(this.gridSize * this.gridSize);
 
         let changed = false;
         for (let x = 0; x < this.gridSize; x++) {
