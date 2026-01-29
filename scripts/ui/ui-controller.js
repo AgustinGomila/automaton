@@ -77,6 +77,16 @@ class UIController {
         this.updateNeighborhoodInfo();
         this.loadRules();
 
+        eventBus.on('automaton:runningChanged', ({isRunning}) => {
+            const playIcon = document.getElementById('playIcon');
+            const playText = document.getElementById('playText');
+
+            if (playIcon && playText) {
+                if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
+                if (playText) playText.textContent = isRunning ? 'Pausar' : 'Ejecutar';
+            }
+        });
+
         eventBus.emit('ui:ready');
     }
 

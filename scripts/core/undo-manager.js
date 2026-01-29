@@ -101,6 +101,11 @@ class UndoManager {
                 generation: currentGeneration
             });
 
+            // Limitar redoStack para prevenir memory leaks
+            if (this.redoStack.length > this.maxHistory) {
+                this.redoStack.shift();
+            }
+
             // Obtener estado anterior
             const previousState = this.undoStack.pop();
             const deserialized = this._deserializeState(previousState);

@@ -263,7 +263,7 @@
     },
      "hammerhead": {
       "name": "Hammerhead",
-      "description": "---",
+      "description": "Una nave espacial de período ortogonal 4 c/2 con muchos extremos traseros posibles diferentes",
       "category": "oscilador",
       "cellCount": 76,
       "color": "#ef4444",
