@@ -1,5 +1,5 @@
 class CellularAutomaton {
-    constructor(gridSize = 100, cellSize = 6) {
+    constructor(gridSize = 200, cellSize = 4) {
         // Configuración con validación estricta
         this.gridSize = Math.min(Math.max(gridSize, 20), 200);
         this.cellSize = Math.min(Math.max(cellSize, 4), 20);
