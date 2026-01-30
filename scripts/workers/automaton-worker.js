@@ -1,6 +1,6 @@
 self.onmessage = function (e) {
     const {
-        grid,
+        grid: flatGrid,
         gridSize,
         rule,
         wrapEdges,
@@ -10,68 +10,72 @@ self.onmessage = function (e) {
         generation
     } = e.data;
 
-    // Clonar grid
-    const newGrid = grid.map(row => [...row]);
-    const changedCells = [];
+    const size = gridSize;
+    const newGridFlat = new Uint8Array(size * size);
+    const changedCells = []; // Índices: y * size + x
 
-    // Clonar para dirty tracking
-    const prevGrid = grid.map(row => [...row]);
+    // Helpers
+    const get = (buf, x, y) => buf[y * size + x];
+    const set = (buf, x, y, val) => {
+        buf[y * size + x] = val;
+    };
 
-    // Calcular nueva generación
-    for (let x = 0; x < gridSize; x++) {
-        for (let y = 0; y < gridSize; y++) {
-            const neighbors = countNeighbors(x, y, grid, gridSize, wrapEdges, neighborOffsets);
-            const isAlive = grid[x][y];
-            const willBeAlive = isAlive
-                ? rule.survival.includes(neighbors)
-                : rule.birth.includes(neighbors);
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            // Contar vecinos
+            let count = 0;
+            for (let i = 0; i < neighborOffsets.length; i++) {
+                const off = neighborOffsets[i];
+                let nx = x + off.dx;
+                let ny = y + off.dy;
 
-            newGrid[x][y] = willBeAlive;
+                if (wrapEdges) {
+                    nx = (nx + size) % size;
+                    ny = (ny + size) % size;
+                    if (get(flatGrid, nx, ny)) count++;
+                } else {
+                    if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
+                        if (get(flatGrid, nx, ny)) count++;
+                    }
+                }
+            }
 
-            if (willBeAlive !== isAlive) {
-                changedCells.push({x, y});
+            // Normalizar explícitamente a 0/1
+            const currentState = get(flatGrid, x, y) ? 1 : 0;
+            const survives = rule.survival.includes(count);
+            const born = rule.birth.includes(count);
+            const nextState = (currentState === 1 ? survives : born) ? 1 : 0;
+
+            set(newGridFlat, x, y, nextState);
+
+            // Comparar números puros (no booleanos)
+            if (nextState !== currentState) {
+                changedCells.push(y * size + x);
             }
         }
     }
 
-    // Calcular población
-    let population = 0;
-    for (let x = 0; x < gridSize; x++) {
-        for (let y = 0; y < gridSize; y++) {
-            if (newGrid[x][y]) population++;
-        }
+    let pop = 0;
+    for (let i = 0; i < newGridFlat.length; i++) {
+        if (newGridFlat[i]) pop++;
     }
 
-    const density = (population / (gridSize * gridSize) * 100).toFixed(1);
+    // Convertir a 2D row-major
+    const newGrid2D = new Array(size);
+    for (let y = 0; y < size; y++) {
+        const row = new Uint8Array(size);
+        for (let x = 0; x < size; x++) {
+            row[x] = get(newGridFlat, x, y);
+        }
+        newGrid2D[y] = row;
+    }
 
     // Enviar resultado (usando transferibles si es posible)
     self.postMessage({
-        newGrid,
+        newGrid: newGrid2D,
         changedCells,
-        population,
-        density,
+        population: pop,
+        density: ((pop / (size * size)) * 100).toFixed(1),
         generation: generation + 1
     });
 };
-
-// Función de conteo de vecinos
-function countNeighbors(x, y, grid, size, wrapEdges, offsets) {
-    let count = 0;
-
-    for (const {dx, dy} of offsets) {
-        let nx = x + dx;
-        let ny = y + dy;
-
-        if (wrapEdges) {
-            nx = (nx + size) % size;
-            ny = (ny + size) % size;
-            if (grid[nx][ny]) count++;
-        } else {
-            if (nx >= 0 && nx < size && ny >= 0 && ny < size) {
-                if (grid[nx][ny]) count++;
-            }
-        }
-    }
-
-    return count;
-}
