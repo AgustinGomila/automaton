@@ -896,32 +896,56 @@ class CellularAutomaton {
             this.isRunning = false;
         }
 
-        setTimeout(() => {
-            let changed = false;
-            for (let x = minX; x <= maxX; x++) {
-                for (let y = minY; y <= maxY; y++) {
-                    if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
-                        const cellChanged = this.setCell(x, y, false);
-                        if (cellChanged) changed = true;
-                    }
+        if (this.isWorkerProcessing) {
+            this._cleanupWorker();
+            this.isWorkerProcessing = false;
+        }
+
+        // 1. Guardar UN solo estado para toda la operación
+        this.undoManager.saveState(this.grid, this.generation);
+        this.undoManager.stopTracking();
+
+        // 2. Clamping previo para evitar checks dentro del loop
+        const startX = Math.max(0, minX);
+        const endX = Math.min(maxX, this.gridSize - 1);
+        const startY = Math.max(0, minY);
+        const endY = Math.min(maxY, this.gridSize - 1);
+
+        let changed = false;
+        const dirtyIndices = [];
+        const size = this.gridSize;
+
+        // 3. Modificación directa del grid (sin setCell)
+        for (let x = startX; x <= endX; x++) {
+            const col = this.grid[x];
+            for (let y = startY; y <= endY; y++) {
+                if (col[y]) {
+                    col[y] = 0;
+                    dirtyIndices.push(x * size + y);
+                    changed = true;
                 }
             }
-            if (changed) {
-                this.updateStats();
-                this.render();
-            }
+        }
 
-            // Reanudar si estaba en ejecución
-            if (wasRunning) {
-                setTimeout(() => {
-                    this.isRunning = true;
-                    this.start();
-                }, 50);
-            }
-        }, 0);
+        // 4. Marcar dirty en batch y renderizar una sola vez
+        if (changed) {
+            dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
+            this.updateStats();
+            this.render();
+        }
+
+        this.undoManager.startTracking();
+
+        // Reanudar si estaba en ejecución
+        if (wasRunning) {
+            this.isRunning = true;
+            this.start();
+        }
     }
 
     pasteArea(area, offsetX, offsetY) {
+        if (!area?.grid) return;
+
         // 1. Detener ejecución si está activa
         const wasRunning = this.isRunning;
         if (wasRunning) {
@@ -929,46 +953,55 @@ class CellularAutomaton {
             this.isRunning = false;
         }
 
-        // 2. Limpiar worker si está procesando
         if (this.isWorkerProcessing) {
             this._cleanupWorker();
             this.isWorkerProcessing = false;
         }
 
-        setTimeout(() => {
-            if (!area?.grid) {
-                // Si estaba running, reanudar
-                if (wasRunning) {
-                    this.isRunning = true;
-                    this.start();
-                }
-                return;
-            }
+        // 2. Guardar UN solo estado para el paste completo
+        this.undoManager.saveState(this.grid, this.generation);
+        this.undoManager.stopTracking();
 
-            let changed = false;
-            for (let x = 0; x < area.width; x++) {
-                for (let y = 0; y < area.height; y++) {
-                    const gridX = offsetX + x;
-                    const gridY = offsetY + y;
-                    if (gridX >= 0 && gridX < this.gridSize && gridY >= 0 && gridY < this.gridSize) {
-                        const cellChanged = this.setCell(gridX, gridY, area.grid[x][y]);
-                        if (cellChanged) changed = true;
-                    }
+        const width = area.width;
+        const height = area.height;
+        let changed = false;
+        const dirtyIndices = [];
+        const size = this.gridSize;
+
+        // 3. Acceso directo a columnas para evitar reindexación repetida
+        for (let x = 0; x < width; x++) {
+            const gridX = offsetX + x;
+            if (gridX < 0 || gridX >= size) continue;
+
+            const sourceCol = area.grid[x];
+            const targetCol = this.grid[gridX];
+
+            for (let y = 0; y < height; y++) {
+                const gridY = offsetY + y;
+                if (gridY < 0 || gridY >= size) continue;
+
+                const newState = sourceCol[y] ? 1 : 0;
+                if (targetCol[gridY] !== newState) {
+                    targetCol[gridY] = newState;
+                    dirtyIndices.push(gridX * size + gridY);
+                    changed = true;
                 }
             }
-            if (changed) {
-                this.updateStats();
-                this.render();
-            }
+        }
 
-            // Reanudar si estaba en ejecución
-            if (wasRunning) {
-                setTimeout(() => {
-                    this.isRunning = true;
-                    this.start();
-                }, 50);
-            }
-        }, 0);
+        if (changed) {
+            dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
+            this.updateStats();
+            this.render();
+        }
+
+        this.undoManager.startTracking();
+
+        // Reanudar si estaba en ejecución
+        if (wasRunning) {
+            this.isRunning = true;
+            this.start();
+        }
     }
 
     undo() {
@@ -1013,62 +1046,62 @@ class CellularAutomaton {
             this.isWorkerProcessing = false;
         }
 
-        // 3. Esperar un frame para asegurar que RAF se detuvo
-        setTimeout(() => {
-            if (!pattern?.pattern) {
-                console.warn('No pattern to import');
-                // Si estaba running, reanudar
-                if (wasRunning) {
-                    this.isRunning = true;
-                    this.start();
-                }
-                return;
+        // 3. Guardar estado una sola vez
+        this.undoManager.saveState(this.grid, this.generation);
+        this.undoManager.stopTracking();
+
+        if (pattern?.pattern === 'random') {
+            // Delegar a randomize que ya tiene optimizaciones
+            this.randomize(0.3);
+            // Nota: randomize maneja su propio startTracking
+            if (wasRunning && !this.isRunning) {
+                this.isRunning = true;
+                this.start();
             }
+            return;
+        }
 
-            if (pattern.pattern === 'random') {
-                // Si es random, llamamos a randomize (que ya maneja su propia lógica)
-                this.randomize(0.3);
-                // Nota: randomize ya maneja reanudar si estaba running
-                return;
-            }
-
-            // Guardar antes de importar
-            this.undoManager.saveState(this.grid, this.generation);
-
+        if (pattern?.pattern) {
             const patternData = pattern.pattern;
             const offsetX = Math.floor(patternData[0].length / 2);
             const offsetY = Math.floor(patternData.length / 2);
 
             let changed = false;
+            const dirtyIndices = [];
+            const size = this.gridSize;
+
+            // 2. Loop optimizado sin setTimeout ni setCell
             for (let row = 0; row < patternData.length; row++) {
                 for (let col = 0; col < patternData[row].length; col++) {
                     if (patternData[row][col] === 1) {
                         const gridX = centerX - offsetX + col;
                         const gridY = centerY - offsetY + row;
-                        if (gridX >= 0 && gridX < this.gridSize && gridY >= 0 && gridY < this.gridSize) {
-                            const cellChanged = this.setCell(gridX, gridY, true);
-                            if (cellChanged) changed = true;
+
+                        if (gridX >= 0 && gridX < size && gridY >= 0 && gridY < size) {
+                            if (!this.grid[gridX][gridY]) {
+                                this.grid[gridX][gridY] = 1;
+                                dirtyIndices.push(gridX * size + gridY);
+                                changed = true;
+                            }
                         }
                     }
                 }
             }
 
             if (changed) {
+                dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
                 this.updateStats();
                 this.render();
             }
+        }
 
-            this.resetDirtyFlags();
+        this.undoManager.startTracking();
 
-            // 4. Reanudar si estaba en ejecución
-            if (wasRunning) {
-                // Pequeña pausa para asegurar render completo
-                setTimeout(() => {
-                    this.isRunning = true;
-                    this.start();
-                }, 50);
-            }
-        }, 0);
+        // 4. Reanudar si estaba en ejecución
+        if (wasRunning) {
+            this.isRunning = true;
+            this.start();
+        }
     }
 
     exportPattern() {
