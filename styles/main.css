@@ -1697,21 +1697,16 @@ canvas {
 
     /* Panel izquierdo oculto por defecto */
     .left-panel {
-        position: fixed;
-        top: 0;
-        left: -100%;
-        width: 85%;
-        height: 100vh;
-        background: var(--dark-bg);
-        z-index: 1001;
-        padding: 20px;
-        overflow-y: auto;
-        transition: left 0.3s ease;
-        box-shadow: 5px 0 15px rgba(0, 0, 0, 0.3);
+        will-change: left; /* Optimización de performance */
     }
 
     .left-panel.mobile-visible {
-        left: 0;
+        left: 0 !important;
+        visibility: visible !important;
+    }
+
+    .left-panel.mobile-hidden {
+        left: -100% !important;
     }
 
     .mobile-panel-close {
@@ -1909,5 +1904,12 @@ canvas {
     .btn-toggle:active {
         transform: scale(0.95);
         opacity: 0.9;
+    }
+}
+
+@media screen and (min-width: 769px) {
+    #configMobileBtn,
+    #mobileMenuBtn {
+        display: none !important;
     }
 }

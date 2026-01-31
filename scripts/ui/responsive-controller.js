@@ -80,8 +80,17 @@ class ResponsiveController {
     }
 
     toggleLeftPanel() {
+        // Solo operar en móvil. En desktop no hay panel lateral deslizable.
+        if (!this.isMobile) {
+            console.debug('Panel toggle ignorado: no estamos en vista móvil');
+            return;
+        }
+
         const leftPanel = document.getElementById('leftPanel');
-        if (!leftPanel) return;
+        if (!leftPanel) {
+            console.warn('Left panel no encontrado');
+            return;
+        }
 
         if (this.isPanelOpen) {
             this.closeLeftPanel();
@@ -92,20 +101,29 @@ class ResponsiveController {
 
     openLeftPanel() {
         const leftPanel = document.getElementById('leftPanel');
-        leftPanel.classList.remove('mobile-hidden');
-        leftPanel.classList.add('mobile-visible');
-        this.isPanelOpen = true;
+        if (!leftPanel) return;
 
+        // Forzar reflow para asegurar que la transición ocurra
+        leftPanel.classList.remove('mobile-hidden');
+        void leftPanel.offsetWidth; // Trigger reflow
+        leftPanel.classList.add('mobile-visible');
+
+        this.isPanelOpen = true;
         document.body.style.overflow = 'hidden';
+
+        console.debug('Panel izquierdo abierto');
     }
 
     closeLeftPanel() {
         const leftPanel = document.getElementById('leftPanel');
+        if (!leftPanel) return;
+
         leftPanel.classList.remove('mobile-visible');
         leftPanel.classList.add('mobile-hidden');
         this.isPanelOpen = false;
-
         document.body.style.overflow = '';
+
+        console.debug('Panel izquierdo cerrado');
     }
 
     toggleRules() {
