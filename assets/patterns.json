@@ -693,7 +693,23 @@
         [1, 1, 1, 0, 0]
       ]
     },
-      "diagonal_K": {
+    "K17": {
+      "name": "K20",
+      "description": "Patrón estable para reglas de Kauffman",
+      "category": "vida estable",
+      "cellCount": 20,
+      "color": "#d406ab",
+      "pattern": [
+          [0, 0, 0, 1, 0, 0],
+          [0, 1, 1, 0, 0, 0],
+          [1, 1, 1, 1, 0, 1],
+          [1, 1, 0, 1, 1, 0],
+          [1, 1, 1, 1, 0, 1],
+          [0, 1, 1, 0, 0, 0],
+          [0, 0, 0, 1, 0, 0]
+        ]
+    },
+    "diagonal_K": {
       "name": "Kauffman Diagonal",
       "description": "Patrón diagonal para reglas de Kauffman",
       "category": "vida estable",
@@ -726,12 +742,12 @@
         ]
       },
       "diagonal_K2": {
-      "name": "Kauffman Diagonal II",
-      "description": "Patrón diagonal para reglas de Kauffman",
-      "category": "vida estable",
-      "cellCount": 98,
-      "color": "#8b5cf6",
-      "pattern": [
+        "name": "Kauffman Diagonal II",
+        "description": "Patrón diagonal para reglas de Kauffman",
+        "category": "vida estable",
+        "cellCount": 98,
+        "color": "#8b5cf6",
+        "pattern": [
           [1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
           [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
           [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -750,12 +766,12 @@
         ]
       },
       "K85": {
-      "name": "Kauffman K85",
-      "description": "Patrón periódico para reglas de Kauffman",
-      "category": "vida estable",
-      "cellCount": 85,
-      "color": "#f59e0b",
-      "pattern": [
+        "name": "Kauffman K85",
+        "description": "Patrón periódico para reglas de Kauffman",
+        "category": "vida estable",
+        "cellCount": 85,
+        "color": "#f59e0b",
+        "pattern": [
           [0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0], 
           [0, 0, 1, 1, 1, 0, 1, 1, 1, 0, 0], 
           [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
