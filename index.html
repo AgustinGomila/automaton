@@ -32,8 +32,20 @@
             </div>
 
             <!-- Información de vecindad -->
-            <div class="neighborhood-info" id="neighborhoodInfo">
-                <i class="fas fa-crosshairs"></i> Vecindad: Moore (radio 1)
+            <div class="header-meta-bar">
+                <div class="neighborhood-info" id="neighborhoodInfo">
+                    <i class="fas fa-crosshairs"></i> Vecindad: Moore (R1) ∞
+                </div>
+
+                <div class="header-quick-controls">
+                    <span id="mouseCoords" class="coords">X: 0, Y: 0</span>
+                    <button id="gridToggle" class="btn-toggle" title="Mostrar/Ocultar Grilla (G)">
+                        <i class="fas fa-border-all"></i>
+                    </button>
+                    <button id="quickInfluenceToggle" class="btn-toggle" title="Área de Influencia">
+                        <i class="fas fa-bullseye"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
@@ -224,17 +236,6 @@
                         <div class="canvas-overlay" id="patternPreview"></div>
                         <div class="canvas-overlay" id="influenceArea"></div>
                         <canvas id="canvas"></canvas>
-                    </div>
-
-                    <div class="canvas-controls">
-                        <div class="coords" id="mouseCoords">X: 0, Y: 0</div>
-                        <button class="btn-toggle" id="gridToggle" title="Mostrar/Ocultar cuadrícula">
-                            <i class="fas fa-th"></i>
-                        </button>
-                        <!-- Botón rápido para área de influencia en controles del canvas -->
-                        <button class="btn-toggle" id="quickInfluenceToggle" title="Mostrar/Ocultar área de influencia">
-                            <i class="fas fa-bullseye"></i>
-                        </button>
                     </div>
                 </div>
 
