@@ -12,16 +12,17 @@ self.onmessage = function (e) {
 
     const size = gridSize;
     const newGridFlat = new Uint8Array(size * size);
-    const changedCells = []; // Índices: y * size + x
+    const changedCells = [];
 
-    // Helpers
-    const get = (buf, x, y) => buf[y * size + x];
+    // Usar column-major para ser consistente con el main thread
+    // El flatGrid viene como: columna X en posición [X * size .. X * size + size]
+    const get = (buf, x, y) => buf[x * size + y];
     const set = (buf, x, y, val) => {
-        buf[y * size + x] = val;
+        buf[x * size + y] = val;
     };
 
-    for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
+    for (let x = 0; x < size; x++) {
+        for (let y = 0; y < size; y++) {
             // Contar vecinos
             let count = 0;
             for (let i = 0; i < neighborOffsets.length; i++) {
@@ -40,7 +41,6 @@ self.onmessage = function (e) {
                 }
             }
 
-            // Normalizar explícitamente a 0/1
             const currentState = get(flatGrid, x, y) ? 1 : 0;
             const survives = rule.survival.includes(count);
             const born = rule.birth.includes(count);
@@ -48,9 +48,9 @@ self.onmessage = function (e) {
 
             set(newGridFlat, x, y, nextState);
 
-            // Comparar números puros (no booleanos)
             if (nextState !== currentState) {
-                changedCells.push(y * size + x);
+                // Índice column-major
+                changedCells.push(x * size + y);
             }
         }
     }
@@ -60,17 +60,16 @@ self.onmessage = function (e) {
         if (newGridFlat[i]) pop++;
     }
 
-    // Convertir a 2D row-major
+    // Convertir a 2D column-major (array de columnas)
     const newGrid2D = new Array(size);
-    for (let y = 0; y < size; y++) {
-        const row = new Uint8Array(size);
-        for (let x = 0; x < size; x++) {
-            row[x] = get(newGridFlat, x, y);
+    for (let x = 0; x < size; x++) {
+        const col = new Uint8Array(size);
+        for (let y = 0; y < size; y++) {
+            col[y] = get(newGridFlat, x, y);
         }
-        newGrid2D[y] = row;
+        newGrid2D[x] = col;
     }
 
-    // Enviar resultado (usando transferibles si es posible)
     self.postMessage({
         newGrid: newGrid2D,
         changedCells,

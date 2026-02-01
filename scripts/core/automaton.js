@@ -250,37 +250,26 @@ class CellularAutomaton {
     _nextGenerationMainThread() {
         const newGrid = this.createEmptyGrid();
         let changes = 0;
-        const changedCells = []; // Array para trackear cambios
+        const changedCells = [];
 
-        for (let y = 0; y < this.gridSize; y++) {
-            for (let x = 0; x < this.gridSize; x++) {
+        // Usar x primero (column-major) consistente con el constructor
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
                 const neighbors = this._countNeighbors(x, y);
-
-                // Forzar a número explícito (0 o 1)
-                const currentState = this.grid[y][x] ? 1 : 0;
-
+                const currentState = this.grid[x][y] ? 1 : 0;
                 const survives = this.rule.survival.includes(neighbors);
                 const born = this.rule.birth.includes(neighbors);
-                const nextState = currentState === 1
-                    ? (survives ? 1 : 0)
-                    : (born ? 1 : 0);
+                const nextState = currentState === 1 ? (survives ? 1 : 0) : (born ? 1 : 0);
 
-                newGrid[y][x] = nextState;
+                newGrid[x][y] = nextState;
 
-                // Comparar números puros
                 if (nextState !== currentState) {
                     changes++;
-                    const index = y * this.gridSize + x;
+                    const index = x * this.gridSize + y; // Column-major indexing
                     this.dirtyCells.add(index);
                     changedCells.push(index);
                 }
             }
-        }
-
-        // DEBUG TEMPORAL
-        if (this.generation % 10 === 0) {
-            const totalAlive = this.grid.flat().filter(c => c).length;
-            console.log(`Gen ${this.generation}: ${changedCells.length} cambios de ${totalAlive} vivas`);
         }
 
         this.grid = newGrid;
@@ -382,14 +371,11 @@ class CellularAutomaton {
         if (x < 0 || x >= this.gridSize || y < 0 || y >= this.gridSize) return false;
 
         if (this.grid[x][y] !== state) {
-            // Guardar estado antes de modificar
             this.undoManager.saveState(this.grid, this.generation);
-
-            // Marcar siempre que cambie, sin condiciones
             this.grid[x][y] = state;
 
-            // Resetear edad de actividad para celdas manualmente editadas
-            if (state) this.activityAges[y * this.gridSize + x] = 0;
+            // Index column-major consistente (x * size + y, no y * size + x)
+            if (state) this.activityAges[x * this.gridSize + y] = 0;
 
             const index = x * this.gridSize + y;
             if (markDirty) this.dirtyCells.add(index);
@@ -411,30 +397,30 @@ class CellularAutomaton {
         const size = this.gridSize;
         const cooldown = this.activityCooldown;
 
-        // Si hay demasiados cambios (más del 50% del grid), algo está mal
+        // Validación de seguridad
         if (changedCells.length > (size * size * 0.5)) {
             console.warn('Detectado posible error: más del 50% de celdas marcadas como cambiadas');
         }
 
         const changedSet = new Set(changedCells);
 
-        // Verificar una celda específica (ej: centro)
-        const centerIdx = Math.floor(size / 2) * size + Math.floor(size / 2);
-        const wasReset = changedSet.has(centerIdx);
-
+        // Indexing column-major: x = fila de la matriz, y = columna de la matriz
+        // Índice flat = x * size + y
         for (let index = 0; index < size * size; index++) {
-            const y = Math.floor(index / size);
-            const x = index % size;
+            const x = Math.floor(index / size);
+            const y = index % size;
 
-            if (this.grid[y][x]) {
-                // Si cambió este turno, resetear edad
+            // Verificación de límites por seguridad
+            if (x >= size || y >= size) continue;
+
+            if (this.grid[x][y]) {
+                // Si cambió este turno, resetear edad de actividad (celda recién nacida/modificada)
                 if (changedSet.has(index)) {
                     this.activityAges[index] = 0;
-                    // Ya está en dirtyCells por el cambio de estado
                 } else if (this.activityAges[index] < cooldown) {
                     // Envejecer celda viva
                     this.activityAges[index]++;
-                    // Si JUSTO alcanzó el cooldown, marcar para redibujar cambio de color
+                    // Si JUSTO alcanzó el cooldown, marcar para redibujar cambio de color (amarillo -> verde)
                     if (this.activityAges[index] === cooldown) {
                         this.dirtyCells.add(index);
                     }
@@ -443,11 +429,6 @@ class CellularAutomaton {
                 // Celdas muertas resetean edad
                 this.activityAges[index] = 0;
             }
-        }
-
-        // Debug edad de celda central cada 10 gens
-        if (this.generation % 10 === 0) {
-            console.log(`  Edad celda centro: ${this.activityAges[centerIdx]}, Reseteado: ${wasReset}`);
         }
     }
 
@@ -889,7 +870,6 @@ class CellularAutomaton {
     }
 
     clearArea(minX, minY, maxX, maxY) {
-        // Detener ejecución si está activa
         const wasRunning = this.isRunning;
         if (wasRunning) {
             this.stop();
@@ -898,14 +878,12 @@ class CellularAutomaton {
 
         if (this.isWorkerProcessing) {
             this._cleanupWorker();
-            this.isWorkerProcessing = false;
         }
 
-        // 1. Guardar UN solo estado para toda la operación
         this.undoManager.saveState(this.grid, this.generation);
         this.undoManager.stopTracking();
 
-        // 2. Clamping previo para evitar checks dentro del loop
+        // Usar column-major (x primero)
         const startX = Math.max(0, minX);
         const endX = Math.min(maxX, this.gridSize - 1);
         const startY = Math.max(0, minY);
@@ -915,7 +893,6 @@ class CellularAutomaton {
         const dirtyIndices = [];
         const size = this.gridSize;
 
-        // 3. Modificación directa del grid (sin setCell)
         for (let x = startX; x <= endX; x++) {
             const col = this.grid[x];
             for (let y = startY; y <= endY; y++) {
@@ -927,38 +904,49 @@ class CellularAutomaton {
             }
         }
 
-        // 4. Marcar dirty en batch y renderizar una sola vez
         if (changed) {
             dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
+            this.prevFlags = new Uint8Array(this.renderFlags);
             this.updateStats();
             this.render();
         }
 
         this.undoManager.startTracking();
 
-        // Reanudar si estaba en ejecución
         if (wasRunning) {
-            this.isRunning = true;
-            this.start();
+            requestAnimationFrame(() => {
+                this.isRunning = true;
+                this.start();
+            });
         }
     }
 
-    pasteArea(area, offsetX, offsetY) {
+    async pasteArea(area, offsetX, offsetY) {
         if (!area?.grid) return;
 
-        // 1. Detener ejecución si está activa
+        // 1. Detener completamente y esperar a que el worker termine
         const wasRunning = this.isRunning;
         if (wasRunning) {
             this.stop();
             this.isRunning = false;
         }
 
+        // Esperar a que el worker termine si está procesando
         if (this.isWorkerProcessing) {
+            await new Promise(resolve => {
+                const checkWorker = () => {
+                    if (!this.isWorkerProcessing) {
+                        resolve();
+                    } else {
+                        setTimeout(checkWorker, 10);
+                    }
+                };
+                checkWorker();
+            });
             this._cleanupWorker();
-            this.isWorkerProcessing = false;
         }
 
-        // 2. Guardar UN solo estado para el paste completo
+        // 2. Guardar estado y detener tracking
         this.undoManager.saveState(this.grid, this.generation);
         this.undoManager.stopTracking();
 
@@ -968,12 +956,12 @@ class CellularAutomaton {
         const dirtyIndices = [];
         const size = this.gridSize;
 
-        // 3. Acceso directo a columnas para evitar reindexación repetida
+        // 3. Aplicar patrón con acceso column-major correcto
         for (let x = 0; x < width; x++) {
             const gridX = offsetX + x;
             if (gridX < 0 || gridX >= size) continue;
 
-            const sourceCol = area.grid[x];
+            const sourceCol = area.grid[x]; // Asume que area.grid es column-major también
             const targetCol = this.grid[gridX];
 
             for (let y = 0; y < height; y++) {
@@ -983,7 +971,14 @@ class CellularAutomaton {
                 const newState = sourceCol[y] ? 1 : 0;
                 if (targetCol[gridY] !== newState) {
                     targetCol[gridY] = newState;
+                    // Index column-major
                     dirtyIndices.push(gridX * size + gridY);
+
+                    // Resetear edad de actividad para celdas nuevas
+                    if (newState) {
+                        this.activityAges[gridX * size + gridY] = 0;
+                    }
+
                     changed = true;
                 }
             }
@@ -991,16 +986,28 @@ class CellularAutomaton {
 
         if (changed) {
             dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
+
+            // CRÍTICO: Sincronizar prevFlags para evitar "inversión" en siguiente generación
+            this.prevFlags = new Uint8Array(this.renderFlags);
+
             this.updateStats();
-            this.render();
+            this._forceFullRender(); // Render completo inmediato
+
+            // Asegurar que el worker se reinicie con el nuevo estado si es necesario
+            if (this.gridSize >= this.workerThreshold) {
+                this._initWorker();
+            }
         }
 
         this.undoManager.startTracking();
 
-        // Reanudar si estaba en ejecución
+        // 4. Reanudar solo después de asegurar que todo está sincronizado
         if (wasRunning) {
-            this.isRunning = true;
-            this.start();
+            // Usar RAF para asegurar que el renderizado se completó
+            requestAnimationFrame(() => {
+                this.isRunning = true;
+                this.start();
+            });
         }
     }
 
@@ -1032,31 +1039,31 @@ class CellularAutomaton {
         return false;
     }
 
-    importPattern(pattern, centerX, centerY) {
-        // 1. Detener ejecución si está activa
+    async importPattern(pattern, centerX, centerY) {
         const wasRunning = this.isRunning;
         if (wasRunning) {
             this.stop();
             this.isRunning = false;
         }
 
-        // 2. Limpiar worker si está procesando
         if (this.isWorkerProcessing) {
+            await new Promise(resolve => {
+                const check = () => this.isWorkerProcessing ? setTimeout(check, 10) : resolve();
+                check();
+            });
             this._cleanupWorker();
-            this.isWorkerProcessing = false;
         }
 
-        // 3. Guardar estado una sola vez
         this.undoManager.saveState(this.grid, this.generation);
         this.undoManager.stopTracking();
 
         if (pattern?.pattern === 'random') {
-            // Delegar a randomize que ya tiene optimizaciones
             this.randomize(0.3);
-            // Nota: randomize maneja su propio startTracking
-            if (wasRunning && !this.isRunning) {
-                this.isRunning = true;
-                this.start();
+            if (wasRunning) {
+                requestAnimationFrame(() => {
+                    this.isRunning = true;
+                    this.start();
+                });
             }
             return;
         }
@@ -1070,7 +1077,7 @@ class CellularAutomaton {
             const dirtyIndices = [];
             const size = this.gridSize;
 
-            // 2. Loop optimizado sin setTimeout ni setCell
+            // patternData es row-major (array de filas), convertir a column-major al aplicar
             for (let row = 0; row < patternData.length; row++) {
                 for (let col = 0; col < patternData[row].length; col++) {
                     if (patternData[row][col] === 1) {
@@ -1080,6 +1087,7 @@ class CellularAutomaton {
                         if (gridX >= 0 && gridX < size && gridY >= 0 && gridY < size) {
                             if (!this.grid[gridX][gridY]) {
                                 this.grid[gridX][gridY] = 1;
+                                this.activityAges[gridX * size + gridY] = 0;
                                 dirtyIndices.push(gridX * size + gridY);
                                 changed = true;
                             }
@@ -1090,17 +1098,23 @@ class CellularAutomaton {
 
             if (changed) {
                 dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
+                this.prevFlags = new Uint8Array(this.renderFlags);
                 this.updateStats();
-                this.render();
+                this._forceFullRender();
+
+                if (this.gridSize >= this.workerThreshold) {
+                    this._initWorker();
+                }
             }
         }
 
         this.undoManager.startTracking();
 
-        // 4. Reanudar si estaba en ejecución
         if (wasRunning) {
-            this.isRunning = true;
-            this.start();
+            requestAnimationFrame(() => {
+                this.isRunning = true;
+                this.start();
+            });
         }
     }
 
@@ -1228,46 +1242,38 @@ class CellularAutomaton {
     }
 
     clear() {
-        // Detener ejecución si está activa
         if (this.isRunning) {
             this.stop();
             this.isRunning = false;
             eventBus.emit('automaton:runningChanged', {isRunning: false});
         }
 
-        // Cancelar worker si está procesando
         if (this.isWorkerProcessing) {
             this._cleanupWorker();
-            this.isWorkerProcessing = false;
         }
 
-        // Guardar un solo estado antes de limpiar (para poder deshacer la limpieza completa)
         this.undoManager.saveState(this.grid, this.generation);
-
-        // Deshabilitar tracking durante operación masiva (evita el bottleneck)
         const wasTracking = this.undoManager.isTracking;
         this.undoManager.stopTracking();
 
         let changed = false;
-        // Limpiar directamente
-        for (let y = 0; y < this.gridSize; y++) {
-            const row = this.grid[y];
-            for (let x = 0; x < this.gridSize; x++) {
-                if (row[x]) {
-                    row[x] = 0;
+
+        // Column-major (x primero)
+        for (let x = 0; x < this.gridSize; x++) {
+            const col = this.grid[x];
+            for (let y = 0; y < this.gridSize; y++) {
+                if (col[y]) {
+                    col[y] = 0;
                     changed = true;
                 }
             }
         }
 
-        // Restaurar tracking
         if (wasTracking) {
             this.undoManager.startTracking();
         }
 
-        // Resetear ages de forma eficiente
         this.activityAges.fill(0);
-
         this.generation = 0;
         this.isLimitReached = false;
         this.populationHistory.clear();
@@ -1275,11 +1281,8 @@ class CellularAutomaton {
 
         if (changed) {
             this._markAllDirty();
-
-            // Forzar render completo para eliminar cualquier residuo visual
             this._forceFullRender();
             this.updateStats();
-
             this.prevFlags.set(this.renderFlags);
         }
     }
