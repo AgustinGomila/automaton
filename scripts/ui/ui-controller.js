@@ -397,8 +397,8 @@ class UIController {
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
-        // Wolfram
-        this._bindWolframEvents();
+        // Motores especiales: Wolfram, RD2D, etc
+        this._bindSpecialEnginesEvents();
 
         // Canvas
         this._bindCanvasEvents();
@@ -417,37 +417,45 @@ class UIController {
         this._setupTouchEvents();
     }
 
-    _bindWolframEvents() {
+    _bindSpecialEnginesEvents() {
+        // Toggle RD-2D
+        const rd2dToggle = document.getElementById('rd2dToggle');
+        if (rd2dToggle) {
+            this._addEventListener(rd2dToggle, 'change', () => {
+                if (rd2dToggle.checked) {
+                    this.activateRD2DMode();
+                } else {
+                    this.deactivateRD2DMode();
+                }
+            });
+        }
+
+        // Toggle Wolfram (actualizado)
         const wolframToggle = document.getElementById('wolframToggle');
         const wolframControls = document.getElementById('wolframControls');
 
         if (wolframToggle) {
             this._addEventListener(wolframToggle, 'change', () => {
                 if (wolframToggle.checked) {
-                    // ACTIVAR controles visuales
-                    if (wolframControls) {
-                        wolframControls.classList.add('active');
-                        wolframControls.style.opacity = '1';
-                        wolframControls.style.pointerEvents = 'all';
+                    // Desactivar RD-2D si está activo
+                    const rd2dToggle = document.getElementById('rd2dToggle');
+                    if (rd2dToggle) {
+                        rd2dToggle.checked = false;
+                        this._toggleRD2DControls(false);
                     }
+
+                    this._toggleWolframControls(true);
 
                     const rule = parseInt(document.getElementById('wolframRule')?.value) || 30;
                     const direction = document.getElementById('wolframDirection')?.value || 'vertical';
                     this.activateWolframMode(rule, direction);
                 } else {
-                    // DESACTIVAR controles visuales
-                    if (wolframControls) {
-                        wolframControls.classList.remove('active');
-                        wolframControls.style.opacity = '0.5';
-                        wolframControls.style.pointerEvents = 'none';
-                    }
-
+                    this._toggleWolframControls(false);
                     this.deactivateWolframMode();
                 }
             });
         }
 
-        // Resto del código sin cambios...
         const ruleInput = document.getElementById('wolframRule');
         if (ruleInput) {
             this._addEventListener(ruleInput, 'input', () => {
@@ -458,7 +466,7 @@ class UIController {
                 if (this.automaton.wolframEngine?.isActive) {
                     const direction = this.automaton.wolframEngine.direction;
                     this.automaton.wolframEngine.activate(rule, direction);
-                    this.updateHeaderInfo(); // <-- AÑADIR ESTA LÍNEA
+                    this.updateHeaderInfo();
                 }
             });
         }
@@ -502,22 +510,29 @@ class UIController {
 
     async activateWolframMode(rule = 30, direction = 'vertical') {
         try {
-            await this.automaton._initWolframEngine();
+            await this.automaton._initSpecialEngine('wolfram');
 
-            // Desactivar reglas 2D estándar visualmente
+            // Desactivar RD-2D si está activo
+            const rd2dToggle = document.getElementById('rd2dToggle');
+            if (rd2dToggle) {
+                rd2dToggle.checked = false;
+                this._toggleRD2DControls(false);
+            }
+
+            // Activar controles Wolfram
+            this._toggleWolframControls(true);
+
+            // Desactivar controles 2D estándar
             document.getElementById('ruleSelector').disabled = true;
             document.getElementById('neighborhoodType').disabled = true;
 
-            // Activar motor
             this.automaton.wolframEngine.activate(rule, direction);
-
-            // Limpiar y preparar
             this.automaton.clear();
             this.automaton.wolframEngine._initializeSeed();
             this.automaton.render();
 
-            this._updateModeIndicator('wolfram');
             this.updateHeaderInfo();
+            this._updateModeIndicator('wolfram');
             this._showNotification(`Modo Wolfram: Regla ${rule}`, 'info', 2000);
 
         } catch (error) {
@@ -527,17 +542,104 @@ class UIController {
     }
 
     deactivateWolframMode() {
-        // Reactivar controles 2D
         document.getElementById('ruleSelector').disabled = false;
         document.getElementById('neighborhoodType').disabled = false;
 
-        this.automaton.wolframEngine.deactivate();
+        this._toggleWolframControls(false);
+
+        this.automaton.wolframEngine?.deactivate();
+        this.automaton.specialMode = null;
         this.automaton.clear();
         this.automaton.render();
 
         this._updateModeIndicator('standard');
         this.updateHeaderInfo();
         this._showNotification('Modo 2D estándar', 'info', 2000);
+    }
+
+    async activateRD2DMode() {
+        try {
+            await this.automaton._initSpecialEngine('rd2d');
+
+            // Desactivar Wolfram si está activo
+            const wolframToggle = document.getElementById('wolframToggle');
+            if (wolframToggle) {
+                wolframToggle.checked = false;
+                this._toggleWolframControls(false);
+            }
+
+            // Activar controles RD-2D
+            this._toggleRD2DControls(true);
+
+            // Desactivar controles 2D estándar
+            document.getElementById('ruleSelector').disabled = true;
+            document.getElementById('neighborhoodType').disabled = true;
+
+            this.automaton.rd2dEngine.activate();
+            this.automaton.render();
+
+            this.updateHeaderInfo();
+            this._updateModeIndicator('rd2d');
+            this._showNotification('Modo RD-2D: 16 estados activado', 'info', 2000);
+
+        } catch (error) {
+            console.error('Error cargando RD2DEngine:', error);
+            this._showNotification('Error cargando motor RD-2D', 'warning', 3000);
+        }
+    }
+
+    deactivateRD2DMode() {
+        document.getElementById('ruleSelector').disabled = false;
+        document.getElementById('neighborhoodType').disabled = false;
+
+        this._toggleRD2DControls(false);
+
+        this.automaton.rd2dEngine?.deactivate();
+        this.automaton.specialMode = null;
+        this.automaton.clear();
+        this.automaton.render();
+
+        this._updateModeIndicator('standard');
+        this.updateHeaderInfo();
+        this._showNotification('Modo 2D estándar', 'info', 2000);
+    }
+
+    /**
+     * Activa o desactiva visualmente los controles de Wolfram
+     * @param {boolean} show - true para mostrar, false para ocultar
+     * @private
+     */
+    _toggleWolframControls(show) {
+        const wolframControls = document.getElementById('wolframControls');
+        if (!wolframControls) return;
+
+        if (show) {
+            wolframControls.classList.add('active');
+            wolframControls.style.opacity = '1';
+            wolframControls.style.pointerEvents = 'all';
+        } else {
+            wolframControls.classList.remove('active');
+            wolframControls.style.opacity = '0.5';
+            wolframControls.style.pointerEvents = 'none';
+        }
+    }
+
+    /**
+     * Activa o desactiva visualmente los controles de RD-2D
+     * @param {boolean} show - true para mostrar, false para ocultar
+     * @private
+     */
+    _toggleRD2DControls(show) {
+        const rd2dInfo = document.querySelector('.rd2d-info');
+        if (!rd2dInfo) return;
+
+        if (show) {
+            rd2dInfo.style.opacity = '1';
+            rd2dInfo.style.pointerEvents = 'all';
+        } else {
+            rd2dInfo.style.opacity = '0.5';
+            rd2dInfo.style.pointerEvents = 'none';
+        }
     }
 
     _updateModeIndicator(mode) {
@@ -1488,8 +1590,35 @@ class UIController {
     updateHeaderInfo() {
         console.debug('🔄 updateHeaderInfo() ejecutándose...');
 
+        // === MODO RD-2D ===
+        if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
+            const info = this.automaton.rd2dEngine.getInfo();
+
+            const headerTitle = document.querySelector('h1');
+            if (headerTitle) {
+                headerTitle.innerHTML = `<i class="fas fa-border-style"></i> Autómata - RD-2D`;
+            }
+            document.title = `Autómata Celular - RD-2D (16 estados)`;
+
+            const rulesSpecific = document.getElementById('rulesSpecific');
+            if (rulesSpecific) {
+                rulesSpecific.innerHTML = `
+                <p><span class="rd2d-states"><i class="fas fa-cube"></i> Estados:</span> 16 [N,S,E,W]</p>
+                <p><span class="rd2d-rule"><i class="fas fa-project-diagram"></i> Regla:</span> XOR(vecinos)</p>
+                <p><span class="rd2d-gen"><i class="fas fa-clock"></i> Generación:</span> ${info.generation}</p>
+                <p><span class="rd2d-alive"><i class="fas fa-fire"></i> Activas:</span> ${info.aliveCells}</p>
+            `;
+            }
+
+            const neighborhoodInfo = document.getElementById('neighborhoodInfo');
+            if (neighborhoodInfo) {
+                neighborhoodInfo.innerHTML = `<i class="fas fa-border-style"></i> RD-2D: Von Neumann (4 vecinos)`;
+            }
+            return;
+        }
+
         // === MODO WOLFRAM ===
-        if (this.automaton.wolframEngine?.isActive) {
+        if (this.automaton.specialMode === 'wolfram' && this.automaton.wolframEngine?.isActive) {
             const info = this.automaton.wolframEngine.getInfo();
             const directionSymbol = info.direction === 'vertical' ? '↓' : '→';
             const directionText = info.direction === 'vertical' ? 'Vertical' : 'Horizontal';

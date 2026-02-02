@@ -706,6 +706,37 @@ h1 i.fa-dice {
     color: #8b5cf6;
 }
 
+/* RD-2D estilos */
+.rd2d-states {
+    color: #ec4899;
+    font-weight: 600;
+}
+
+.rd2d-rule {
+    color: #8b5cf6;
+    font-weight: 600;
+}
+
+.rd2d-gen {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.rd2d-alive {
+    color: #f59e0b;
+    font-weight: 600;
+}
+
+.mode-indicator.rd2d-mode {
+    background: rgba(236, 72, 153, 0.2);
+    border: 1px solid #ec4899;
+    color: #ec4899;
+}
+
+h1 i.fa-border-style {
+    color: #ec4899;
+}
+
 .btn-preset {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-color);

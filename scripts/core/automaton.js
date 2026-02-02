@@ -16,9 +16,11 @@ class CellularAutomaton {
         this._changedSet = new Set();
         this._pendingTimeouts = new Set();
 
-        // Wolfram
+        // Motores de autómatas especiales
         this.wolframEngine = null;
-        this._wolframLoaded = false;
+        this.rd2dEngine = null;
+        this._specialEngineLoaded = false;
+        this.specialMode = null; // 'wolfram', 'rd2d', o null
 
         // Sistema de dirty rendering
         this.renderFlags = new Uint8Array(this.gridSize * this.gridSize);  // Estado actual renderizado
@@ -90,31 +92,44 @@ class CellularAutomaton {
         });
     }
 
-    _initWolframEngine() {
-        if (this._wolframLoaded) return Promise.resolve();
-
-        // Si ya existe global, usarlo
-        if (typeof WolframEngine !== 'undefined') {
-            this.wolframEngine = new WolframEngine(this);
-            this._wolframLoaded = true;
+    // Método genérico para inicializar motores especiales
+    async _initSpecialEngine(engineName) {
+        if (this.specialMode === engineName && this._specialEngineLoaded) {
             return Promise.resolve();
         }
 
-        // Cargar dinámicamente el script
+        // Desactivar motor anterior si existe
+        if (this.wolframEngine?.isActive) {
+            this.wolframEngine.deactivate();
+        }
+        if (this.rd2dEngine?.isActive) {
+            this.rd2dEngine.deactivate();
+        }
+
+        if (engineName === 'rd2d') {
+            if (typeof RD2DEngine === 'undefined') {
+                await this._loadScript('scripts/core/rd2d-engine.js');
+            }
+            this.rd2dEngine = new RD2DEngine(this);
+            this.specialMode = 'rd2d';
+        } else if (engineName === 'wolfram') {
+            if (typeof WolframEngine === 'undefined') {
+                await this._loadScript('scripts/core/wolfram-engine.js');
+            }
+            this.wolframEngine = new WolframEngine(this);
+            this.specialMode = 'wolfram';
+        }
+
+        this._specialEngineLoaded = true;
+        return Promise.resolve();
+    }
+
+    _loadScript(src) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = 'scripts/core/wolfram-engine.js';
-            script.onload = () => {
-                if (typeof WolframEngine !== 'undefined') {
-                    this.wolframEngine = new WolframEngine(this);
-                    this._wolframLoaded = true;
-                    console.debug('✅ WolframEngine cargado dinámicamente');
-                    resolve();
-                } else {
-                    reject(new Error('WolframEngine no encontrado en script'));
-                }
-            };
-            script.onerror = () => reject(new Error('No se pudo cargar wolfram-engine.js'));
+            script.src = src;
+            script.onload = resolve;
+            script.onerror = reject;
             document.head.appendChild(script);
         });
     }
@@ -669,15 +684,27 @@ class CellularAutomaton {
     nextGeneration() {
         if (this.checkLimits()) return 0;
 
-        // === MODO WOLFRAM 1D ===
-        if (this.wolframEngine?.isActive) {
+        // === MODO ESPECIAL: RD-2D ===
+        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+            const continued = this.rd2dEngine.step();
+            if (!continued) {
+                this.stop();
+                console.debug('🔲 RD-2D: Simulación detenida (estable)');
+            }
+            this.generation = this.rd2dEngine.generation;
+            this.updateStats();
+            this.render();
+            return 1;
+        }
+
+        // === MODO ESPECIAL: WOLFRAM ===
+        if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
             const continued = this.wolframEngine.step();
             if (!continued) {
-                // Wolfram terminó (llegó al borde), detener automáticamente
                 this.stop();
-                console.debug('Wolfram: Límite alcanzado, simulación detenida');
+                console.debug('🎲 Wolfram: Límite alcanzado');
             }
-            this.generation++;
+            this.generation = this.wolframEngine.generation;
             this.updateStats();
             this.render();
             return 1;
@@ -1002,12 +1029,12 @@ class CellularAutomaton {
         const dirtyIndices = [];
         const size = this.gridSize;
 
-        // 3. Aplicar patrón con acceso column-major correcto
+        // 3. Aplicar patrón con acceso column-major
         for (let x = 0; x < width; x++) {
             const gridX = offsetX + x;
             if (gridX < 0 || gridX >= size) continue;
 
-            const sourceCol = area.grid[x]; // Asume que area.grid es column-major también
+            const sourceCol = area.grid[x]; // Asume que area.grid es column-major
             const targetCol = this.grid[gridX];
 
             for (let y = 0; y < height; y++) {
