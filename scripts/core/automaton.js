@@ -16,6 +16,10 @@ class CellularAutomaton {
         this._changedSet = new Set();
         this._pendingTimeouts = new Set();
 
+        // Wolfram
+        this.wolframEngine = null;
+        this._wolframLoaded = false;
+
         // Sistema de dirty rendering
         this.renderFlags = new Uint8Array(this.gridSize * this.gridSize);  // Estado actual renderizado
         this.prevFlags = new Uint8Array(this.gridSize * this.gridSize);    // Estado de la generación anterior
@@ -83,6 +87,35 @@ class CellularAutomaton {
         }).catch(err => {
             console.error('Error inicializando autómata:', err);
             eventBus.emit('automaton:error', err);
+        });
+    }
+
+    _initWolframEngine() {
+        if (this._wolframLoaded) return Promise.resolve();
+
+        // Si ya existe global, usarlo
+        if (typeof WolframEngine !== 'undefined') {
+            this.wolframEngine = new WolframEngine(this);
+            this._wolframLoaded = true;
+            return Promise.resolve();
+        }
+
+        // Cargar dinámicamente el script
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'scripts/core/wolfram-engine.js';
+            script.onload = () => {
+                if (typeof WolframEngine !== 'undefined') {
+                    this.wolframEngine = new WolframEngine(this);
+                    this._wolframLoaded = true;
+                    console.debug('✅ WolframEngine cargado dinámicamente');
+                    resolve();
+                } else {
+                    reject(new Error('WolframEngine no encontrado en script'));
+                }
+            };
+            script.onerror = () => reject(new Error('No se pudo cargar wolfram-engine.js'));
+            document.head.appendChild(script);
         });
     }
 
@@ -632,20 +665,33 @@ class CellularAutomaton {
         else this.setRule([2, 3], [3]);
     }
 
+
     nextGeneration() {
         if (this.checkLimits()) return 0;
 
-        // Copia atómica con propagación (más rápido que bucles)
-        this.prevFlags = new Uint8Array(this.renderFlags);
+        // === MODO WOLFRAM 1D ===
+        if (this.wolframEngine?.isActive) {
+            const continued = this.wolframEngine.step();
+            if (!continued) {
+                // Wolfram terminó (llegó al borde), detener automáticamente
+                this.stop();
+                console.debug('Wolfram: Límite alcanzado, simulación detenida');
+            }
+            this.generation++;
+            this.updateStats();
+            this.render();
+            return 1;
+        }
 
+        // === MODO 2D ESTÁNDAR (código existente sin cambios) ===
+        this.prevFlags = new Uint8Array(this.renderFlags);
         this.dirtyCells.clear();
 
         // === DECIDIR: Worker o main thread ===
         const useWorker = this.worker && this.gridSize >= this.workerThreshold;
-
         if (useWorker) {
             this._nextGenerationWorker();
-            return 0; // Retorna 0 temporalmente, se actualizará async
+            return 0;
         } else {
             return this._nextGenerationMainThread();
         }
@@ -1246,6 +1292,11 @@ class CellularAutomaton {
             this.stop();
             this.isRunning = false;
             eventBus.emit('automaton:runningChanged', {isRunning: false});
+        }
+
+        // Resetear Wolfram si estaba activo
+        if (this.wolframEngine) {
+            this.wolframEngine.reset();
         }
 
         if (this.isWorkerProcessing) {

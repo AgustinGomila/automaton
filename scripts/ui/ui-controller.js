@@ -397,6 +397,9 @@ class UIController {
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
+        // Wolfram
+        this._bindWolframEvents();
+
         // Canvas
         this._bindCanvasEvents();
     }
@@ -412,6 +415,146 @@ class UIController {
         this._addEventListener(canvas, 'contextmenu', (e) => this._handleRightClick(e));
 
         this._setupTouchEvents();
+    }
+
+    _bindWolframEvents() {
+        const wolframToggle = document.getElementById('wolframToggle');
+        const wolframControls = document.getElementById('wolframControls');
+
+        if (wolframToggle) {
+            this._addEventListener(wolframToggle, 'change', () => {
+                if (wolframToggle.checked) {
+                    // ACTIVAR controles visuales
+                    if (wolframControls) {
+                        wolframControls.classList.add('active');
+                        wolframControls.style.opacity = '1';
+                        wolframControls.style.pointerEvents = 'all';
+                    }
+
+                    const rule = parseInt(document.getElementById('wolframRule')?.value) || 30;
+                    const direction = document.getElementById('wolframDirection')?.value || 'vertical';
+                    this.activateWolframMode(rule, direction);
+                } else {
+                    // DESACTIVAR controles visuales
+                    if (wolframControls) {
+                        wolframControls.classList.remove('active');
+                        wolframControls.style.opacity = '0.5';
+                        wolframControls.style.pointerEvents = 'none';
+                    }
+
+                    this.deactivateWolframMode();
+                }
+            });
+        }
+
+        // Resto del código sin cambios...
+        const ruleInput = document.getElementById('wolframRule');
+        if (ruleInput) {
+            this._addEventListener(ruleInput, 'input', () => {
+                const rule = parseInt(ruleInput.value) || 30;
+                const display = document.getElementById('wolframRuleDisplay');
+                if (display) display.textContent = rule;
+
+                if (this.automaton.wolframEngine?.isActive) {
+                    const direction = this.automaton.wolframEngine.direction;
+                    this.automaton.wolframEngine.activate(rule, direction);
+                    this.updateHeaderInfo(); // <-- AÑADIR ESTA LÍNEA
+                }
+            });
+        }
+
+        const directionSelect = document.getElementById('wolframDirection');
+        if (directionSelect) {
+            this._addEventListener(directionSelect, 'change', () => {
+                if (this.automaton.wolframEngine?.isActive) {
+                    const rule = this.automaton.wolframEngine.ruleNumber;
+                    this.automaton.wolframEngine.activate(rule, directionSelect.value);
+                    this.automaton.clear();
+                    if (this.automaton.wolframEngine._initializeSeed) {
+                        this.automaton.wolframEngine._initializeSeed();
+                    }
+                    this.automaton.render();
+                }
+            });
+        }
+
+        // Presets de reglas
+        document.querySelectorAll('.btn-preset[data-rule]').forEach(btn => {
+            this._addEventListener(btn, 'click', () => {
+                const rule = parseInt(btn.dataset.rule);
+                const ruleInput = document.getElementById('wolframRule');
+                const display = document.getElementById('wolframRuleDisplay');
+
+                if (ruleInput) ruleInput.value = rule;
+                if (display) display.textContent = rule;
+
+                if (this.automaton.wolframEngine?.isActive) {
+                    const direction = this.automaton.wolframEngine.direction;
+                    this.automaton.wolframEngine.activate(rule, direction);
+                    this.automaton.clear();
+                    this.automaton.wolframEngine._initializeSeed();
+                    this.automaton.render();
+                    this._showNotification(`Regla ${rule} activada`, 'info', 1500);
+                }
+            });
+        });
+    }
+
+    async activateWolframMode(rule = 30, direction = 'vertical') {
+        try {
+            await this.automaton._initWolframEngine();
+
+            // Desactivar reglas 2D estándar visualmente
+            document.getElementById('ruleSelector').disabled = true;
+            document.getElementById('neighborhoodType').disabled = true;
+
+            // Activar motor
+            this.automaton.wolframEngine.activate(rule, direction);
+
+            // Limpiar y preparar
+            this.automaton.clear();
+            this.automaton.wolframEngine._initializeSeed();
+            this.automaton.render();
+
+            this._updateModeIndicator('wolfram');
+            this.updateHeaderInfo();
+            this._showNotification(`Modo Wolfram: Regla ${rule}`, 'info', 2000);
+
+        } catch (error) {
+            console.error('❌ Error cargando WolframEngine:', error);
+            this._showNotification('Error cargando motor Wolfram', 'warning', 3000);
+        }
+    }
+
+    deactivateWolframMode() {
+        // Reactivar controles 2D
+        document.getElementById('ruleSelector').disabled = false;
+        document.getElementById('neighborhoodType').disabled = false;
+
+        this.automaton.wolframEngine.deactivate();
+        this.automaton.clear();
+        this.automaton.render();
+
+        this._updateModeIndicator('standard');
+        this.updateHeaderInfo();
+        this._showNotification('Modo 2D estándar', 'info', 2000);
+    }
+
+    _updateModeIndicator(mode) {
+        const indicator = document.getElementById('modeIndicator');
+        if (!indicator) return;
+
+        if (mode === 'wolfram') {
+            const info = this.automaton.wolframEngine.getInfo();
+            indicator.className = 'mode-indicator wolfram-mode';
+            indicator.innerHTML = `
+            <i class="fas fa-arrows-alt-v"></i>
+            Wolfram R${info.rule} ${info.direction === 'vertical' ? '↓' : '→'}
+        `;
+        } else {
+            indicator.className = 'mode-indicator standard-mode';
+            indicator.innerHTML = `<i class="fas fa-th"></i> 2D Cellular`;
+        }
     }
 
     _handleMouseDown(e) {
@@ -1345,6 +1488,42 @@ class UIController {
     updateHeaderInfo() {
         console.debug('🔄 updateHeaderInfo() ejecutándose...');
 
+        // === MODO WOLFRAM ===
+        if (this.automaton.wolframEngine?.isActive) {
+            const info = this.automaton.wolframEngine.getInfo();
+            const directionSymbol = info.direction === 'vertical' ? '↓' : '→';
+            const directionText = info.direction === 'vertical' ? 'Vertical' : 'Horizontal';
+
+            // Actualizar título principal
+            const headerTitle = document.querySelector('h1');
+            if (headerTitle) {
+                headerTitle.innerHTML = `<i class="fas fa-dice"></i> Autómata - Wolfram R${info.rule}`;
+            }
+
+            document.title = `Autómata Celular - Wolfram Regla ${info.rule}`;
+
+            // Actualizar reglas específicas
+            const rulesSpecific = document.getElementById('rulesSpecific');
+            if (rulesSpecific) {
+                const binary = info.rule.toString(2).padStart(8, '0');
+                rulesSpecific.innerHTML = `
+                <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> Regla:</span> ${info.rule}</p>
+                <p><span class="wolfram-binary"><i class="fas fa-binary"></i> Binario:</span> ${binary}</p>
+                <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-v"></i> Dirección:</span> ${directionText} ${directionSymbol}</p>
+                <p class="notation">Progreso: <span class="highlight">${info.progress}/${info.max}</span></p>
+            `;
+            }
+
+            // Actualizar info de vecindad (ocultar o adaptar)
+            const neighborhoodInfo = document.getElementById('neighborhoodInfo');
+            if (neighborhoodInfo) {
+                neighborhoodInfo.innerHTML = `<i class="fas fa-dice"></i> Wolfram 1D (Vecindad: 3 celdas)`;
+            }
+
+            return; // Salir temprano, no procesar modo 2D
+        }
+
+        // === MODO 2D ESTÁNDAR ===
         const selector = document.getElementById('ruleSelector');
         if (!selector) {
             console.warn('Selector de reglas no encontrado');

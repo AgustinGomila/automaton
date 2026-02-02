@@ -667,6 +667,94 @@ canvas {
     }
 }
 
+/* Controles Wolfram */
+.wolfram-controls {
+    transition: opacity 0.3s ease;
+}
+
+.wolfram-controls.active {
+    opacity: 1 !important;
+    pointer-events: all !important;
+}
+
+.wolfram-presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* Estilos para información Wolfram en el header */
+.wolfram-rule {
+    color: #8b5cf6;
+    font-weight: 600;
+}
+
+.wolfram-binary {
+    color: #10b981;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+}
+
+.wolfram-direction {
+    color: #3b82f6;
+    font-weight: 600;
+}
+
+/* Icono de dado en título */
+h1 i.fa-dice {
+    color: #8b5cf6;
+}
+
+.btn-preset {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--light-text);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-preset:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.mode-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mode-indicator.standard-mode {
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+}
+
+.mode-indicator.wolfram-mode {
+    background: rgba(139, 92, 246, 0.2);
+    border: 1px solid #8b5cf6;
+    color: #8b5cf6;
+}
+
+/* Responsive */
+@media screen and (max-width: 768px) {
+    .wolfram-presets {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ===== SECCIÓN DE PATRONES ===== */
 
 .patterns-horizontal-container {

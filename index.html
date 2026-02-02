@@ -49,6 +49,7 @@
                     </button>
                 </div>
             </div>
+        </div>
     </header>
 
     <main>
@@ -208,6 +209,42 @@
                             <span>Bajo</span>
                             <span>Medio</span>
                             <span>Alto</span>
+                        </div>
+                    </div>
+
+                    <h3><i class="fas fa-dice"></i> Wolfram 1D</h3>
+
+                    <div class="toggle-switch">
+                        <input type="checkbox" id="wolframToggle" class="toggle-checkbox">
+                        <label for="wolframToggle" class="toggle-label">
+                            Activar Modo 1D
+                            <span class="toggle-switch-slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="wolfram-controls" id="wolframControls"
+                         style="margin-top: 15px; opacity: 0.5; pointer-events: none;">
+                        <div class="config-group">
+                            <label>Regla (0-255): <span id="wolframRuleDisplay" class="value-display">30</span></label>
+                            <input type="range" id="wolframRule" min="0" max="255" value="30">
+                            <div class="range-ticks">
+                                <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
+                            </div>
+                        </div>
+
+                        <div class="config-group">
+                            <label>Dirección de evolución</label>
+                            <select id="wolframDirection">
+                                <option value="vertical">↓ Vertical (top-down)</option>
+                                <option value="horizontal">→ Horizontal (left-right)</option>
+                            </select>
+                        </div>
+
+                        <div class="wolfram-presets">
+                            <button class="btn-preset" data-rule="30">30 (Caos)</button>
+                            <button class="btn-preset" data-rule="90">90 (Sierpiński)</button>
+                            <button class="btn-preset" data-rule="110">110 (Universal)</button>
+                            <button class="btn-preset" data-rule="184">184 (Tráfico)</button>
                         </div>
                     </div>
                 </div>
