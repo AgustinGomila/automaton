@@ -36,7 +36,6 @@
                 <div class="neighborhood-info" id="neighborhoodInfo">
                     <i class="fas fa-crosshairs"></i> Vecindad: Moore (R1) ∞
                 </div>
-
                 <div class="header-quick-controls">
                     <span id="mouseCoords" class="coords">X: 0, Y: 0</span>
                     <button id="gridToggle" class="btn-toggle" title="Mostrar/Ocultar Grilla (G)">
@@ -45,9 +44,11 @@
                     <button id="quickInfluenceToggle" class="btn-toggle" title="Área de Influencia">
                         <i class="fas fa-bullseye"></i>
                     </button>
+                    <button id="exportBtn" class="btn-toggle" title="Exportar Patrón">
+                        <i class="fas fa-download"></i>
+                    </button>
                 </div>
             </div>
-        </div>
     </header>
 
     <main>
@@ -327,13 +328,9 @@
 
     <footer class="footer">
         <div class="footer-content">
-            <p><i class="fas fa-brain"></i> Basado en las reglas de <strong>Louis Kauffman</strong></p>
             <p class="footer-links">
                 <a href="https://github.com/AgustinGomila/automaton" target="_blank">
                     <i class="fab fa-github"></i> Código en GitHub
-                </a>
-                <a href="#" id="exportBtn">
-                    <i class="fas fa-download"></i> Exportar Patrón
                 </a>
                 <a href="#" id="configMobileBtn">
                     <i class="fas fa-sliders-h"></i> Configuración
