@@ -418,6 +418,16 @@ class UIController {
     }
 
     _bindSpecialEnginesEvents() {
+        const debugBtn = document.getElementById('debugRD2D');
+        if (debugBtn) {
+            this._addEventListener(debugBtn, 'click', () => {
+                if (this.automaton.rd2dEngine) {
+                    this.automaton.rd2dEngine._debugStateDistribution();
+                    this.automaton.rd2dEngine._debugSyncCheck();
+                }
+            });
+        }
+
         // Toggle RD-2D
         const rd2dToggle = document.getElementById('rd2dToggle');
         if (rd2dToggle) {
@@ -452,6 +462,17 @@ class UIController {
                 } else {
                     this._toggleWolframControls(false);
                     this.deactivateWolframMode();
+                }
+            });
+        }
+
+        const resetSeedBtn = document.getElementById('resetWolframSeed');
+        if (resetSeedBtn) {
+            this._addEventListener(resetSeedBtn, 'click', () => {
+                if (this.automaton.wolframEngine?.isActive) {
+                    this.automaton.wolframEngine.forceInitializeSeed();
+                    this.automaton.render();
+                    this._showNotification('Semilla restablecida', 'info', 1500);
                 }
             });
         }
@@ -494,11 +515,12 @@ class UIController {
                 const display = document.getElementById('wolframRuleDisplay');
 
                 if (ruleInput) ruleInput.value = rule;
-                if (display) display.textContent = rule;
+                if (display) display.textContent = rule.toString();
 
                 if (this.automaton.wolframEngine?.isActive) {
                     const direction = this.automaton.wolframEngine.direction;
                     this.automaton.wolframEngine.activate(rule, direction);
+                    this.updateHeaderInfo();
                     this.automaton.clear();
                     this.automaton.wolframEngine._initializeSeed();
                     this.automaton.render();
@@ -509,6 +531,13 @@ class UIController {
     }
 
     async activateWolframMode(rule = 30, direction = 'vertical') {
+        // Esperar a que el autómata esté listo
+        if (!this.automaton || !this.automaton.grid) {
+            console.error('❌ Autómata no inicializado');
+            this._showNotification('Error: Autómata no listo', 'warning', 3000);
+            return;
+        }
+
         try {
             await this.automaton._initSpecialEngine('wolfram');
 
@@ -527,8 +556,6 @@ class UIController {
             document.getElementById('neighborhoodType').disabled = true;
 
             this.automaton.wolframEngine.activate(rule, direction);
-            this.automaton.clear();
-            this.automaton.wolframEngine._initializeSeed();
             this.automaton.render();
 
             this.updateHeaderInfo();
@@ -1408,11 +1435,6 @@ class UIController {
         this.automaton.render();
     }
 
-    scrollPatterns(direction) {
-        const container = document.getElementById('patternsContainer');
-        if (container) container.scrollLeft += direction;
-    }
-
     exportPattern() {
         const pattern = this.automaton.exportPattern();
         if (pattern) {
@@ -1505,27 +1527,6 @@ class UIController {
         } catch (error) {
             alert(`Error: ${error.message}`);
         }
-    }
-
-    toggleWrapMode() {
-        this.automaton.wrapEdges = !this.automaton.wrapEdges;
-
-        if (this.automaton.isRunning) {
-            this.automaton.stop();
-        }
-
-        this.automaton.generation = 0;
-        this.automaton.isLimitReached = false;
-
-        this.automaton._markAllDirty();
-        this.automaton.updateStats();
-        this.automaton.render();
-
-        // Actualizar UI
-        const status = this.automaton.wrapEdges ? 'Toroidal' : 'Paredes Duras';
-        console.debug(`🔲 Modo de frontera: ${status}`);
-
-        eventBus.emit('automaton:wrapChanged', {wrap: this.automaton.wrapEdges});
     }
 
     /**
@@ -1636,20 +1637,20 @@ class UIController {
             if (rulesSpecific) {
                 const binary = info.rule.toString(2).padStart(8, '0');
                 rulesSpecific.innerHTML = `
-                <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> Regla:</span> ${info.rule}</p>
-                <p><span class="wolfram-binary"><i class="fas fa-binary"></i> Binario:</span> ${binary}</p>
-                <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-v"></i> Dirección:</span> ${directionText} ${directionSymbol}</p>
-                <p class="notation">Progreso: <span class="highlight">${info.progress}/${info.max}</span></p>
-            `;
+            <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> Regla:</span> ${info.rule}</p>
+            <p><span class="wolfram-binary"><i class="fas fa-binary"></i> Binario:</span> ${binary}</p>
+            <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-${info.direction === 'vertical' ? 'v' : 'h'}"></i> Dirección:</span> ${directionText} ${directionSymbol}</p>
+            <p><span class="wolfram-gen"><i class="fas fa-clock"></i> Generación:</span> ${info.generation}</p>
+            <p class="notation">Progreso: <span class="highlight">${info.progress}/${info.max}</span></p>
+        `;
             }
 
-            // Actualizar info de vecindad (ocultar o adaptar)
+            // Actualizar info de vecindad
             const neighborhoodInfo = document.getElementById('neighborhoodInfo');
             if (neighborhoodInfo) {
                 neighborhoodInfo.innerHTML = `<i class="fas fa-dice"></i> Wolfram 1D (Vecindad: 3 celdas)`;
             }
-
-            return; // Salir temprano, no procesar modo 2D
+            return;
         }
 
         // === MODO 2D ESTÁNDAR ===

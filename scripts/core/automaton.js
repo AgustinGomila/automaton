@@ -544,6 +544,21 @@ class CellularAutomaton {
         const cellIndex = x * this.gridSize + y;
         const isAlive = this.grid[x][y];
 
+        // === MODO RD-2D: Renderizado especial ===
+        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive && isAlive) {
+            const state = this.rd2dEngine.stateGrid[x]?.[y] || 0;
+
+            // Fondo negro
+            this.ctx.fillStyle = '#0f172a';
+            this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+
+            // Dibujar fronteras
+            this.rd2dEngine._renderRD2DCell(this.ctx, x, y, cellSize, state);
+
+            this.renderFlags[cellIndex] = 1;
+            return;
+        }
+
         if (cellSize <= 2) {
             const xPos = x * cellSize;
             const yPos = y * cellSize;
@@ -710,7 +725,7 @@ class CellularAutomaton {
             return 1;
         }
 
-        // === MODO 2D ESTÁNDAR (código existente sin cambios) ===
+        // === MODO 2D ESTÁNDAR ===
         this.prevFlags = new Uint8Array(this.renderFlags);
         this.dirtyCells.clear();
 
@@ -1301,17 +1316,6 @@ class CellularAutomaton {
                 }, 50);
             }
         }, 0);
-    }
-
-    resetDirtyFlags() {
-        this.dirtyFlags.fill(0);
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                if (this.grid[x][y]) {
-                    this.dirtyFlags[x * this.gridSize + y] = 1;
-                }
-            }
-        }
     }
 
     clear() {

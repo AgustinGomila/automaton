@@ -701,6 +701,11 @@ canvas {
     font-weight: 600;
 }
 
+.wolfram-gen {
+    color: #10b981;
+    font-weight: 600;
+}
+
 /* Icono de dado en título */
 h1 i.fa-dice {
     color: #8b5cf6;

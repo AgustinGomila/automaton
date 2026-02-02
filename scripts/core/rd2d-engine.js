@@ -24,36 +24,6 @@ class RD2DEngine {
         this.generation = 0;
     }
 
-    /**
-     * Convierte un estado numérico a representación de fronteras
-     */
-    static stateToBorders(state) {
-        return {
-            N: (state >> 3) & 1,
-            S: (state >> 2) & 1,
-            E: (state >> 1) & 1,
-            W: state & 1
-        };
-    }
-
-    /**
-     * Convierte bordes a estado numérico
-     */
-    static bordersToState(n, s, e, w) {
-        return (n << 3) | (s << 2) | (e << 1) | w;
-    }
-
-    /**
-     * Obtiene nombre/icono del estado
-     */
-    static getStateName(state) {
-        const names = [
-            '∅', 'E', 'W', 'EW', 'S', 'SE', 'SW', 'SEW',
-            'N', 'NE', 'NW', 'NEW', 'NS', 'NSE', 'NSW', 'NSEW'
-        ];
-        return names[state] || '∅';
-    }
-
     activate() {
         this.gridSize = this.automaton.gridSize;
         this.isActive = true;
@@ -89,38 +59,138 @@ class RD2DEngine {
      * Patrón semilla: cruz central con estado completo (15)
      */
     _initializeSeed() {
+        if (this.initialized && !this._forceReinit) return;
+
         const center = Math.floor(this.gridSize / 2);
         const size = this.gridSize;
 
-        // Cruz central
+        console.log('=== Inicializando semilla ===');
+        console.log('Centro:', center);
+        console.log('GridSize:', size);
+
+        // Limpiar y verificar
+        this._initStateGrid();
+        console.log('stateGrid limpio, verificando [center][center]:', this.stateGrid[center][center]);
+
+        // Colocar cruz
+        let colocados = 0;
         for (let i = -2; i <= 2; i++) {
-            // Vertical
             const vy = center + i;
             if (vy >= 0 && vy < size) {
-                this.stateGrid[center][vy] = 15; // NSEW completo
-                this._updateAutomatonCell(center, vy, 15);
+                this.stateGrid[center][vy] = 15;
+                this.automaton.grid[center][vy] = 1;
+                colocados++;
+                if (i === 0) console.log(`  Centro vertical (${center},${vy}) = 15`);
             }
-            // Horizontal
+
             const hx = center + i;
-            if (hx >= 0 && hx < size) {
+            if (hx >= 0 && hx < size && i !== 0) {
                 this.stateGrid[hx][center] = 15;
-                this._updateAutomatonCell(hx, center, 15);
+                this.automaton.grid[hx][center] = 1;
+                colocados++;
             }
         }
 
+        console.log('Total celdas colocadas:', colocados);
+
+        // Verificación inmediata
+        console.log('Verificación stateGrid[center][center]:', this.stateGrid[center][center]);
+        console.log('Verificación automaton.grid[center][center]:', this.automaton.grid[center][center]);
+
         this.generation = 0;
+        this.initialized = true;
+        this._forceReinit = false;
+    }
+
+    _checkUserSeed() {
+        for (let x = 0; x < this.gridSize; x++) {
+            // Verificar que la columna existe
+            if (!this.automaton.grid[x]) continue;
+
+            for (let y = 0; y < this.gridSize; y++) {
+                if (this.automaton.grid[x][y]) return true;
+            }
+        }
+        return false;
     }
 
     /**
-     * Sincroniza el estado RD con el grid binario del automaton
-     * Solo muestra celdas con estado != 0
+     * Sincroniza el estado RD desde el grid binario del autómata
+     * Convierte celdas vivas del usuario a estados RD apropiados
      */
-    _updateAutomatonCell(x, y, state) {
-        const isAlive = state !== 0;
-        // No usar setCell para evitar overhead de undo/saveState masivo
-        this.automaton.grid[x][y] = isAlive ? 1 : 0;
-        if (isAlive) {
-            this.automaton.dirtyCells.add(x * this.gridSize + y);
+    _syncFromAutomatonGrid() {
+        // Reiniciar stateGrid
+        this._initStateGrid();
+
+        const size = this.gridSize;
+
+        for (let x = 0; x < size; x++) {
+            if (!this.automaton.grid[x]) continue;
+
+            for (let y = 0; y < size; y++) {
+                if (this.automaton.grid[x][y]) {
+                    // Celda viva del usuario: asignar estado 15 (NSEW completo)
+                    // o inferir de vecinos si es posible
+                    this.stateGrid[x][y] = this._inferStateFromNeighbors(x, y) || 15;
+                } else {
+                    this.stateGrid[x][y] = 0;
+                }
+            }
+        }
+    }
+
+    /**
+     * Intenta inferir un estado RD razonable basado en vecinos inmediatos
+     * Si una celda tiene vecinos vivos en ciertas direcciones, abre esas fronteras
+     */
+    _inferStateFromNeighbors(x, y) {
+        const size = this.gridSize;
+        let state = 0;
+
+        // Verificar vecinos cardinales en el grid del autómata
+        // Norte (y-1)
+        if (y > 0 && this.automaton.grid[x]?.[y - 1]) {
+            state |= 8; // bit N
+        }
+        // Sur (y+1)
+        if (y < size - 1 && this.automaton.grid[x]?.[y + 1]) {
+            state |= 4; // bit S
+        }
+        // Este (x+1)
+        if (x < size - 1 && this.automaton.grid[x + 1]?.[y]) {
+            state |= 2; // bit E
+        }
+        // Oeste (x-1)
+        if (x > 0 && this.automaton.grid[x - 1]?.[y]) {
+            state |= 1; // bit W
+        }
+
+        // Si no tiene vecinos, estado completo (15) por defecto
+        return state === 0 ? 15 : state;
+    }
+
+    /**
+     * Actualiza el grid del autómata desde el stateGrid RD
+     * Llama después de cada paso RD para sincronizar visualización
+     */
+    _syncToAutomatonGrid() {
+        const size = this.gridSize;
+
+        for (let x = 0; x < size; x++) {
+            if (!this.automaton.grid[x]) continue;
+
+            for (let y = 0; y < size; y++) {
+                const isAlive = this.stateGrid[x]?.[y] !== 0;
+
+                // Solo actualizar si cambió, y sin usar setCell (evitar overhead)
+                if (this.automaton.grid[x][y] !== (isAlive ? 1 : 0)) {
+                    this.automaton.grid[x][y] = isAlive ? 1 : 0;
+
+                    if (isAlive) {
+                        this.automaton.dirtyCells.add(x * size + y);
+                    }
+                }
+            }
         }
     }
 
@@ -128,19 +198,147 @@ class RD2DEngine {
      * Obtiene el estado de una celda con wrap (toroidal)
      */
     _getState(x, y) {
-        const wx = (x + this.gridSize) % this.gridSize;
-        const wy = (y + this.gridSize) % this.gridSize;
-        return this.stateGrid[wx][wy];
+        const size = this.gridSize;
+        const wx = ((x % size) + size) % size;
+        const wy = ((y % size) + size) % size;
+        return this.stateGrid[wx]?.[wy] || 0;
     }
 
     /**
-     * Calcula la siguiente generación RD-2D
-     * Regla: XOR de los 4 vecinos cardinales
+     * Obtiene nombre/icono del estado
+     */
+    static getStateName(state) {
+        const names = [
+            '∅', 'E', 'W', 'EW', 'S', 'SE', 'SW', 'SEW',
+            'N', 'NE', 'NW', 'NEW', 'NS', 'NSE', 'NSW', 'NSEW'
+        ];
+        return names[state] || '∅';
+    }
+
+    /**
+     * Renderiza una celda RD-2D mostrando sus fronteras como líneas
+     */
+    _renderRD2DCell(ctx, x, y, cellSize, state) {
+        if (state === 0) return; // Vacío, no dibujar nada
+
+        const borders = RD2DEngine.stateToBorders(state);
+        const centerX = x * cellSize + cellSize / 2;
+        const centerY = y * cellSize + cellSize / 2;
+        const half = cellSize / 2;
+
+        ctx.strokeStyle = this._getStateColor(state);
+        ctx.lineWidth = Math.max(2, cellSize / 4);
+        ctx.lineCap = 'round';
+
+        // Dibujar líneas en los bordes abiertos
+        ctx.beginPath();
+
+        if (borders.N) { // Norte (arriba)
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX, centerY - half + 1);
+        }
+        if (borders.S) { // Sur (abajo)
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX, centerY + half - 1);
+        }
+        if (borders.E) { // Este (derecha)
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX + half - 1, centerY);
+        }
+        if (borders.W) { // Oeste (izquierda)
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX - half + 1, centerY);
+        }
+
+        ctx.stroke();
+
+        // Punto central para estados con múltiples fronteras
+        if (state > 0) {
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, cellSize / 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    /**
+     * Colores por "tipo" de estado (número de fronteras abiertas)
+     */
+    _getStateColor(state) {
+        const colors = {
+            0: '#000000',  // ∅ Vacío
+            1: '#ef4444',  // 1 frontera: rojo brillante
+            2: '#f97316',  // 2 fronteras: naranja
+            3: '#eab308',  // 3 fronteras: amarillo
+            4: '#22c55e',  // 4 fronteras (NSEW): verde
+        };
+        const count = RD2DEngine.countBorders(state);
+        return colors[count] || '#94a3b8';
+    }
+
+    static countBorders(state) {
+        let count = 0;
+        for (let i = 0; i < 4; i++) {
+            count += (state >> i) & 1;
+        }
+        return count;
+    }
+
+    static stateToBorders(state) {
+        return {
+            N: (state >> 3) & 1,
+            S: (state >> 2) & 1,
+            E: (state >> 1) & 1,
+            W: state & 1
+        };
+    }
+
+    /**
+     * Paso de generación RD-2D corregido
      */
     step() {
         if (!this.isActive) return false;
 
+        // Verificar que el autómata existe
+        if (!this.automaton || !this.automaton.grid) {
+            console.error('❌ RD2DEngine: Autómata no disponible');
+            return false;
+        }
+
+        // Sincronizar tamaño si cambió
+        if (this.automaton.gridSize !== this.gridSize) {
+            this.gridSize = this.automaton.gridSize;
+            this._initStateGrid();
+            this.initialized = false;
+        }
+
+        // PRIMERA VEZ: detectar semilla del usuario o inicializar por defecto
+        if (!this.initialized) {
+            const hasUserSeed = this._checkUserSeed();
+
+            if (hasUserSeed) {
+                console.debug('🔲 RD-2D: Detectada semilla del usuario');
+                this._syncFromAutomatonGrid();
+            } else {
+                console.debug('🔲 RD-2D: Inicializando semilla por defecto');
+                this._initializeSeed();
+            }
+
+            this.initialized = true;
+            this.generation = 0;
+            return true;
+        }
+
         const size = this.gridSize;
+
+        // Crear COPIA PROFUNDA del estado actual para lectura
+        // No usar referencia, sino copiar todos los valores
+        const previousGrid = new Array(size);
+        for (let x = 0; x < size; x++) {
+            previousGrid[x] = new Uint8Array(this.stateGrid[x]);
+        }
+
+        // Crear grid nuevo para escritura
         const newStateGrid = new Array(size);
         for (let x = 0; x < size; x++) {
             newStateGrid[x] = new Uint8Array(size);
@@ -148,34 +346,69 @@ class RD2DEngine {
 
         let changed = false;
 
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
-                // XOR de los 4 vecinos cardinales
-                const north = this._getState(x, y - 1);
-                const south = this._getState(x, y + 1);
-                const east = this._getState(x + 1, y);
-                const west = this._getState(x - 1, y);
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                // Leer desde previousGrid (copia del estado anterior), no desde this.stateGrid
+                const north = this._getStateFromGrid(previousGrid, x, y - 1);
+                const south = this._getStateFromGrid(previousGrid, x, y + 1);
+                const east = this._getStateFromGrid(previousGrid, x + 1, y);
+                const west = this._getStateFromGrid(previousGrid, x - 1, y);
 
                 const newState = north ^ south ^ east ^ west;
                 newStateGrid[x][y] = newState;
 
                 if (newState !== this.stateGrid[x][y]) {
                     changed = true;
-                    this._updateAutomatonCell(x, y, newState);
                 }
             }
         }
 
+        // Reemplazar el estado
         this.stateGrid = newStateGrid;
         this.generation++;
 
-        // Si no hay cambios, detener
+        // Sincronizar visualización
+        this._syncToAutomatonGrid();
+
         if (!changed) {
             console.debug('🔲 RD-2D: Estado estable alcanzado');
             return false;
         }
 
         return true;
+    }
+
+    /**
+     * Lee estado desde un grid específico (no desde this.stateGrid)
+     */
+    _getStateFromGrid(grid, x, y) {
+        const size = this.gridSize;
+        const wx = ((x % size) + size) % size;
+        const wy = ((y % size) + size) % size;
+        return grid[wx]?.[wy] || 0;
+    }
+
+    /**
+     * Detecta si el usuario modificó el grid externamente (durante pausa)
+     */
+    _detectExternalChanges() {
+        // Muestreo rápido: verificar algunas celdas aleatorias
+        const samples = 10;
+        const size = this.gridSize;
+
+        for (let i = 0; i < samples; i++) {
+            const x = Math.floor(Math.random() * size);
+            const y = Math.floor(Math.random() * size);
+
+            if (!this.automaton.grid[x]) continue;
+
+            const autoState = this.automaton.grid[x][y] ? 1 : 0;
+            const rdState = this.stateGrid[x]?.[y] ? 1 : 0;
+
+            if (autoState !== rdState) return true;
+        }
+
+        return false;
     }
 
     getInfo() {
@@ -193,9 +426,66 @@ class RD2DEngine {
     }
 
     reset() {
-        if (this.isActive) {
-            this._initStateGrid();
-            this._initializeSeed();
+        this.initialized = false;
+        this._forceReinit = false;
+    }
+
+    /**
+     * Debug: Muestra estadísticas de estados en consola
+     */
+    _debugStateDistribution() {
+        if (!this.stateGrid) return;
+
+        const counts = new Array(16).fill(0);
+        let total = 0;
+
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                const state = this.stateGrid[x]?.[y] || 0;
+                counts[state]++;
+                if (state !== 0) total++;
+            }
+        }
+
+        console.log('=== RD-2D State Distribution ===');
+        console.log('Total celdas vivas:', total);
+        for (let i = 0; i < 16; i++) {
+            if (counts[i] > 0) {
+                const borders = RD2DEngine.stateToBorders(i);
+                const borderCount = RD2DEngine.countBorders(i);
+                console.log(`  Estado ${i} (${RD2DEngine.getStateName(i)}): ${counts[i]} celdas, ${borderCount} fronteras`);
+            }
+        }
+        console.log('================================');
+
+        return counts;
+    }
+
+    /**
+     * Debug: Verifica sincronización entre stateGrid y automaton.grid
+     */
+    _debugSyncCheck() {
+        let mismatches = 0;
+        const maxChecks = 100;
+        const sampleX = Math.floor(Math.random() * (this.gridSize - maxChecks));
+        const sampleY = Math.floor(Math.random() * (this.gridSize - maxChecks));
+
+        for (let x = sampleX; x < sampleX + 10 && x < this.gridSize; x++) {
+            for (let y = sampleY; y < sampleY + 10 && y < this.gridSize; y++) {
+                const stateAlive = (this.stateGrid[x]?.[y] || 0) !== 0;
+                const gridAlive = this.automaton.grid[x]?.[y] === 1;
+
+                if (stateAlive !== gridAlive) {
+                    mismatches++;
+                    console.warn(`Mismatch en (${x},${y}): stateGrid=${this.stateGrid[x][y]}, grid=${this.automaton.grid[x][y]}`);
+                }
+            }
+        }
+
+        if (mismatches === 0) {
+            console.log('✅ Sincronización OK en muestra');
+        } else {
+            console.error(`❌ ${mismatches} desincronizaciones encontradas`);
         }
     }
 }
