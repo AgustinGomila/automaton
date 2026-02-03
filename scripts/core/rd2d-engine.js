@@ -64,38 +64,23 @@ class RD2DEngine {
         const center = Math.floor(this.gridSize / 2);
         const size = this.gridSize;
 
-        console.log('=== Inicializando semilla ===');
-        console.log('Centro:', center);
-        console.log('GridSize:', size);
-
-        // Limpiar y verificar
+        // Siempre crear stateGrid fresco, nunca reusar
         this._initStateGrid();
-        console.log('stateGrid limpio, verificando [center][center]:', this.stateGrid[center][center]);
 
-        // Colocar cruz
-        let colocados = 0;
+        // Colocar cruz central
         for (let i = -2; i <= 2; i++) {
             const vy = center + i;
             if (vy >= 0 && vy < size) {
                 this.stateGrid[center][vy] = 15;
                 this.automaton.grid[center][vy] = 1;
-                colocados++;
-                if (i === 0) console.log(`  Centro vertical (${center},${vy}) = 15`);
             }
 
             const hx = center + i;
             if (hx >= 0 && hx < size && i !== 0) {
                 this.stateGrid[hx][center] = 15;
                 this.automaton.grid[hx][center] = 1;
-                colocados++;
             }
         }
-
-        console.log('Total celdas colocadas:', colocados);
-
-        // Verificación inmediata
-        console.log('Verificación stateGrid[center][center]:', this.stateGrid[center][center]);
-        console.log('Verificación automaton.grid[center][center]:', this.automaton.grid[center][center]);
 
         this.generation = 0;
         this.initialized = true;
@@ -293,13 +278,13 @@ class RD2DEngine {
         };
     }
 
+
     /**
-     * Paso de generación RD-2D corregido
+     * Paso de generación RD-2D
      */
     step() {
         if (!this.isActive) return false;
 
-        // Verificar que el autómata existe
         if (!this.automaton || !this.automaton.grid) {
             console.error('❌ RD2DEngine: Autómata no disponible');
             return false;
@@ -312,7 +297,7 @@ class RD2DEngine {
             this.initialized = false;
         }
 
-        // PRIMERA VEZ: detectar semilla del usuario o inicializar por defecto
+        // Inicialización (primera ejecución o después de reset)
         if (!this.initialized) {
             const hasUserSeed = this._checkUserSeed();
 
@@ -329,16 +314,8 @@ class RD2DEngine {
             return true;
         }
 
+        // Calcular siguiente generación
         const size = this.gridSize;
-
-        // Crear COPIA PROFUNDA del estado actual para lectura
-        // No usar referencia, sino copiar todos los valores
-        const previousGrid = new Array(size);
-        for (let x = 0; x < size; x++) {
-            previousGrid[x] = new Uint8Array(this.stateGrid[x]);
-        }
-
-        // Crear grid nuevo para escritura
         const newStateGrid = new Array(size);
         for (let x = 0; x < size; x++) {
             newStateGrid[x] = new Uint8Array(size);
@@ -348,11 +325,11 @@ class RD2DEngine {
 
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
-                // Leer desde previousGrid (copia del estado anterior), no desde this.stateGrid
-                const north = this._getStateFromGrid(previousGrid, x, y - 1);
-                const south = this._getStateFromGrid(previousGrid, x, y + 1);
-                const east = this._getStateFromGrid(previousGrid, x + 1, y);
-                const west = this._getStateFromGrid(previousGrid, x - 1, y);
+                // XOR de los 4 vecinos cardinales
+                const north = this._getState(x, y - 1);
+                const south = this._getState(x, y + 1);
+                const east = this._getState(x + 1, y);
+                const west = this._getState(x - 1, y);
 
                 const newState = north ^ south ^ east ^ west;
                 newStateGrid[x][y] = newState;
@@ -363,7 +340,6 @@ class RD2DEngine {
             }
         }
 
-        // Reemplazar el estado
         this.stateGrid = newStateGrid;
         this.generation++;
 
@@ -376,39 +352,6 @@ class RD2DEngine {
         }
 
         return true;
-    }
-
-    /**
-     * Lee estado desde un grid específico (no desde this.stateGrid)
-     */
-    _getStateFromGrid(grid, x, y) {
-        const size = this.gridSize;
-        const wx = ((x % size) + size) % size;
-        const wy = ((y % size) + size) % size;
-        return grid[wx]?.[wy] || 0;
-    }
-
-    /**
-     * Detecta si el usuario modificó el grid externamente (durante pausa)
-     */
-    _detectExternalChanges() {
-        // Muestreo rápido: verificar algunas celdas aleatorias
-        const samples = 10;
-        const size = this.gridSize;
-
-        for (let i = 0; i < samples; i++) {
-            const x = Math.floor(Math.random() * size);
-            const y = Math.floor(Math.random() * size);
-
-            if (!this.automaton.grid[x]) continue;
-
-            const autoState = this.automaton.grid[x][y] ? 1 : 0;
-            const rdState = this.stateGrid[x]?.[y] ? 1 : 0;
-
-            if (autoState !== rdState) return true;
-        }
-
-        return false;
     }
 
     getInfo() {
@@ -428,6 +371,16 @@ class RD2DEngine {
     reset() {
         this.initialized = false;
         this._forceReinit = false;
+        this.generation = 0;
+
+        // Limpieza inmediata de stateGrid
+        if (this.stateGrid) {
+            for (let x = 0; x < this.gridSize; x++) {
+                if (this.stateGrid[x]) {
+                    this.stateGrid[x].fill(0);
+                }
+            }
+        }
     }
 
     /**

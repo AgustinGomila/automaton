@@ -422,11 +422,22 @@ class CellularAutomaton {
             this.undoManager.saveState(this.grid, this.generation);
             this.grid[x][y] = state;
 
-            // Index column-major consistente (x * size + y, no y * size + x)
             if (state) this.activityAges[x * this.gridSize + y] = 0;
 
             const index = x * this.gridSize + y;
             if (markDirty) this.dirtyCells.add(index);
+
+            // Sincronizar con RD2D si está activo
+            if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+                if (state) {
+                    // Nueva celda: estado completo (15) o inferido
+                    this.rd2dEngine.stateGrid[x][y] = this.rd2dEngine._inferStateFromNeighbors(x, y) || 15;
+                } else {
+                    // Celda eliminada
+                    this.rd2dEngine.stateGrid[x][y] = 0;
+                }
+            }
+
             return true;
         }
         return false;
@@ -1325,9 +1336,13 @@ class CellularAutomaton {
             eventBus.emit('automaton:runningChanged', {isRunning: false});
         }
 
-        // Resetear Wolfram si estaba activo
+        // Resetear motores antes de limpiar el grid visual
         if (this.wolframEngine) {
             this.wolframEngine.reset();
+        }
+
+        if (this.rd2dEngine) {
+            this.rd2dEngine.reset();
         }
 
         if (this.isWorkerProcessing) {
@@ -1361,6 +1376,7 @@ class CellularAutomaton {
         this.populationHistory.clear();
         this.dirtyCells.clear();
 
+        // Forzar re-inicialización completa
         if (changed) {
             this._markAllDirty();
             this._forceFullRender();
