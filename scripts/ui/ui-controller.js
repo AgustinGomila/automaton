@@ -600,7 +600,11 @@ class UIController {
 
             // Desactivar controles 2D estándar
             document.getElementById('ruleSelector').disabled = true;
-            document.getElementById('neighborhoodType').disabled = true;
+            const neighborhoodSelect = document.getElementById('neighborhoodType');
+            if (neighborhoodSelect) {
+                neighborhoodSelect.value = 'neumann';
+                neighborhoodSelect.disabled = true;
+            }
 
             this.automaton.rd2dEngine.activate();
             this.automaton.render();
@@ -617,7 +621,11 @@ class UIController {
 
     deactivateRD2DMode() {
         document.getElementById('ruleSelector').disabled = false;
-        document.getElementById('neighborhoodType').disabled = false;
+        const neighborhoodSelect = document.getElementById('neighborhoodType');
+        if (neighborhoodSelect) {
+            neighborhoodSelect.disabled = false;
+            neighborhoodSelect.value = 'moore';  // Restaurar default
+        }
 
         this._toggleRD2DControls(false);
 
