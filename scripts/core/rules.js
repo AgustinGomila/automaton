@@ -48,6 +48,33 @@ function parseCustomRule(birthStr, survivalStr) {
     };
 }
 
+/**
+ * Genera una clave de ordenación lexicográfica para una regla.
+ * Útil para ordenar reglas en selectores o listas.
+ * @param {number[]} birth - Array de condiciones de nacimiento
+ * @param {number[]} survival - Array de condiciones de supervivencia
+ * @returns {string} - Clave de ordenación en formato "B_key|S_key"
+ */
+function getLexicographicSortKey(birth, survival) {
+    const bKey = (birth || []).slice().sort((a, b) => a - b).join('');
+    const sKey = (survival || []).slice().sort((a, b) => a - b).join('');
+    return `B${bKey}|S${sKey}`;
+}
+
+/**
+ * Compara dos reglas lexicográficamente.
+ * @param {Object} ruleA - Primera regla con birth y survival
+ * @param {Object} ruleB - Segunda regla con birth y survival
+ * @returns {number} - Negativo si A < B, 0 si iguales, positivo si A > B
+ */
+function compareRulesLexicographically(ruleA, ruleB) {
+    const keyA = getLexicographicSortKey(ruleA.birth, ruleA.survival);
+    const keyB = getLexicographicSortKey(ruleB.birth, ruleB.survival);
+    return keyA.localeCompare(keyB);
+}
+
 // Exportar funciones (no exportar RULES aquí)
 window.parseRuleString = parseRuleString;
 window.parseCustomRule = parseCustomRule;
+window.getLexicographicSortKey = getLexicographicSortKey;
+window.compareRulesLexicographically = compareRulesLexicographically;

@@ -12,6 +12,10 @@ class RulesLoader {
             const data = await response.json();
             this.RULES = data.rules || {};
             this.isLoaded = true;
+
+            // Ordenar reglas lexicográficamente por B, luego por S
+            this.RULES = this._sortRulesLexicographically(this.RULES);
+
             window.RULES = this.RULES;
 
             // === Emitir evento ===
@@ -54,10 +58,51 @@ class RulesLoader {
             },
         };
         this.isLoaded = true;
+
+        // Ordenar reglas lexicográficamente por B, luego por S
+        this.RULES = this._sortRulesLexicographically(this.RULES);
+
         window.RULES = this.RULES;
 
         // === Emitir evento ===
         eventBus.emit('rules:loaded', {rules: this.RULES});
+    }
+
+    /**
+     * Ordena las reglas lexicográficamente basándose en los valores de B (birth) y S (survival).
+     * Orden: B < B3 < B34 < B345 < B37 < B4 < B5, luego S < S12 < S123 < S2 < S23 < S3
+     * @param {Object} rules - Objeto con las reglas
+     * @returns {Object} - Objeto con las reglas ordenadas
+     * @private
+     */
+    _sortRulesLexicographically(rules) {
+        const sortedEntries = Object.entries(rules).sort((a, b) => {
+            const ruleA = a[1];
+            const ruleB = b[1];
+
+            // Crear claves de ordenación: strings concatenados de birth y survival
+            const bKeyA = (ruleA.birth || []).slice().sort((x, y) => x - y).join('');
+            const bKeyB = (ruleB.birth || []).slice().sort((x, y) => x - y).join('');
+
+            // Comparar birth lexicográficamente
+            if (bKeyA !== bKeyB) {
+                return bKeyA.localeCompare(bKeyB);
+            }
+
+            // Si birth es igual, comparar survival
+            const sKeyA = (ruleA.survival || []).slice().sort((x, y) => x - y).join('');
+            const sKeyB = (ruleB.survival || []).slice().sort((x, y) => x - y).join('');
+
+            return sKeyA.localeCompare(sKeyB);
+        });
+
+        // Reconstruir el objeto manteniendo el orden
+        const sortedRules = {};
+        for (const [key, value] of sortedEntries) {
+            sortedRules[key] = value;
+        }
+
+        return sortedRules;
     }
 }
 
