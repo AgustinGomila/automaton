@@ -318,12 +318,31 @@ class UIController {
         this._addEventListener(document.getElementById('playBtn'), 'click', () => this.togglePlay());
         this._addEventListener(document.getElementById('stepBtn'), 'click', () => this.step());
         this._addEventListener(document.getElementById('stepBackBtn'), 'click', () => this.undo());
-        this._addEventListener(document.getElementById('randomBtn'), 'click', () => this.randomize());
         this._addEventListener(document.getElementById('clearBtn'), 'click', () => this.clear());
         this._addEventListener(document.getElementById('cancelPatternBtn'), 'click', () => {
             this.deselectPattern();
             window.selectedPatternRotation = 0;
         });
+
+        // Handler del botón aleatorio
+        const randomBtn = document.getElementById('randomBtn');
+        if (randomBtn) {
+            this._addEventListener(randomBtn, 'click', () => {
+                // Obtener valor del slider
+                const percentageSlider = document.getElementById('randomPercentage');
+                const percentage = percentageSlider ?
+                    parseInt(percentageSlider.value, 10) / 100 : 0.3;
+
+                this.automaton.randomize(percentage);
+                this._showNotification(
+                    `Tablero aleatorio: ${Math.round(percentage * 100)}% densidad`,
+                    'info',
+                    1500
+                );
+                this.updateHeaderInfo();
+            });
+        }
+
         // Instrucciones
         this._addEventListener(document.getElementById('instructionsBtn'), 'click', () => {
             document.getElementById('instructionsModal').classList.add('show');
@@ -365,6 +384,9 @@ class UIController {
                 eventBus.emit('automaton:wrapChanged', {wrap: wrapToggle.checked});
             });
         }
+
+        // Random Percent
+        this._bindRandomPercentageControl();
 
         // Web workers
         const workerToggle = document.getElementById('workerToggle');
@@ -886,6 +908,23 @@ class UIController {
         }
 
         return cells;
+    }
+
+    // =========================================
+    // ALEATORIEDAD
+    // =========================================
+
+    _bindRandomPercentageControl() {
+        const slider = document.getElementById('randomPercentage');
+        const display = document.getElementById('randomPercentageDisplay');
+
+        if (!slider || !display) return;
+
+        // Actualizar display al mover slider
+        this._addEventListener(slider, 'input', () => {
+            const value = parseInt(slider.value, 10);
+            display.textContent = `${value}%`;
+        });
     }
 
     // =========================================

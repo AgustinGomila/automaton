@@ -143,6 +143,25 @@
                         </div>
                     </div>
 
+
+                    <div class="config-group random-control">
+                        <button id="randomBtn" class="btn-control btn-random">
+                            <i class="fas fa-dice"></i> Aleatorio
+                        </button>
+
+                        <div class="random-percentage-control" style="margin-top: 10px;">
+                            <div class="slider-header">
+                                <label for="randomPercentage">Densidad</label>
+                                <span id="randomPercentageDisplay" class="value-display">30%</span>
+                            </div>
+                            <input type="range" id="randomPercentage" min="5" max="90" value="30" step="5">
+                            <div class="range-ticks">
+                                <span>5%</span>
+                                <span>90%</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="config-group">
                         <label for="speedControl">
                             <i class="fas fa-tachometer-alt"></i> Velocidad:
@@ -324,11 +343,6 @@
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
-
-                    <button class="btn-control btn-random" id="randomBtn">
-                        <i class="fas fa-dice"></i>
-                        <span>Aleatorio</span>
-                    </button>
 
                     <button class="btn-control btn-clear" id="clearBtn">
                         <i class="fas fa-broom"></i>

@@ -1255,78 +1255,49 @@ class CellularAutomaton {
     // =========================================
 
     randomize(density = 0.3) {
-        // 1. Detener completamente la ejecución si está activa
-        const wasRunning = this.isRunning;
-        if (wasRunning) {
-            this.stop(); // Cancela RAF
-            this.isRunning = false; // Asegurar estado consistente
-        }
+        // Validar rango
+        const validDensity = Math.max(0.05, Math.min(0.9, density));
 
-        // 2. Limpiar completamente el worker si está procesando
-        if (this.isWorkerProcessing) {
-            this._cleanupWorker();
-            this.isWorkerProcessing = false;
-        }
+        this.undoManager.saveState(this.grid, this.generation);
 
-        // 3. Esperar un frame para asegurar que RAF se detuvo
-        setTimeout(() => {
-            // 4. Limpiar el estado como en reset
-            this.undoManager.saveState(this.grid, this.generation);
-            this.activityAges = new Uint8Array(this.gridSize * this.gridSize);
+        let changed = false;
 
-            // 5. Deshabilitar tracking durante operación masiva
-            const wasTracking = this.undoManager.isTracking;
-            this.undoManager.stopTracking();
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                const wasAlive = this.grid[x][y];
+                // Usar el porcentaje proporcionado
+                const isAlive = Math.random() < validDensity ? 1 : 0;
 
-            let changed = false;
-            const gridSize = this.gridSize;
+                if (this.grid[x][y] !== isAlive) {
+                    this.grid[x][y] = isAlive;
+                    changed = true;
+                }
 
-            // 6. Aplicar aleatorización (mismo código existente)
-            for (let x = 0; x < gridSize; x++) {
-                const row = this.grid[x];
-                for (let y = 0; y < gridSize; y++) {
-                    const newState = Math.random() < density;
-                    if (row[y] !== newState) {
-                        row[y] = newState;
-                        changed = true;
-                    }
+                if (isAlive) {
+                    this.activityAges[x * this.gridSize + y] = 0;
                 }
             }
+        }
 
-            // 7. Restaurar tracking
-            if (wasTracking) {
-                this.undoManager.startTracking();
-            }
-
-            // 8. Resetear estado
+        if (changed) {
+            this._markAllDirty();
+            this._forceFullRender();
+            this.updateStats();
             this.generation = 0;
-            this.isLimitReached = false;
             this.populationHistory.clear();
-            this.dirtyCells.clear();
 
-            // 9. Forzar reinicio de worker si es necesario
-            if (this.gridSize >= this.workerThreshold) {
-                this._initWorker();
+            // Resetear motores especiales si están activos
+            if (this.wolframEngine) {
+                this.wolframEngine.reset();
+            }
+            if (this.rd2dEngine) {
+                this.rd2dEngine.reset();
             }
 
-            // 10. Actualizar y renderizar completo
-            if (changed) {
-                this._markAllDirty();
-                this.updateStats();
-                this.render();
-            }
+            eventBus.emit('automaton:cleared');
+        }
 
-            this.prevFlags.set(this.renderFlags);
-
-            // 11. Solo si estaba ejecutándose, reiniciar
-            if (wasRunning) {
-                // Pequeña pausa para asegurar render completo
-                setTimeout(() => {
-                    this.isRunning = true;
-                    this.start();
-                }, 50);
-            }
-        }, 0);
+        return changed;
     }
 
     clear() {

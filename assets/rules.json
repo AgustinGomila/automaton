@@ -40,6 +40,21 @@
         3
       ]
     },
+    "7-life": {
+      "name": "7-Life",
+      "ruleString": "B37/S23",
+      "description": "7-Vida",
+      "descriptionLong": "Regla similar a Conway's Life",
+      "author": "Louis Kauffman",
+      "survival": [
+        2,
+        3
+      ],
+      "birth": [
+        3,
+        7
+      ]
+    },
     "2x2": {
       "name": "2x2",
       "ruleString": "B36/S125",
