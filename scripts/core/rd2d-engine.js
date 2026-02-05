@@ -190,17 +190,6 @@ class RD2DEngine {
     }
 
     /**
-     * Obtiene nombre/icono del estado
-     */
-    static getStateName(state) {
-        const names = [
-            '∅', 'E', 'W', 'EW', 'S', 'SE', 'SW', 'SEW',
-            'N', 'NE', 'NW', 'NEW', 'NS', 'NSE', 'NSW', 'NSEW'
-        ];
-        return names[state] || '∅';
-    }
-
-    /**
      * Renderiza una celda RD-2D mostrando sus fronteras como líneas
      */
     _renderRD2DCell(ctx, x, y, cellSize, state) {
@@ -260,24 +249,6 @@ class RD2DEngine {
         const count = RD2DEngine.countBorders(state);
         return colors[count] || '#94a3b8';
     }
-
-    static countBorders(state) {
-        let count = 0;
-        for (let i = 0; i < 4; i++) {
-            count += (state >> i) & 1;
-        }
-        return count;
-    }
-
-    static stateToBorders(state) {
-        return {
-            N: (state >> 3) & 1,
-            S: (state >> 2) & 1,
-            E: (state >> 1) & 1,
-            W: state & 1
-        };
-    }
-
 
     /**
      * Paso de generación RD-2D
@@ -412,6 +383,35 @@ class RD2DEngine {
         console.log('================================');
 
         return counts;
+    }
+
+
+    /**
+     * Obtiene nombre/icono del estado
+     */
+    static getStateName(state) {
+        const names = [
+            '∅', 'E', 'W', 'EW', 'S', 'SE', 'SW', 'SEW',
+            'N', 'NE', 'NW', 'NEW', 'NS', 'NSE', 'NSW', 'NSEW'
+        ];
+        return names[state] || '∅';
+    }
+
+    static countBorders(state) {
+        let count = 0;
+        for (let i = 0; i < 4; i++) {
+            count += (state >> i) & 1;
+        }
+        return count;
+    }
+
+    static stateToBorders(state) {
+        return {
+            N: (state >> 3) & 1,
+            S: (state >> 2) & 1,
+            E: (state >> 1) & 1,
+            W: state & 1
+        };
     }
 
     /**

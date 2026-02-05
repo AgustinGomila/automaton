@@ -332,7 +332,7 @@ class PatternManager {
         };
 
         const pattern = window.selectedPattern?.pattern;
-        let cellsToHighlight = [];
+        let cellsToHighlight;
 
         if (!pattern || pattern === 'random') {
             cellsToHighlight = getNeighborhood(x, y);

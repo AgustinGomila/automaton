@@ -480,9 +480,9 @@ class UIController {
         const ruleInput = document.getElementById('wolframRule');
         if (ruleInput) {
             this._addEventListener(ruleInput, 'input', () => {
-                const rule = parseInt(ruleInput.value) || 30;
+                const rule = parseInt(String(ruleInput.value), 10) || 30;
                 const display = document.getElementById('wolframRuleDisplay');
-                if (display) display.textContent = rule;
+                if (display) display.textContent = String(rule);
 
                 if (this.automaton.wolframEngine?.isActive) {
                     const direction = this.automaton.wolframEngine.direction;
@@ -1326,7 +1326,7 @@ class UIController {
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value) - 1;
+        let value = parseInt(slider.value, 10) + 1;
         if (value < 1) value = 1;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -1334,7 +1334,7 @@ class UIController {
 
     increaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value) + 1;
+        let value = parseInt(slider.value, 10) + 1;
         if (value > 10) value = 10;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -1643,7 +1643,7 @@ class UIController {
             // Actualizar reglas específicas
             const rulesSpecific = document.getElementById('rulesSpecific');
             if (rulesSpecific) {
-                const binary = info.rule.toString(2).padStart(8, '0');
+                const binary = (info.rule).toString(2).padStart(8, '0');
                 rulesSpecific.innerHTML = `
             <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> Regla:</span> ${info.rule}</p>
             <p><span class="wolfram-binary"><i class="fas fa-binary"></i> Binario:</span> ${binary}</p>
