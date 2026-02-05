@@ -24,6 +24,34 @@ class RD2DEngine {
         this.generation = 0;
     }
 
+    /**
+     * Obtiene nombre/icono del estado
+     */
+    static getStateName(state) {
+        const names = [
+            '∅', 'E', 'W', 'EW', 'S', 'SE', 'SW', 'SEW',
+            'N', 'NE', 'NW', 'NEW', 'NS', 'NSE', 'NSW', 'NSEW'
+        ];
+        return names[state] || '∅';
+    }
+
+    static countBorders(state) {
+        let count = 0;
+        for (let i = 0; i < 4; i++) {
+            count += (state >> i) & 1;
+        }
+        return count;
+    }
+
+    static stateToBorders(state) {
+        return {
+            N: (state >> 3) & 1,
+            S: (state >> 2) & 1,
+            E: (state >> 1) & 1,
+            W: state & 1
+        };
+    }
+
     activate() {
         this.gridSize = this.automaton.gridSize;
         this.isActive = true;
@@ -383,35 +411,6 @@ class RD2DEngine {
         console.log('================================');
 
         return counts;
-    }
-
-
-    /**
-     * Obtiene nombre/icono del estado
-     */
-    static getStateName(state) {
-        const names = [
-            '∅', 'E', 'W', 'EW', 'S', 'SE', 'SW', 'SEW',
-            'N', 'NE', 'NW', 'NEW', 'NS', 'NSE', 'NSW', 'NSEW'
-        ];
-        return names[state] || '∅';
-    }
-
-    static countBorders(state) {
-        let count = 0;
-        for (let i = 0; i < 4; i++) {
-            count += (state >> i) & 1;
-        }
-        return count;
-    }
-
-    static stateToBorders(state) {
-        return {
-            N: (state >> 3) & 1,
-            S: (state >> 2) & 1,
-            E: (state >> 1) & 1,
-            W: state & 1
-        };
     }
 
     /**

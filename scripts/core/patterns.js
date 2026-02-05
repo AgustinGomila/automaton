@@ -512,7 +512,7 @@ const defaultPatterns = {
     // === ALEATORIO ===
     random: {
         name: "Aleatorio",
-        description: "Patrón aleatorio con densidad ~30%",
+        description: "Patrón aleatorio con densidad ~35%",
         category: "especial",
         cellCount: 0, // No aplica
         color: "#8b5cf6",

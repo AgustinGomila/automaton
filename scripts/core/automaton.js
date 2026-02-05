@@ -1157,7 +1157,7 @@ class CellularAutomaton {
         this.undoManager.stopTracking();
 
         if (pattern?.pattern === 'random') {
-            this.randomize(0.3);
+            this.randomize(0.35);
             if (wasRunning) {
                 requestAnimationFrame(() => {
                     this.isRunning = true;
@@ -1254,50 +1254,102 @@ class CellularAutomaton {
     // CONTROL DE EJECUCIÓN
     // =========================================
 
-    randomize(density = 0.3) {
-        // Validar rango
+    randomize(density = 0.35) {
+        // 1. Validar parámetros temprano
         const validDensity = Math.max(0.05, Math.min(0.9, density));
 
-        this.undoManager.saveState(this.grid, this.generation);
+        // 2. Estado de ejecución
+        const wasRunning = this.isRunning;
+        this.stop(); // Síncrono y seguro
 
-        let changed = false;
+        // 3. Sincronización atómica con worker
+        this._cleanupWorker(); // Termina worker inmediatamente
 
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                const wasAlive = this.grid[x][y];
-                // Usar el porcentaje proporcionado
-                const isAlive = Math.random() < validDensity ? 1 : 0;
-
-                if (this.grid[x][y] !== isAlive) {
-                    this.grid[x][y] = isAlive;
-                    changed = true;
-                }
-
-                if (isAlive) {
-                    this.activityAges[x * this.gridSize + y] = 0;
-                }
-            }
+        // 4. Guardar estado para undo ANTES de modificar
+        if (this.undoManager?.isTracking) {
+            this.undoManager.saveState(this.grid, this.generation);
+            this.undoManager.stopTracking();
         }
 
-        if (changed) {
-            this._markAllDirty();
-            this._forceFullRender();
-            this.updateStats();
+        try {
+            // 5. Generar nuevo estado directamente en el grid existente
+            // (evita doble memoria y problemas de referencia)
+            const size = this.gridSize;
+            const totalCells = size * size;
+            let population = 0;
+
+            // Reutilizar arrays existentes si es posible
+            if (this.activityAges.length !== totalCells) {
+                this.activityAges = new Uint8Array(totalCells);
+            } else {
+                this.activityAges.fill(0);
+            }
+
+            // Poblar grid
+            for (let x = 0; x < size; x++) {
+                const col = this.grid[x];
+                // Limpiar columna primero (más rápido que crear nuevo array)
+                col.fill(0);
+
+                for (let y = 0; y < size; y++) {
+                    if (Math.random() < validDensity) {
+                        col[y] = 1;
+                        this.activityAges[x * size + y] = 0;
+                        population++;
+                    }
+                }
+            }
+
+            // 6. Actualizar estado
             this.generation = 0;
+            this.isLimitReached = false;
             this.populationHistory.clear();
+            this._lastPopulation = population;
 
-            // Resetear motores especiales si están activos
-            if (this.wolframEngine) {
-                this.wolframEngine.reset();
-            }
-            if (this.rd2dEngine) {
-                this.rd2dEngine.reset();
+            // 7. Resetear motores especiales
+            this.wolframEngine?.reset();
+            this.rd2dEngine?.reset();
+
+            // 8. Sincronizar renderizado (sin dirtyCells para full render)
+            this.renderFlags.fill(0); // Necesita renderizarse
+            this.prevFlags.fill(0);
+            this.dirtyCells.clear(); // No usamos dirty optimization aquí
+
+            // 9. Renderizar y actualizar stats
+            this._forceFullRender();
+            this.updateStats(population);
+
+            // 10. Evento de éxito
+            eventBus.emit('automaton:randomized', {
+                density: validDensity,
+                population,
+                gridSize: size
+            });
+
+        } catch (error) {
+            console.error('❌ Error en randomize:', error);
+            eventBus.emit('automaton:error', {
+                operation: 'randomize',
+                error: error.message
+            });
+            // No intentamos recuperación parcial - mejor estado conocido
+
+        } finally {
+            // 11. Siempre reanudar tracking y worker si es necesario
+            if (this.undoManager) {
+                this.undoManager.startTracking();
             }
 
-            eventBus.emit('automaton:cleared');
+            if (this.gridSize >= this.workerThreshold) {
+                this._initWorker();
+            }
+
+            // 12. Reanudar solo si estaba corriendo Y no hubo error
+            if (wasRunning) {
+                // Usar setTimeout en lugar de rAF para asegurar que todo procesó
+                setTimeout(() => this.start(), 0);
+            }
         }
-
-        return changed;
     }
 
     clear() {

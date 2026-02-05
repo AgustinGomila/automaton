@@ -331,7 +331,7 @@ class UIController {
                 // Obtener valor del slider
                 const percentageSlider = document.getElementById('randomPercentage');
                 const percentage = percentageSlider ?
-                    parseInt(percentageSlider.value, 10) / 100 : 0.3;
+                    parseInt(percentageSlider.value, 10) / 100 : 0.35;
 
                 this.automaton.randomize(percentage);
                 this._showNotification(
