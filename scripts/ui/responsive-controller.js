@@ -24,6 +24,7 @@ class ResponsiveController {
         if (menuBtn) {
             menuBtn.addEventListener('click', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 this.toggleLeftPanel();
             });
         }
@@ -33,15 +34,17 @@ class ResponsiveController {
         if (configBtn) {
             configBtn.addEventListener('click', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 this.toggleLeftPanel();
             });
         }
 
-        // Botón para cerrar panel
+        // Botón para cerrar panel - CORREGIDO
         const closeBtn = document.getElementById('closePanelBtn');
         if (closeBtn) {
             closeBtn.addEventListener('click', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 this.closeLeftPanel();
             });
         }
@@ -103,14 +106,11 @@ class ResponsiveController {
         const leftPanel = document.getElementById('leftPanel');
         if (!leftPanel) return;
 
-        // Forzar reflow para asegurar que la transición ocurra
         leftPanel.classList.remove('mobile-hidden');
-        void leftPanel.offsetWidth; // Trigger reflow
         leftPanel.classList.add('mobile-visible');
+        document.body.classList.add('panel-open');
 
         this.isPanelOpen = true;
-        document.body.style.overflow = 'hidden';
-
         console.debug('Panel izquierdo abierto');
     }
 
@@ -120,9 +120,9 @@ class ResponsiveController {
 
         leftPanel.classList.remove('mobile-visible');
         leftPanel.classList.add('mobile-hidden');
-        this.isPanelOpen = false;
-        document.body.style.overflow = '';
+        document.body.classList.remove('panel-open');
 
+        this.isPanelOpen = false;
         console.debug('Panel izquierdo cerrado');
     }
 

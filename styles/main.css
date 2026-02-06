@@ -1803,6 +1803,222 @@ h1 i.fa-border-style {
     }
 }
 
+/* ============================================
+   ACORDEONES PARA ORGANIZACIÓN
+   ============================================ */
+
+.accordion-group {
+    margin-bottom: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.accordion-header {
+    width: 100%;
+    padding: 12px 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    color: var(--light-text);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    transition: all 0.2s ease;
+}
+
+.accordion-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.accordion-header i:first-child {
+    color: var(--primary);
+    width: 20px;
+}
+
+.accordion-icon {
+    font-size: 0.8rem;
+    color: var(--gray-text);
+    transition: transform 0.3s ease;
+}
+
+.accordion-header.active .accordion-icon {
+    transform: rotate(180deg);
+}
+
+.accordion-content {
+    padding: 12px 15px;
+    background: transparent;
+    /* Por defecto oculto, se muestra con clase active */
+    display: none;
+}
+
+/* Cuando el header está activo, mostrar el contenido siguiente */
+.accordion-header.active + .accordion-content {
+    display: block;
+    animation: accordionSlide 0.3s ease;
+}
+
+@keyframes accordionSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Ajustes para contenido dentro de acordeones */
+.accordion-content .config-group {
+    margin-bottom: 15px;
+}
+
+.accordion-content .config-group:last-child {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   PANEL LATERAL MÓVIL CORREGIDO
+   ============================================ */
+
+@media screen and (max-width: 768px) {
+    .left-panel {
+        position: fixed;
+        top: 0;
+        left: -100%;
+        width: 85%;
+        max-width: 320px;
+        height: 100vh;
+        background: var(--dark-bg);
+        z-index: 1000;
+        overflow-y: auto;
+        overflow-x: hidden;
+        transition: left 0.3s ease;
+        box-shadow: 2px 0 20px rgba(0, 0, 0, 0.5);
+        padding: 15px;
+        display: block !important;
+        visibility: visible !important;
+    }
+
+    /* Estados del panel */
+    .left-panel.mobile-visible {
+        left: 0 !important;
+    }
+
+    .left-panel.mobile-hidden {
+        left: -100% !important;
+    }
+
+    /* Overlay cuando el panel está abierto */
+    .left-panel.mobile-visible::after {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 100%;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        pointer-events: auto;
+    }
+
+    .mobile-panel-close {
+        display: flex !important;
+        width: 100%;
+        padding: 14px;
+        background: var(--danger);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 1rem;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 20px;
+        transition: all 0.2s ease;
+    }
+
+    .mobile-panel-close:hover {
+        background: #dc2626;
+        transform: translateY(-2px);
+    }
+
+    .mobile-panel-close:active {
+        transform: scale(0.98);
+    }
+
+    body.panel-open {
+        overflow: hidden;
+    }
+
+    .accordion-header {
+        padding: 14px 15px;
+        font-size: 1rem;
+    }
+
+    .accordion-content {
+        padding: 15px;
+    }
+
+    .accordion-header,
+    .mobile-panel-close,
+    .btn-control {
+        min-height: 44px;
+    }
+}
+
+/* Desktop: paneles colapsables */
+@media screen and (min-width: 769px) {
+    .left-panel {
+        position: relative;
+        left: 0 !important;
+        width: 300px;
+        height: auto;
+        background: transparent;
+        z-index: auto;
+        overflow: visible;
+        box-shadow: none;
+        transition: none;
+    }
+
+    .mobile-panel-close {
+        display: none !important;
+    }
+
+    /* En desktop, los acordeones funcionan igual pero con más espacio */
+    .accordion-content {
+        /* Hereda display:none por defecto, se controla con clase active */
+    }
+}
+
+/* ============================================
+   SCROLLBAR PERSONALIZADA PARA PANEL
+   ============================================ */
+
+.left-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.left-panel::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.left-panel::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 3px;
+}
+
+.left-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
 /* ===== RESPONSIVE ===== */
 
 /* Tabletas y móviles grandes */

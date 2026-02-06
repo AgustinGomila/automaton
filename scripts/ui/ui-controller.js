@@ -86,6 +86,7 @@ class UIController {
     async _init() {
         await this._waitForRules();
         this._bindEvents();
+        this._bindAccordionEvents();
         this._bindKeyboardEvents();
         this._bindPatternEvents();
         this._bindNeighborhoodEvents();
@@ -445,6 +446,28 @@ class UIController {
 
         // Canvas
         this._bindCanvasEvents();
+
+    }
+
+    // =========================================
+    // ACORDEONES
+    // =========================================
+
+    _bindAccordionEvents() {
+        document.querySelectorAll('.accordion-header').forEach(header => {
+            this._addEventListener(header, 'click', (e) => {
+                e.preventDefault();
+
+                const isActive = header.classList.contains('active');
+
+                // Toggle clase active en el header
+                if (isActive) {
+                    header.classList.remove('active');
+                } else {
+                    header.classList.add('active');
+                }
+            });
+        });
     }
 
     _bindCanvasEvents() {
