@@ -63,8 +63,8 @@ class PatternManager {
             patternBtn.dataset.patternKey = key;
 
             const categoryText = pattern.category ? `[${pattern.category}]\n` : '';
-            const cellCountText = pattern.cellCount ? `\nCélulas: ${pattern.cellCount}` : '';
-            patternBtn.dataset.tooltip = `${categoryText}${pattern.description}${cellCountText}\n\nClic derecho para rotar 90°`;
+            const cellCountText = pattern.cellCount ? `\n${t('patterns.cells', {count: pattern.cellCount})}` : '';
+            patternBtn.dataset.tooltip = `${categoryText}${pattern.description}${cellCountText}\n\n${t('patterns.rotate')}`;
 
             const thumbnail = document.createElement('div');
             thumbnail.className = 'pattern-thumb-horizontal';
@@ -178,8 +178,8 @@ class PatternManager {
         const descEl = document.getElementById('patternDescriptionMini');
 
         if (!window.selectedPatternKey) {
-            if (nameEl) nameEl.textContent = 'Selecciona un patrón';
-            if (detailsEl) detailsEl.textContent = 'Clic en un patrón para seleccionarlo';
+            if (nameEl) nameEl.textContent = t('patterns.select');
+            if (detailsEl) detailsEl.textContent = t('patterns.details');
             if (descEl) descEl.textContent = '';
             return;
         }
@@ -191,8 +191,8 @@ class PatternManager {
             const rotationText = window.selectedPatternRotation > 0 ? ` (${window.selectedPatternRotation}°)` : '';
             nameEl.textContent = `${pattern.name}${rotationText}`;
 
-            const categoryText = originalPattern.category ? `Categoría: ${originalPattern.category}` : '';
-            const cellCountText = originalPattern.cellCount ? ` | Células: ${originalPattern.cellCount}` : '';
+            const categoryText = originalPattern.category ? t('patterns.category', {category: originalPattern.category}) : '';
+            const cellCountText = originalPattern.cellCount ? t('patterns.cells', {count: originalPattern.cellCount}) : '';
             detailsEl.textContent = `${categoryText}${cellCountText}`;
 
             if (descEl) {

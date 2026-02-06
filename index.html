@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
-    <title>Autómata Celular</title>
+    <title data-i18n="app.title">Autómata Celular</title>
     <link href="styles/main.css" rel="stylesheet">
     <link href="images/favicon.ico" rel="icon" type="image/x-icon">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -11,11 +11,11 @@
 <body>
 <div class="container">
     <header>
-        <button class="mobile-menu-btn" id="mobileMenuBtn">
+        <button class="mobile-menu-btn" id="mobileMenuBtn" data-i18n="mobile.menu" data-i18n-attr="title" title="Menú">
             <i class="fas fa-bars"></i>
         </button>
 
-        <h1><i class="fas fa-cogs"></i> Autómata - Conway's Life</h1>
+        <h1><i class="fas fa-cogs"></i> <span id="headerTitleText">Autómata - Conway's Life</span></h1>
 
         <div class="rules-mobile-toggle" id="rulesToggle">
             <i class="fas fa-info-circle"></i>
@@ -24,27 +24,26 @@
         <div class="rules" id="rulesPanel">
             <!-- Reglas específicas -->
             <div class="rules-specific" id="rulesSpecific">
-                <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> 3 vecinos</p>
-                <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> 2 o 3 vecinos</p>
-                <p class="notation">
-                    Notación: <span class="highlight">B3/S23</span>
-                </p>
+                <!-- Se llena dinámicamente desde ui-controller.js -->
             </div>
 
             <!-- Información de vecindad -->
             <div class="header-meta-bar">
                 <div class="neighborhood-info" id="neighborhoodInfo">
-                    <i class="fas fa-crosshairs"></i> Vecindad: Moore (R1) ∞
+                    <i class="fas fa-crosshairs"></i> <span id="neighborhoodText">Vecindad: Moore (R1) ∞</span>
                 </div>
                 <div class="header-quick-controls">
                     <span id="mouseCoords" class="coords">X: 0, Y: 0</span>
-                    <button id="gridToggle" class="btn-toggle" title="Mostrar/Ocultar Grilla (G)">
+                    <button id="gridToggle" class="btn-toggle" data-i18n="tooltip.grid" data-i18n-attr="title"
+                            title="Mostrar/Ocultar Grilla (G)">
                         <i class="fas fa-border-all"></i>
                     </button>
-                    <button id="quickInfluenceToggle" class="btn-toggle" title="Área de Influencia">
+                    <button id="quickInfluenceToggle" class="btn-toggle" data-i18n="tooltip.influence"
+                            data-i18n-attr="title" title="Área de Influencia">
                         <i class="fas fa-bullseye"></i>
                     </button>
-                    <button id="exportBtn" class="btn-toggle" title="Exportar Patrón">
+                    <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
+                            title="Exportar Patrón">
                         <i class="fas fa-download"></i>
                     </button>
                 </div>
@@ -57,11 +56,11 @@
             <!-- Panel izquierdo - Configuración -->
             <div class="left-panel mobile-hidden" id="leftPanel">
                 <div class="config-section">
-                    <h3><i class="fas fa-sliders-h"></i> Configuración</h3>
+                    <h3><i class="fas fa-sliders-h"></i> <span data-i18n="config.title">Configuración</span></h3>
 
                     <div class="config-group">
                         <label for="ruleSelector">
-                            <i class="fas fa-chess-board"></i> Regla:
+                            <i class="fas fa-chess-board"></i> <span data-i18n="config.rule">Regla:</span>
                         </label>
                         <select class="limit-select" id="ruleSelector">
                             <!-- Las opciones se llenarán con JavaScript -->
@@ -72,18 +71,20 @@
                     <div class="custom-rule-group" id="customRuleGroup" style="display: none;">
                         <div class="config-group">
                             <label for="birthInput">
-                                <i class="fas fa-seedling"></i> B (Nacimiento):
+                                <i class="fas fa-seedling"></i> B (<span
+                                    data-i18n="header.rules.birth">Nacimiento</span>):
                             </label>
                             <input id="birthInput" placeholder="Ej: 3,6,8" type="text" value="3,7">
                         </div>
                         <div class="config-group">
                             <label for="survivalInput">
-                                <i class="fas fa-heart"></i> S (Supervivencia):
+                                <i class="fas fa-heart"></i> S (<span
+                                    data-i18n="header.rules.survival">Supervivencia</span>):
                             </label>
                             <input id="survivalInput" placeholder="Ej: 2,3,4" type="text" value="4,5,6,7">
                         </div>
                         <button class="btn-control" id="applyCustomRuleBtn" style="margin-top: 10px; width: 100%;">
-                            <i class="fas fa-check"></i> Aplicar Regla
+                            <i class="fas fa-check"></i> <span data-i18n="config.rule.custom.apply">Aplicar Regla</span>
                         </button>
                     </div>
 
@@ -91,7 +92,8 @@
                         <div class="toggle-switch">
                             <input checked class="toggle-checkbox" id="workerToggle" type="checkbox">
                             <label class="toggle-label" for="workerToggle">
-                                <i class="fas fa-cogs"></i> Usar Worker (grids >100)
+                                <i class="fas fa-cogs"></i> <span
+                                    data-i18n="config.worker">Usar Worker (grids >100)</span>
                                 <span class="toggle-switch-slider"></span>
                             </label>
                         </div>
@@ -99,37 +101,38 @@
 
                     <div class="config-group">
                         <label for="neighborhoodType">
-                            <i class="fas fa-project-diagram"></i> Vecindad:
+                            <i class="fas fa-project-diagram"></i> <span
+                                data-i18n="config.neighborhood">Vecindad:</span>
                         </label>
                         <select class="limit-select" id="neighborhoodType">
-                            <option value="moore">Moore (8 vecinos)</option>
-                            <option value="neumann">Neumann (4 vecinos)</option>
+                            <option value="moore" data-i18n="config.neighborhood.moore">Moore (8 vecinos)</option>
+                            <option value="neumann" data-i18n="config.neighborhood.neumann">Neumann (4 vecinos)</option>
                         </select>
                     </div>
 
                     <div class="config-group">
                         <label for="neighborhoodRadius">
-                            <i class="fas fa-expand-arrows-alt"></i> Radio:
+                            <i class="fas fa-expand-arrows-alt"></i> <span data-i18n="config.radius">Radio:</span>
                             <span class="value-display" id="radiusValue">1</span>
                         </label>
                         <input id="neighborhoodRadius" max="10" min="1" type="range" value="1">
                         <div class="range-ticks">
-                            <span>Cerca</span>
+                            <span data-i18n="config.radius.near">Cerca</span>
                             <span></span>
-                            <span>Lejos</span>
+                            <span data-i18n="config.radius.far">Lejos</span>
                         </div>
                     </div>
 
                     <div class="config-group">
                         <label for="gridSize">
-                            <i class="fas fa-border-all"></i> Tamaño:
+                            <i class="fas fa-border-all"></i> <span data-i18n="config.gridSize">Tamaño:</span>
                             <span class="value-display" id="gridSizeValue">200×200</span>
                         </label>
                         <input id="gridSize" max="400" min="20" step="5" type="range" value="200">
                         <div class="range-ticks">
-                            <span>Pequeño</span>
-                            <span>Medio</span>
-                            <span>Grande</span>
+                            <span data-i18n="config.gridSize.small">Pequeño</span>
+                            <span data-i18n="config.gridSize.medium">Medio</span>
+                            <span data-i18n="config.gridSize.large">Grande</span>
                         </div>
                     </div>
 
@@ -137,7 +140,8 @@
                         <div class="toggle-switch">
                             <input checked class="toggle-checkbox" id="wrapToggle" type="checkbox">
                             <label class="toggle-label" for="wrapToggle">
-                                <i class="fas fa-infinity"></i> Modo Toroidal (wrap)
+                                <i class="fas fa-infinity"></i> <span
+                                    data-i18n="config.wrap">Modo Toroidal (wrap)</span>
                                 <span class="toggle-switch-slider"></span>
                             </label>
                         </div>
@@ -146,12 +150,12 @@
 
                     <div class="config-group random-control">
                         <button id="randomBtn" class="btn-control btn-random">
-                            <i class="fas fa-dice"></i> Aleatorio
+                            <i class="fas fa-dice"></i> <span data-i18n="controls.random">Aleatorio</span>
                         </button>
 
                         <div class="random-percentage-control" style="margin-top: 10px;">
                             <div class="slider-header">
-                                <label for="randomPercentage">Densidad</label>
+                                <label for="randomPercentage" data-i18n="config.density">Densidad</label>
                                 <span id="randomPercentageDisplay" class="value-display">35%</span>
                             </div>
                             <input type="range" id="randomPercentage" min="5" max="90" value="35" step="5">
@@ -164,20 +168,20 @@
 
                     <div class="config-group">
                         <label for="speedControl">
-                            <i class="fas fa-tachometer-alt"></i> Velocidad:
-                            <span class="value-display" id="speedValue">Normal</span>
+                            <i class="fas fa-tachometer-alt"></i> <span data-i18n="config.speed">Velocidad:</span>
+                            <span class="value-display" id="speedValue" data-i18n="config.speed.normal">Normal</span>
                         </label>
                         <input id="speedControl" max="10" min="1" type="range" value="5">
                         <div class="range-ticks">
-                            <span>Lento</span>
-                            <span>Normal</span>
-                            <span>Rápido</span>
+                            <span data-i18n="config.speed.slow">Lento</span>
+                            <span data-i18n="config.speed.normal">Normal</span>
+                            <span data-i18n="config.speed.fast">Rápido</span>
                         </div>
                     </div>
 
                     <div class="config-group">
                         <label for="cellSize">
-                            <i class="fas fa-expand-alt"></i> Zoom:
+                            <i class="fas fa-expand-alt"></i> <span data-i18n="config.zoom">Zoom:</span>
                             <span class="value-display" id="cellSizeValue">4px</span>
                         </label>
                         <input id="cellSize" max="20" min="1" step="1" type="range" value="4">
@@ -187,7 +191,7 @@
                         <div class="toggle-switch">
                             <input class="toggle-checkbox" id="influenceToggle" type="checkbox">
                             <label class="toggle-label" for="influenceToggle">
-                                <i class="fas fa-bullseye"></i> Mostrar área de influencia
+                                <i class="fas fa-bullseye"></i> <span data-i18n="config.influence">Mostrar área de influencia</span>
                                 <span class="toggle-switch-slider"></span>
                             </label>
                         </div>
@@ -197,46 +201,46 @@
                         <div class="toggle-switch">
                             <input checked class="toggle-checkbox" id="activityEffectToggle" type="checkbox">
                             <label class="toggle-label" for="activityEffectToggle">
-                                <i class="fas fa-palette"></i> Colorear células activas
+                                <i class="fas fa-palette"></i> <span data-i18n="config.activity">Colorear células activas</span>
                                 <span class="toggle-switch-slider"></span>
                             </label>
                         </div>
                     </div>
 
                     <button class="mobile-panel-close" id="closePanelBtn">
-                        <i class="fas fa-times"></i> Cerrar
+                        <i class="fas fa-times"></i> <span data-i18n="mobile.close">Cerrar</span>
                     </button>
 
                     <div class="config-group">
                         <label for="limitType">
-                            <i class="fas fa-stopwatch"></i> Límite:
+                            <i class="fas fa-stopwatch"></i> <span data-i18n="config.limit">Límite:</span>
                         </label>
                         <select class="limit-select" id="limitType">
-                            <option value="none">Sin límite</option>
-                            <option value="generations">Generaciones</option>
-                            <option value="population">Población</option>
+                            <option value="none" data-i18n="config.limit.none">Sin límite</option>
+                            <option value="generations" data-i18n="config.limit.generations">Generaciones</option>
+                            <option value="population" data-i18n="config.limit.population">Población</option>
                         </select>
                     </div>
 
                     <div class="config-group" id="limitValueGroup" style="display: none;">
                         <label for="limitValue">
-                            <i class="fas fa-sliders-h"></i> Valor:
+                            <i class="fas fa-sliders-h"></i> <span data-i18n="config.limit.value">Valor:</span>
                             <span class="value-display" id="limitValueDisplay">0</span>
                         </label>
                         <input id="limitValue" max="10000" min="10" step="10" type="range" value="1000">
                         <div class="range-ticks">
-                            <span>Bajo</span>
-                            <span>Medio</span>
-                            <span>Alto</span>
+                            <span data-i18n="config.limit.low">Bajo</span>
+                            <span data-i18n="config.limit.medium">Medio</span>
+                            <span data-i18n="config.limit.high">Alto</span>
                         </div>
                     </div>
 
-                    <h3><i class="fas fa-dice"></i> Wolfram 1D</h3>
+                    <h3><i class="fas fa-dice"></i> <span data-i18n="wolfram.title">Wolfram 1D</span></h3>
 
                     <div class="toggle-switch">
                         <input type="checkbox" id="wolframToggle" class="toggle-checkbox">
                         <label for="wolframToggle" class="toggle-label">
-                            Activar Modo 1D
+                            <span data-i18n="wolfram.enable">Activar Modo 1D</span>
                             <span class="toggle-switch-slider"></span>
                         </label>
                     </div>
@@ -244,7 +248,8 @@
                     <div class="wolfram-controls" id="wolframControls"
                          style="margin-top: 15px; opacity: 0.5; pointer-events: none;">
                         <div class="config-group">
-                            <label>Regla (0-255): <span id="wolframRuleDisplay" class="value-display">30</span></label>
+                            <label><span data-i18n="wolfram.rule">Regla (0-255):</span> <span id="wolframRuleDisplay"
+                                                                                              class="value-display">30</span></label>
                             <input type="range" id="wolframRule" min="0" max="255" value="30">
                             <div class="range-ticks">
                                 <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
@@ -252,34 +257,55 @@
                         </div>
 
                         <div class="config-group">
-                            <label>Dirección de evolución</label>
+                            <label data-i18n="wolfram.direction">Dirección de evolución</label>
                             <select id="wolframDirection">
-                                <option value="vertical">↓ Vertical (top-down)</option>
-                                <option value="horizontal">→ Horizontal (left-right)</option>
+                                <option value="vertical" data-i18n="wolfram.vertical">↓ Vertical (top-down)</option>
+                                <option value="horizontal" data-i18n="wolfram.horizontal">→ Horizontal (left-right)
+                                </option>
                             </select>
                         </div>
 
                         <div class="wolfram-presets">
-                            <button class="btn-preset" data-rule="30">30 (Caos)</button>
-                            <button class="btn-preset" data-rule="90">90 (Sierpiński)</button>
-                            <button class="btn-preset" data-rule="110">110 (Universal)</button>
-                            <button class="btn-preset" data-rule="184">184 (Tráfico)</button>
+                            <button class="btn-preset" data-rule="30"
+                                    data-i18n="wolfram.preset.30"
+                                    data-i18n-attr="title"
+                                    title="30 (Caos)">
+                                30
+                            </button>
+                            <button class="btn-preset" data-rule="90"
+                                    data-i18n="wolfram.preset.90"
+                                    data-i18n-attr="title"
+                                    title="90 (Sierpiński)">
+                                90
+                            </button>
+                            <button class="btn-preset" data-rule="110"
+                                    data-i18n="wolfram.preset.110"
+                                    data-i18n-attr="title"
+                                    title="110 (Universal)">
+                                110
+                            </button>
+                            <button class="btn-preset" data-rule="184"
+                                    data-i18n="wolfram.preset.184"
+                                    data-i18n-attr="title"
+                                    title="184 (Tráfico)">
+                                184
+                            </button>
                         </div>
                     </div>
 
-                    <h3><i class="fas fa-border-style"></i> RD-2D</h3>
+                    <h3><i class="fas fa-border-style"></i> <span data-i18n="rd2d.title">RD-2D</span></h3>
 
                     <div class="toggle-switch">
                         <input type="checkbox" id="rd2dToggle" class="toggle-checkbox">
                         <label for="rd2dToggle" class="toggle-label">
-                            Distinción Recursiva 2D
+                            <span data-i18n="rd2d.enable">Distinción Recursiva 2D</span>
                             <span class="toggle-switch-slider"></span>
                         </label>
                     </div>
 
                     <div class="rd2d-info" style="margin-top: 15px; font-size: 0.85rem; color: var(--gray-text);">
-                        <p>16 estados: [N,S,E,W]</p>
-                        <p>Regla: XOR de vecinos</p>
+                        <p data-i18n="rd2d.states">16 estados: [N,S,E,W]</p>
+                        <p data-i18n="rd2d.rule">Regla: XOR de vecinos</p>
                         <div class="rd2d-states-preview"
                              style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 10px; font-size: 0.65rem; text-align: center;">
                             <span>0000 (∅)</span><span>0100 (S)</span><span>1000 (N)</span><span>1100 (NS)</span>
@@ -287,6 +313,16 @@
                             <span>0010 (W)</span><span>0110 (SW)</span><span>1010 (NW)</span><span>1110 (NSW)</span>
                             <span>0011 (EW)</span><span>0111 (SEW)</span><span>1011 (NEW)</span><span>1111 (NSEW)</span>
                         </div>
+                    </div>
+
+                    <div class="config-group">
+                        <label for="languageSelect">
+                            <i class="fas fa-globe"></i> <span data-i18n="config.language">Idioma:</span>
+                        </label>
+                        <select class="limit-select" id="languageSelect">
+                            <option value="es">Español</option>
+                            <option value="en">English</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -296,15 +332,15 @@
                 <!-- Estadísticas - MOSTRAR SIEMPRE -->
                 <div class="stats">
                     <div class="stat-item">
-                        <span class="stat-label"><i class="fas fa-history"></i> Generación</span>
+                        <span class="stat-label"><i class="fas fa-history"></i> <span data-i18n="stats.generation">Generación</span></span>
                         <span class="stat-value generation" id="generation">0</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label"><i class="fas fa-users"></i> Población</span>
+                        <span class="stat-label"><i class="fas fa-users"></i> <span data-i18n="stats.population">Población</span></span>
                         <span class="stat-value population" id="population">0</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-label"><i class="fas fa-percentage"></i> Densidad</span>
+                        <span class="stat-label"><i class="fas fa-percentage"></i> <span data-i18n="stats.density">Densidad</span></span>
                         <span class="stat-value density" id="density">0.0%</span>
                     </div>
                 </div>
@@ -322,41 +358,43 @@
                 <div class="controls">
                     <button class="btn-control btn-play" id="playBtn">
                         <i class="fas fa-play" id="playIcon"></i>
-                        <span id="playText">Ejecutar</span>
+                        <span data-i18n="controls.play">Ejecutar</span>
                     </button>
 
                     <button class="btn-control btn-step" id="stepBtn">
                         <i class="fas fa-step-forward"></i>
-                        <span>Paso</span>
+                        <span data-i18n="controls.step">Paso</span>
                     </button>
 
                     <button class="btn-control btn-step-back" id="stepBackBtn">
                         <i class="fas fa-step-backward"></i>
-                        <span>Atrás</span>
+                        <span data-i18n="controls.undo">Atrás</span>
                     </button>
 
                     <div class="speed-buttons">
-                        <button class="btn-speed" id="speedDown" title="Más lento">
+                        <button class="btn-speed" id="speedDown" data-i18n="tooltip.speed.slower" data-i18n-attr="title"
+                                title="Más lento">
                             <i class="fas fa-minus"></i>
                         </button>
-                        <button class="btn-speed" id="speedUp" title="Más rápido">
+                        <button class="btn-speed" id="speedUp" data-i18n="tooltip.speed.faster" data-i18n-attr="title"
+                                title="Más rápido">
                             <i class="fas fa-plus"></i>
                         </button>
                     </div>
 
                     <button class="btn-control btn-clear" id="clearBtn">
                         <i class="fas fa-broom"></i>
-                        <span>Limpiar</span>
+                        <span data-i18n="controls.clear">Limpiar</span>
                     </button>
 
                     <button class="btn-control btn-cancel" id="cancelPatternBtn">
                         <i class="fas fa-times"></i>
-                        <span>Cancelar</span>
+                        <span data-i18n="controls.cancel">Cancelar</span>
                     </button>
 
                     <button class="btn-control" id="instructionsBtn">
                         <i class="fas fa-question-circle"></i>
-                        <span>Ayuda</span>
+                        <span data-i18n="controls.help">Ayuda</span>
                     </button>
                 </div>
             </div>
@@ -367,10 +405,14 @@
     <div class="patterns-horizontal-container">
         <div class="patterns-header">
             <div class="patterns-header-left">
-                <h3><i class="fas fa-shapes"></i> Patrones</h3>
+                <h3><i class="fas fa-shapes"></i> <span data-i18n="patterns.title">Patrones</span></h3>
                 <div class="pattern-info-expanded" id="patternInfoExpanded">
-                    <div class="pattern-info-main" id="patternNameMini">Selecciona un patrón</div>
-                    <div class="pattern-info-secondary" id="patternDetailsMini"></div>
+                    <div class="pattern-info-main" id="patternNameMini" data-i18n="patterns.select">Selecciona un
+                        patrón
+                    </div>
+                    <div class="pattern-info-secondary" id="patternDetailsMini" data-i18n="patterns.details">Clic en un
+                        patrón para seleccionarlo
+                    </div>
                     <div class="pattern-info-description" id="patternDescriptionMini" style="
                         font-size: 0.75rem;
                         color: var(--gray-text);
@@ -383,10 +425,12 @@
                 </div>
             </div>
             <div class="patterns-controls">
-                <button class="btn-toggle" id="patternsToggleRows" title="Alternar 1/2 filas">
+                <button class="btn-toggle" id="patternsToggleRows" data-i18n="tooltip.patterns.rows"
+                        data-i18n-attr="title" title="Alternar 1/2 filas">
                     <i class="fas fa-grip-lines"></i>
                 </button>
-                <button class="btn-toggle" id="patternsToggleCompact" title="Vista compacta">
+                <button class="btn-toggle" id="patternsToggleCompact" data-i18n="tooltip.patterns.compact"
+                        data-i18n-attr="title" title="Vista compacta">
                     <i class="fas fa-compress"></i>
                 </button>
             </div>
@@ -403,10 +447,10 @@
         <div class="footer-content">
             <p class="footer-links">
                 <a href="https://github.com/AgustinGomila/automaton" target="_blank">
-                    <i class="fab fa-github"></i> Código en GitHub
+                    <i class="fab fa-github"></i> <span data-i18n="footer.github">Código en GitHub</span>
                 </a>
                 <a href="#" id="configMobileBtn">
-                    <i class="fas fa-sliders-h"></i> Configuración
+                    <i class="fas fa-sliders-h"></i> <span data-i18n="footer.config">Configuración</span>
                 </a>
             </p>
         </div>
@@ -415,58 +459,75 @@
     <div class="modal-overlay" id="instructionsModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3><i class="fas fa-question-circle"></i> Instrucciones</h3>
+                <h3><i class="fas fa-question-circle"></i> <span data-i18n="instructions.title">Instrucciones</span>
+                </h3>
                 <button class="modal-close" id="closeModalBtn">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <div class="pattern-mode-indicator free-draw" id="drawModeIndicatorModal">Modo: Dibujo libre</div>
+                <div class="pattern-mode-indicator free-draw" id="drawModeIndicatorModal" data-i18n="mode.freeDraw">
+                    Modo: Dibujo libre
+                </div>
                 <div class="instructions-grid">
                     <div class="instruction-item">
                         <i class="fas fa-mouse-pointer"></i>
-                        <strong>Clic + arrastrar</strong> para dibujar
+                        <strong data-i18n="instructions.draw">Clic + arrastrar</strong> <span
+                            data-i18n="instructions.draw.suffix">para dibujar</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-eraser"></i>
-                        <strong>Ctrl + clic + arrastrar</strong> para borrar
+                        <strong>Ctrl + <span data-i18n="instructions.click">clic</span> + <span
+                                data-i18n="instructions.drag">arrastrar</span></strong> <span
+                            data-i18n="instructions.erase.suffix">para borrar</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-vector-square"></i>
-                        <strong>Shift + arrastrar</strong> para seleccionar área
+                        <strong>Shift + <span data-i18n="instructions.drag">arrastrar</span></strong> <span
+                            data-i18n="instructions.select.suffix">para seleccionar área</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-arrows-alt"></i>
-                        <strong>Ctrl + arrastrar</strong> selección para mover
+                        <strong>Ctrl + <span data-i18n="instructions.drag">arrastrar</span></strong> <span
+                            data-i18n="instructions.move.suffix">selección para mover</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-copy"></i>
-                        <strong>Ctrl+Shift + arrastrar</strong> selección para copiar
+                        <strong>Ctrl+Shift + <span data-i18n="instructions.drag">arrastrar</span></strong> <span
+                            data-i18n="instructions.copy.suffix">selección para copiar</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-trash"></i>
-                        <strong>Delete</strong> para borrar selección
+                        <strong>Delete</strong> <span
+                            data-i18n="instructions.delete.suffix">para borrar selección</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-redo-alt"></i>
-                        <strong>Clic derecho</strong> en patrón para rotar
+                        <strong data-i18n="instructions.rightClick">Clic derecho</strong> <span
+                            data-i18n="instructions.rotate.suffix">en patrón para rotar</span>
                     </div>
                     <div class="instruction-item">
                         <i class="fas fa-times"></i>
-                        Botón <strong>"Cancelar"</strong> para volver a dibujo libre
+                        <span data-i18n="instructions.cancel.prefix">Botón</span> <strong>"<span
+                            data-i18n="controls.cancel">Cancelar</span>"</strong> <span
+                            data-i18n="instructions.cancel.suffix">para volver a dibujo libre</span>
                     </div>
                 </div>
                 <div class="keyboard-shortcuts">
-                    <h4><i class="fas fa-keyboard"></i> Atajos de teclado</h4>
+                    <h4><i class="fas fa-keyboard"></i> <span
+                            data-i18n="instructions.shortcuts">Atajos de teclado</span></h4>
                     <ul>
-                        <li><strong>ESPACIO</strong> - Play/Pausa</li>
-                        <li><strong>S</strong> - Siguiente paso</li>
-                        <li><strong>R</strong> - Rotar patrón</li>
-                        <li><strong>A</strong> - Aleatorio</li>
-                        <li><strong>C</strong> - Limpiar</li>
-                        <li><strong>ESC</strong> - Cancelar/Clear</li>
-                        <li><strong>Ctrl+Z</strong> - Deshacer</li>
-                        <li><strong>Ctrl+Shift+Z</strong> - Rehacer</li>
+                        <li><strong>ESPACIO</strong> - <span data-i18n="instructions.shortcut.space">Play/Pausa</span>
+                        </li>
+                        <li><strong>S</strong> - <span data-i18n="instructions.shortcut.s">Siguiente paso</span></li>
+                        <li><strong>R</strong> - <span data-i18n="instructions.shortcut.r">Rotar patrón</span></li>
+                        <li><strong>A</strong> - <span data-i18n="instructions.shortcut.a">Aleatorio</span></li>
+                        <li><strong>C</strong> - <span data-i18n="instructions.shortcut.c">Limpiar</span></li>
+                        <li><strong>ESC</strong> - <span data-i18n="instructions.shortcut.esc">Cancelar/Clear</span>
+                        </li>
+                        <li><strong>Ctrl+Z</strong> - <span data-i18n="instructions.shortcut.undo">Deshacer</span></li>
+                        <li><strong>Ctrl+Shift+Z</strong> - <span data-i18n="instructions.shortcut.redo">Rehacer</span>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -474,6 +535,7 @@
     </div>
 </div>
 <script src="scripts/core/event-bus.js"></script>
+<script src="scripts/ui/i18n.js"></script>
 <script src="scripts/core/rules-loader.js"></script>
 <script src="scripts/core/rules.js"></script>
 <script src="scripts/core/pattern-loader.js"></script>

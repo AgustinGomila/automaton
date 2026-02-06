@@ -47,6 +47,26 @@ class UIController {
         this._waitForRulesAndInit().then();
 
         this._setupSelectionDelegation();
+
+        // Suscribirse a cambios de idioma
+        this._cleanups.push(
+            i18n.onLocaleChange(() => this._onLocaleChanged())
+        );
+    }
+
+    _onLocaleChanged() {
+        // Actualizar todos los elementos dinámicos
+        this.updateHeaderInfo();
+        this.updateSpeedDisplay();
+        this.updateNeighborhoodInfo();
+        this.updateDrawModeIndicator();
+
+        // Actualizar botón de play/pause según estado
+        const isRunning = this.automaton.isRunning;
+        const playText = document.querySelector('#playBtn [data-i18n]');
+        if (playText) {
+            playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
+        }
     }
 
     async _waitForRulesAndInit() {
@@ -82,8 +102,8 @@ class UIController {
             const playText = document.getElementById('playText');
 
             if (playIcon && playText) {
-                if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
-                if (playText) playText.textContent = isRunning ? 'Pausar' : 'Ejecutar';
+                playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
+                playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
             }
         });
 
@@ -269,7 +289,7 @@ class UIController {
 
             // SI ES CUSTOM Y TIENE VALORES, MOSTRAR LA NOTACIÓN REAL
             if (key === 'custom' && rule.birth.length > 0 && rule.survival.length > 0) {
-                option.textContent = `Personalizada (${rule.ruleString})`;
+                option.textContent = `${t('config.rule.custom')} (${rule.ruleString})`;
             } else {
                 option.textContent = `${rule.name} (${rule.ruleString})`;
             }
@@ -314,6 +334,11 @@ class UIController {
     // =========================================
 
     _bindEvents() {
+        // Selector de idioma
+        this._addEventListener(document.getElementById('languageSelect'), 'change', (e) => {
+            i18n.setLocale(e.target.value);
+        });
+
         // Controles principales
         this._addEventListener(document.getElementById('playBtn'), 'click', () => this.togglePlay());
         this._addEventListener(document.getElementById('stepBtn'), 'click', () => this.step());
@@ -334,11 +359,7 @@ class UIController {
                     parseInt(percentageSlider.value, 10) / 100 : 0.35;
 
                 this.automaton.randomize(percentage);
-                this._showNotification(
-                    `Tablero aleatorio: ${Math.round(percentage * 100)}% densidad`,
-                    'info',
-                    1500
-                );
+                this._showNotification(t('notif.randomized', {density: Math.round(percentage * 100)}), 'info', 1500);
                 this.updateHeaderInfo();
             });
         }
@@ -378,7 +399,7 @@ class UIController {
                 this.automaton.updateStats();
                 this.automaton._markAllDirty();
                 this.automaton.render();
-                this.updateNeighborhoodInfo(); // ACTUALIZAR INMEDIATAMENTE
+                this.updateNeighborhoodInfo();
 
                 // Emitir evento para cualquier otro listener
                 eventBus.emit('automaton:wrapChanged', {wrap: wrapToggle.checked});
@@ -494,7 +515,7 @@ class UIController {
                 if (this.automaton.wolframEngine?.isActive) {
                     this.automaton.wolframEngine.forceInitializeSeed();
                     this.automaton.render();
-                    this._showNotification('Semilla restablecida', 'info', 1500);
+                    this._showNotification(t('wolfram.resetSeed'), 'info', 1500);
                 }
             });
         }
@@ -546,7 +567,7 @@ class UIController {
                     this.automaton.clear();
                     this.automaton.wolframEngine._initializeSeed();
                     this.automaton.render();
-                    this._showNotification(`Regla ${rule} activada`, 'info', 1500);
+                    this._showNotification(t('notif.rule.enabled', {rule: rule}), 'info', 1500);
                 }
             });
         });
@@ -556,7 +577,7 @@ class UIController {
         // Esperar a que el autómata esté listo
         if (!this.automaton || !this.automaton.grid) {
             console.error('❌ Autómata no inicializado');
-            this._showNotification('Error: Autómata no listo', 'warning', 3000);
+            this._showNotification(t('notif.automata.error'), 'warning', 3000);
             return;
         }
 
@@ -582,11 +603,11 @@ class UIController {
 
             this.updateHeaderInfo();
             this._updateModeIndicator('wolfram');
-            this._showNotification(`Modo Wolfram: Regla ${rule}`, 'info', 2000);
+            this._showNotification(t('notif.wolfram.enabled', {rule: rule}), 'info', 2000);
 
         } catch (error) {
             console.error('❌ Error cargando WolframEngine:', error);
-            this._showNotification('Error cargando motor Wolfram', 'warning', 3000);
+            this._showNotification(t('notif.wolfram.error'), 'warning', 3000);
         }
     }
 
@@ -603,7 +624,7 @@ class UIController {
 
         this._updateModeIndicator('standard');
         this.updateHeaderInfo();
-        this._showNotification('Modo 2D estándar', 'info', 2000);
+        this._showNotification(t('notif.standard.enabled'), 'info', 2000);
     }
 
     async activateRD2DMode() {
@@ -633,11 +654,11 @@ class UIController {
 
             this.updateHeaderInfo();
             this._updateModeIndicator('rd2d');
-            this._showNotification('Modo RD-2D: 16 estados activado', 'info', 2000);
+            this._showNotification(t('notif.rd2d.enabled'), 'info', 2000);
 
         } catch (error) {
             console.error('Error cargando RD2DEngine:', error);
-            this._showNotification('Error cargando motor RD-2D', 'warning', 3000);
+            this._showNotification(t('notif.rd2d.error'), 'warning', 3000);
         }
     }
 
@@ -658,7 +679,7 @@ class UIController {
 
         this._updateModeIndicator('standard');
         this.updateHeaderInfo();
-        this._showNotification('Modo 2D estándar', 'info', 2000);
+        this._showNotification(t('notif.standard.enabled'), 'info', 2000);
     }
 
     /**
@@ -1298,7 +1319,7 @@ class UIController {
         const stepBtn = document.getElementById('stepBtn');
 
         if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
-        if (playText) playText.textContent = isRunning ? 'Pausar' : 'Ejecutar';
+        if (playText) playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
         if (stepBtn) stepBtn.disabled = isRunning;
     }
 
@@ -1331,13 +1352,13 @@ class UIController {
      */
     undo() {
         if (this.automaton.undoManager.undoCount === 0) {
-            this._showNotification('No hay acciones para deshacer', 'warning', 1500);
+            this._showNotification(t('notif.noUndo'), 'warning', 1500);
             return;
         }
 
         if (this.automaton.undo()) {
             console.debug('↶ Undo ejecutado');
-            this._showNotification('Deshacer ejecutado', 'info', 1000);
+            this._showNotification(t('notif.undo'), 'info', 1000);
         }
     }
 
@@ -1346,13 +1367,13 @@ class UIController {
      */
     redo() {
         if (this.automaton.undoManager.redoCount === 0) {
-            this._showNotification('No hay acciones para rehacer', 'warning', 1500);
+            this._showNotification(t('notif.noRedo'), 'warning', 1500);
             return;
         }
 
         if (this.automaton.redo()) {
             console.debug('↷ Redo ejecutado');
-            this._showNotification('Rehacer ejecutado', 'info', 1000);
+            this._showNotification(t('notif.redo'), 'info', 1000);
         }
     }
 
@@ -1365,7 +1386,7 @@ class UIController {
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value, 10) + 1;
+        let value = parseInt(String(slider.value), 10) + 1;
         if (value < 1) value = 1;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -1373,7 +1394,7 @@ class UIController {
 
     increaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(slider.value, 10) + 1;
+        let value = parseInt(String(slider.value), 10) + 1;
         if (value > 10) value = 10;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
@@ -1382,7 +1403,7 @@ class UIController {
     updateSpeedDisplay() {
         const slider = document.getElementById('speedControl');
         const value = parseInt(slider.value);
-        const speedTexts = ['Muy Lento', 'Lento', 'Normal', 'Rápido', 'Muy Rápido'];
+        const speedTexts = [t('speed.very_slow'), t('speed.slow'), t('speed.normal'), t('speed.fast'), t('speed.very_fast')];
         const index = Math.min(Math.max(Math.floor((value - 1) / 2), 0), speedTexts.length - 1);
 
         const display = document.getElementById('speedValue');
@@ -1415,7 +1436,7 @@ class UIController {
         const value = this._gridSizePendingValue;
         this._gridSizePendingValue = null;
 
-        if (!this.automaton.isRunning || confirm('Cambiar el tamaño detendrá la simulación. ¿Continuar?')) {
+        if (!this.automaton.isRunning || confirm(t('confirm.resize'))) {
             if (this.automaton.isRunning) this.togglePlay();
             this.automaton.resizeGrid(value);
         }
@@ -1494,9 +1515,9 @@ class UIController {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            alert('Patrón exportado correctamente');
+            alert(t('notif.pattern.exported'));
         } else {
-            alert('No hay patrón para exportar. Dibuja algo primero.');
+            alert(t('notif.pattern.empty'));
         }
     }
 
@@ -1563,7 +1584,7 @@ class UIController {
                 // ACTUALIZAR EL SELECTOR VISUALMENTE
                 const selector = document.getElementById('ruleSelector');
                 const selectedOption = selector.options[selector.selectedIndex];
-                selectedOption.textContent = `Personalizada (${window.RULES.custom.ruleString})`;
+                selectedOption.textContent = `${t('config.rule.custom')} (${window.RULES.custom.ruleString})`;
 
                 // ACTUALIZAR EL HEADER INMEDIATAMENTE
                 this.updateRuleInfo(window.RULES.custom);
@@ -1644,24 +1665,25 @@ class UIController {
 
             const headerTitle = document.querySelector('h1');
             if (headerTitle) {
-                headerTitle.innerHTML = `<i class="fas fa-border-style"></i> Autómata - RD-2D`;
+                headerTitle.innerHTML = `<i class="fas fa-border-style"></i> ${t('header.title', {ruleName: 'RD-2D'})}`;
             }
-            document.title = `Autómata Celular - RD-2D (16 estados)`;
+            document.title = t('app.title.rd2d');
 
             const rulesSpecific = document.getElementById('rulesSpecific');
             if (rulesSpecific) {
                 rulesSpecific.innerHTML = `
-                <p><span class="rd2d-states"><i class="fas fa-cube"></i> Estados:</span> 16 [N,S,E,W]</p>
-                <p><span class="rd2d-rule"><i class="fas fa-project-diagram"></i> Regla:</span> XOR(vecinos)</p>
-                <p><span class="rd2d-gen"><i class="fas fa-clock"></i> Generación:</span> ${info.generation}</p>
-                <p><span class="rd2d-alive"><i class="fas fa-fire"></i> Activas:</span> ${info.aliveCells}</p>
+                <p><span class="rd2d-states"><i class="fas fa-cube"></i> ${t('rd2d.states.label')}:</span> 16 [N,S,E,W]</p>
+                <p><span class="rd2d-rule"><i class="fas fa-project-diagram"></i> ${t('rd2d.rule.label')}:</span> XOR(${t('rd2d.neighbors')})</p>
+                <p><span class="rd2d-gen"><i class="fas fa-clock"></i> ${t('stats.generation')}:</span> ${info.generation}</p>
+                <p><span class="rd2d-alive"><i class="fas fa-fire"></i> ${t('rd2d.alive')}:</span> ${info.aliveCells}</p>
             `;
             }
 
-            const neighborhoodInfo = document.getElementById('neighborhoodInfo');
-            if (neighborhoodInfo) {
-                neighborhoodInfo.innerHTML = `<i class="fas fa-border-style"></i> RD-2D: Von Neumann (4 vecinos)`;
+            const neighborhoodText = document.getElementById('neighborhoodText');
+            if (neighborhoodText) {
+                neighborhoodText.textContent = t('rd2d.neighborhood');
             }
+            this.updateNeighborhoodInfo();
             return;
         }
 
@@ -1669,34 +1691,35 @@ class UIController {
         if (this.automaton.specialMode === 'wolfram' && this.automaton.wolframEngine?.isActive) {
             const info = this.automaton.wolframEngine.getInfo();
             const directionSymbol = info.direction === 'vertical' ? '↓' : '→';
-            const directionText = info.direction === 'vertical' ? 'Vertical' : 'Horizontal';
+            const directionText = info.direction === 'vertical' ? t('wolfram.vertical.short') : t('wolfram.horizontal.short');
 
             // Actualizar título principal
             const headerTitle = document.querySelector('h1');
             if (headerTitle) {
-                headerTitle.innerHTML = `<i class="fas fa-dice"></i> Autómata - Wolfram R${info.rule}`;
+                headerTitle.innerHTML = `<i class="fas fa-dice"></i> ${t('header.title', {ruleName: `Wolfram R${info.rule}`})}`;
             }
 
-            document.title = `Autómata Celular - Wolfram Regla ${info.rule}`;
+            document.title = t('app.title.wolfram', {rule: info.rule});
 
             // Actualizar reglas específicas
             const rulesSpecific = document.getElementById('rulesSpecific');
             if (rulesSpecific) {
                 const binary = (info.rule).toString(2).padStart(8, '0');
                 rulesSpecific.innerHTML = `
-            <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> Regla:</span> ${info.rule}</p>
-            <p><span class="wolfram-binary"><i class="fas fa-binary"></i> Binario:</span> ${binary}</p>
-            <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-${info.direction === 'vertical' ? 'v' : 'h'}"></i> Dirección:</span> ${directionText} ${directionSymbol}</p>
-            <p><span class="wolfram-gen"><i class="fas fa-clock"></i> Generación:</span> ${info.generation}</p>
-            <p class="notation">Progreso: <span class="highlight">${info.progress}/${info.max}</span></p>
-        `;
+                <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> ${t('config.rule')}</span> ${info.rule}</p>
+                <p><span class="wolfram-binary"><i class="fas fa-binary"></i> ${t('wolfram.binary')}</span> ${binary}</p>
+                <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-${info.direction === 'vertical' ? 'v' : 'h'}"></i> ${t('wolfram.direction')}:</span> ${directionText} ${directionSymbol}</p>
+                <p><span class="wolfram-gen"><i class="fas fa-clock"></i> ${t('stats.generation')}:</span> ${info.generation}</p>
+                <p class="notation">${t('wolfram.progress')} <span class="highlight">${info.progress}/${info.max}</span></p>
+            `;
             }
 
             // Actualizar info de vecindad
-            const neighborhoodInfo = document.getElementById('neighborhoodInfo');
-            if (neighborhoodInfo) {
-                neighborhoodInfo.innerHTML = `<i class="fas fa-dice"></i> Wolfram 1D (Vecindad: 3 celdas)`;
+            const neighborhoodText = document.getElementById('neighborhoodText');
+            if (neighborhoodText) {
+                neighborhoodText.textContent = t('wolfram.neighborhood');
             }
+            this.updateNeighborhoodInfo();
             return;
         }
 
@@ -1719,21 +1742,27 @@ class UIController {
 
     updateRuleInfo(rule) {
         const rulesSpecific = document.getElementById('rulesSpecific');
-        if (!rulesSpecific) {
-            console.warn('Elemento rulesSpecific no encontrado');
-            return;
-        }
+        if (!rulesSpecific) return;
 
         rulesSpecific.innerHTML = `
-    <p><span class="birth"><i class="fas fa-seedling"></i> Nacimiento:</span> ${rule.birth.join(', ')} vecinos</p>
-    <p><span class="survival"><i class="fas fa-heart"></i> Supervivencia:</span> ${rule.survival.join(', ')} vecinos</p>
-    <p class="notation">Notación: <span class="highlight">${rule.ruleString}</span></p>
-  `;
+        <p><span class="birth"><i class="fas fa-seedling"></i> ${t('header.rules.birth')}</span> ${rule.birth.join(', ')} ${t('header.rules.neighbors')}</p>
+        <p><span class="survival"><i class="fas fa-heart"></i> ${t('header.rules.survival')}</span> ${rule.survival.join(', ')} ${t('header.rules.neighbors')}</p>
+        <p class="notation">${t('header.rules.notation')} <span class="highlight">${rule.ruleString}</span></p>
+    `;
 
-        document.title = `Autómata Celular - ${rule.name} ${rule.ruleString}`;
+        document.title = `${t('app.title')} - ${rule.name} ${rule.ruleString}`;
+
         const headerTitle = document.querySelector('h1');
         if (headerTitle) {
-            headerTitle.innerHTML = `<i class="fas fa-cogs"></i> Autómata - ${rule.name}`;
+            headerTitle.innerHTML = `<i class="fas fa-cogs"></i> ${t('header.title', {ruleName: rule.name})}`;
+        }
+
+        const neighborhoodText = document.getElementById('neighborhoodText');
+        if (neighborhoodText) {
+            const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
+            const radius = this.automaton.neighborhoodRadius;
+            const wrap = this.automaton.wrapEdges ? '∞' : '▏▕';
+            neighborhoodText.textContent = t('header.neighborhood', {type, radius, wrap});
         }
     }
 
@@ -1761,13 +1790,21 @@ class UIController {
             return;
         }
 
-        const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
-        const radius = this.automaton.neighborhoodRadius;
-        const wrap = this.automaton.wrapEdges ? '∞' : '▏▕'; // Símbolos visuales
+        if (this.automaton.specialMode === 'wolfram' && this.automaton.wolframEngine?.isActive) {
+            infoElement.innerHTML = `<i class="fas fa-dice"></i> ${t('wolfram.neighborhood')}`;
+        } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
+            infoElement.innerHTML = `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood')}`;
+        } else {
+            const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
+            const radius = this.automaton.neighborhoodRadius;
+            const wrap = this.automaton.wrapEdges ? '∞' : '▏▕'; // Símbolos visuales
 
-        infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> Vecindad: ${type} (R${radius}) ${wrap}`;
-
-        console.debug(`🏘️ Neighborhood info actualizada: ${type} radio ${radius} ${wrap}`);
+            infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> ${t('header.neighborhood', {
+                type,
+                radius,
+                wrap
+            })}`;
+        }
     }
 
     _bindPatternsControls() {
@@ -1871,7 +1908,7 @@ class UIController {
         });
 
         const miniEl = document.getElementById('patternNameMini');
-        if (miniEl) miniEl.textContent = 'Selecciona un patrón';
+        if (miniEl) miniEl.textContent = t('patterns.select');
 
         hidePatternPreview();
         hideInfluenceArea();
@@ -1884,16 +1921,16 @@ class UIController {
 
         if (window.selectedPattern) {
             indicator.className = 'pattern-mode-indicator pattern-selected';
-            indicator.textContent = `Modo: Patrón - ${window.selectedPattern.name}`;
+            indicator.textContent = t('mode.pattern', {name: window.selectedPattern.name});
         } else {
             indicator.className = 'pattern-mode-indicator free-draw';
-            indicator.textContent = 'Modo: Dibujo libre';
+            indicator.textContent = t('mode.freeDraw');
         }
     }
 
     updateMouseCoords(x, y) {
         const coords = document.getElementById('mouseCoords');
-        if (coords) coords.textContent = `X: ${x}, Y: ${y}`;
+        if (coords) coords.textContent = t('header.coords', {x, y});
     }
 
     _updateStatsDisplay(stats) {

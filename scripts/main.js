@@ -21,10 +21,13 @@ class Application {
             await this._loadRules();
             await window.patternLoader.load();
 
-            // 2. Crear autómata
+            // 2. Inicializar DOM de i18n (con reglas disponibles)
+            i18n.initDOM();
+
+            // 3. Crear autómata
             this.automaton = new CellularAutomaton();
 
-            // 3. Esperar que esté listo
+            // 4. Esperar que esté listo
             await new Promise(resolve => {
                 const unbind = eventBus.on('automaton:ready', () => {
                     unbind();
@@ -32,17 +35,17 @@ class Application {
                 });
             });
 
-            // 4. Crear PatternManager (ESTO LLAMA A renderPatterns() INTERNAMENTE)
+            // 5. Crear PatternManager
             this.patternManager = new PatternManager(this.automaton);
             window.patternManager = this.patternManager;
 
-            // 5. Crear UI Controller
+            // 6. Crear UI Controller (esto actualizará los textos dinámicos)
             this.uiController = new UIController(this.automaton);
 
-            // 6. Crear Responsive Controller
+            // 7. Crear Responsive Controller
             this.responsiveController = new ResponsiveController();
 
-            // 7. Cleanup global
+            // 8. Cleanup global
             this._setupGlobalCleanup();
 
             console.debug('✅ Aplicación inicializada completamente');
@@ -95,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // =========================================
 // BRIDGE TEMPORAL PARA COMPATIBILIDAD RETROACTIVA
-// Eliminar tras migrar completamente todo el código a eventos
+// Eliminar tras migrar completamente el código a eventos
 // =========================================
 
 // Solo crear el bridge después de que la app esté lista

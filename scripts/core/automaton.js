@@ -92,7 +92,7 @@ class CellularAutomaton {
         });
     }
 
-    // Método genérico para inicializar motores especiales
+    // Inicializar motores especiales
     async _initSpecialEngine(engineName) {
         if (this.specialMode === engineName && this._specialEngineLoaded) {
             return Promise.resolve();
@@ -1100,7 +1100,7 @@ class CellularAutomaton {
 
         this.undoManager.startTracking();
 
-        // 4. Reanudar solo después de asegurar que todo está sincronizado
+        // 4. Reanudar solo después de asegurar que está sincronizado
         if (wasRunning) {
             // Usar RAF para asegurar que el renderizado se completó
             requestAnimationFrame(() => {
@@ -1245,8 +1245,8 @@ class CellularAutomaton {
 
         return {
             pattern,
-            name: `Patrón personalizado ${new Date().toLocaleDateString()}`,
-            description: "Patrón exportado desde el autómata"
+            name: `${t('patterns.export.name')} ${new Date().toLocaleDateString()}`,
+            description: t('patterns.export.description')
         };
     }
 
@@ -1346,7 +1346,7 @@ class CellularAutomaton {
 
             // 12. Reanudar solo si estaba corriendo Y no hubo error
             if (wasRunning) {
-                // Usar setTimeout en lugar de rAF para asegurar que todo procesó
+                // Usar setTimeout en lugar de RAF para asegurar que se procesó
                 setTimeout(() => this.start(), 0);
             }
         }

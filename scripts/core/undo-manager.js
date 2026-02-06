@@ -178,7 +178,7 @@ class UndoManager {
     }
 
     /**
-     * Limpia todo el historial
+     * Limpia el historial
      */
     clear() {
         this.undoStack = [];
