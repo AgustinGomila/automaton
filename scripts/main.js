@@ -94,6 +94,16 @@ class Application {
 // Inicialización ÚNICA
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new Application();
+
+    // Inicializar ResponsiveController después de que la app esté lista
+    eventBus.on('app:ready', () => {
+        setTimeout(() => {
+            if (!window.responsiveController) {
+                window.responsiveController = new ResponsiveController();
+            }
+            window.responsiveController.init();
+        }, 50);
+    });
 });
 
 // =========================================

@@ -5,17 +5,115 @@ class ResponsiveController {
         this.isPanelOpen = false;
         this.isRulesOpen = false;
 
-        this.init();
+        // No llamar init aquí, esperar a que todo esté listo
+        this._initialized = false;
     }
 
     init() {
+        if (this._initialized) return;
+        this._initialized = true;
+
         this.bindEvents();
-        this.adjustForMobile();
+
+        // Aplicar ajustes iniciales si es móvil - SIEMPRE esperar app:ready
+        if (this.isMobile) {
+            console.debug('ResponsiveController: Modo móvil detectado, esperando app:ready...');
+
+            // Si ya está listo, aplicar inmediatamente
+            if (window.app?.automaton && window.app?.uiController) {
+                console.debug('ResponsiveController: App ya lista, aplicando ajustes móviles');
+                this.adjustForMobile();
+            } else {
+                // Esperar evento de ready
+                const unbind = eventBus.on('app:ready', () => {
+                    unbind();
+                    console.debug('ResponsiveController: App:ready recibido, aplicando ajustes móviles');
+                    // Delay adicional para asegurar que UIController terminó su init
+                    setTimeout(() => this.adjustForMobile(), 100);
+                });
+            }
+        }
 
         window.addEventListener('resize', () => this.handleResize());
         window.addEventListener('orientationchange', () => {
             setTimeout(() => this.handleResize(), 100);
         });
+    }
+
+    adjustForMobile() {
+        console.log('=== adjustForMobile() llamado ===');
+        console.log('isMobile:', this.isMobile);
+        console.log('window.app:', window.app);
+        console.log('window.app?.automaton:', window.app?.automaton);
+        console.log('window.app?.uiController:', window.app?.uiController);
+
+        if (!this.isMobile) {
+            console.log('No es móvil, saliendo');
+            return;
+        }
+
+        const automaton = window.app?.automaton;
+        const uiController = window.app?.uiController;
+
+        if (!automaton) {
+            console.error('ERROR: Automata no disponible');
+            return;
+        }
+
+        const defaultGridSize = 200;
+        const defaultCellSize = 2;
+
+        const gridSizeInput = document.getElementById('gridSize');
+        const cellSizeInput = document.getElementById('cellSize');
+
+        // === GRID SIZE ===
+        const currentGridSize = parseInt(gridSizeInput?.value) || 0;
+        if (currentGridSize !== defaultGridSize) {
+            console.debug(`Ajustando grid: ${currentGridSize} → ${defaultGridSize}`);
+
+            if (gridSizeInput) gridSizeInput.value = String(defaultGridSize);
+
+            // Llamar a UIController para mantener consistencia
+            if (uiController) {
+                uiController.updateGridSizeDisplay();
+            }
+
+            automaton.resizeGrid(defaultGridSize);
+        }
+
+        // === ZOOM/CELL SIZE ===
+        const currentCellSize = parseInt(cellSizeInput?.value) || 0;
+
+        // Forzar el valor 2
+        if (currentCellSize !== defaultCellSize) {
+            console.debug(`Ajustando zoom: ${currentCellSize} → ${defaultCellSize}`);
+
+            if (cellSizeInput) cellSizeInput.value = String(defaultCellSize);
+
+            if (uiController) {
+                uiController.updateCellSizeDisplay();
+            }
+
+            automaton.setCellSize(defaultCellSize);
+        }
+
+        // Forzar actualización visual
+        automaton._markAllDirty();
+        automaton.render();
+
+        // Ajustes de patrones para móviles
+        const container = document.getElementById('patternsContainer');
+        if (container) {
+            container.classList.remove('two-rows');
+            container.classList.remove('compact-view');
+
+            const controls = document.querySelector('.patterns-controls');
+            if (controls && window.innerWidth < 480) {
+                controls.style.display = 'none';
+            }
+        }
+
+        console.debug('ResponsiveController: Ajustes móviles aplicados');
     }
 
     bindEvents() {
@@ -39,7 +137,7 @@ class ResponsiveController {
             });
         }
 
-        // Botón para cerrar panel - CORREGIDO
+        // Botón para cerrar panel
         const closeBtn = document.getElementById('closePanelBtn');
         if (closeBtn) {
             closeBtn.addEventListener('click', (e) => {
@@ -149,42 +247,6 @@ class ResponsiveController {
         this.isRulesOpen = false;
     }
 
-    adjustForMobile() {
-        if (!this.isMobile) return;
-
-        // Ajustar patrones para móviles
-        const container = document.getElementById('patternsContainer');
-        if (container) {
-            // En móviles, por defecto 1 fila
-            container.classList.remove('two-rows');
-            container.classList.remove('compact-view');
-
-            // Ocultar controles de patrones en móviles muy pequeños
-            const controls = document.querySelector('.patterns-controls');
-            if (controls && window.innerWidth < 480) {
-                controls.style.display = 'none';
-            }
-        }
-
-        // Ajustar tamaño de grid para móviles si es muy grande
-        const gridSizeInput = document.getElementById('gridSize');
-        if (gridSizeInput && parseInt(gridSizeInput.value) > 50) {
-            gridSizeInput.value = '40';
-            if (window.automaton) {
-                window.automaton.resizeGrid(40);
-            }
-        }
-
-        // Ajustar zoom para mejor visibilidad en móviles
-        const cellSizeInput = document.getElementById('cellSize');
-        if (cellSizeInput && parseInt(cellSizeInput.value) < 8) {
-            cellSizeInput.value = '10';
-            if (window.automaton) {
-                window.automaton.setCellSize(10);
-            }
-        }
-    }
-
     handleResize() {
         const wasMobile = this.isMobile;
         this.isMobile = window.innerWidth <= 768;
@@ -202,10 +264,3 @@ class ResponsiveController {
         }
     }
 }
-
-// Inicializar
-document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        window.responsiveController = new ResponsiveController();
-    }, 500);
-});

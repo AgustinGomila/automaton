@@ -1884,7 +1884,7 @@ h1 i.fa-border-style {
 }
 
 /* ============================================
-   PANEL LATERAL MÓVIL CORREGIDO
+   PANEL LATERAL MÓVIL
    ============================================ */
 
 @media screen and (max-width: 768px) {
@@ -1995,6 +1995,68 @@ h1 i.fa-border-style {
     /* En desktop, los acordeones funcionan igual pero con más espacio */
     .accordion-content {
         /* Hereda display:none por defecto, se controla con clase active */
+    }
+}
+
+/* ============================================
+   BOTONES EN GRID DE 3 COLUMNAS (MÓVIL)
+   ============================================ */
+
+@media screen and (max-width: 768px) {
+    .controls {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        padding: 0 10px;
+    }
+
+    .controls .btn-control {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        padding: 12px 8px;
+        font-size: 0.85rem;
+        min-height: 48px;
+    }
+
+    /* Los botones de velocidad (- +) en la última fila, centrados */
+    .controls .speed-buttons {
+        grid-column: 1 / -1; /* Ocupa todas las columnas */
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        background: transparent;
+        padding: 5px 0;
+    }
+
+    .controls .speed-buttons .btn-speed {
+        width: 50px;
+        height: 44px;
+        font-size: 1.1rem;
+    }
+
+    /* Ajustar iconos y texto para que quepan */
+    .controls .btn-control i {
+        font-size: 1rem;
+        margin-bottom: 2px;
+    }
+
+    /* Opcional: apilar icono sobre texto en botones pequeños */
+    .controls .btn-control {
+        flex-direction: column;
+        gap: 4px;
+    }
+}
+
+/* Móviles muy pequeños: ajustar fuente */
+@media screen and (max-width: 380px) {
+    .controls .btn-control {
+        font-size: 0.75rem;
+        padding: 10px 4px;
+    }
+
+    .controls .btn-control i {
+        font-size: 0.9rem;
     }
 }
 
@@ -2317,5 +2379,27 @@ h1 i.fa-border-style {
     #configMobileBtn,
     #mobileMenuBtn {
         display: none !important;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    /* Canvas wrapper ajustable */
+    .canvas-wrapper {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        display: flex;
+        justify-content: center;
+    }
+
+    #canvas-container {
+        max-width: none; /* Permitir scroll horizontal si es necesario */
+        margin: 0 auto;
+    }
+
+    /* Pero preferimos que quepa completo con el zoom 2x */
+    canvas {
+        max-width: 100%;
+        height: auto;
     }
 }
