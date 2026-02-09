@@ -552,8 +552,19 @@ class UIController {
 
                 if (this.automaton.wolframEngine?.isActive) {
                     const direction = this.automaton.wolframEngine.direction;
+
+                    // === DETENER SI ESTÁ CORRIENDO ===
+                    if (this.automaton.isRunning) {
+                        this.automaton.stop();
+                        this.automaton.isRunning = false;
+                        eventBus.emit('automaton:runningChanged', {isRunning: false});
+                    }
+
                     this.automaton.wolframEngine.activate(rule, direction);
                     this.updateHeaderInfo();
+
+                    // === SINCRONIZAR BOTÓN ===
+                    this._syncPlayButtonState();
                 }
             });
         }
@@ -584,6 +595,13 @@ class UIController {
                 if (display) display.textContent = rule.toString();
 
                 if (this.automaton.wolframEngine?.isActive) {
+                    // === DETENER SI ESTÁ CORRIENDO ===
+                    if (this.automaton.isRunning) {
+                        this.automaton.stop();
+                        this.automaton.isRunning = false;
+                        eventBus.emit('automaton:runningChanged', {isRunning: false});
+                    }
+
                     const direction = this.automaton.wolframEngine.direction;
                     this.automaton.wolframEngine.activate(rule, direction);
                     this.updateHeaderInfo();
@@ -591,6 +609,9 @@ class UIController {
                     this.automaton.wolframEngine._initializeSeed();
                     this.automaton.render();
                     this._showNotification(t('notif.rule.enabled', {rule: rule}), 'info', 1500);
+
+                    // === SINCRONIZAR BOTÓN ===
+                    this._syncPlayButtonState();
                 }
             });
         });
@@ -605,6 +626,13 @@ class UIController {
         }
 
         try {
+            // === DETENER SIEMPRE ANTES DE CAMBIAR MODO ===
+            if (this.automaton.isRunning) {
+                this.automaton.stop();
+                this.automaton.isRunning = false;
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
+            }
+
             await this.automaton._initSpecialEngine('wolfram');
 
             // Desactivar RD-2D si está activo
@@ -628,6 +656,9 @@ class UIController {
             this._updateModeIndicator('wolfram');
             this._showNotification(t('notif.wolfram.enabled', {rule: rule}), 'info', 2000);
 
+            // === SINCRONIZAR BOTÓN SIEMPRE ===
+            this._syncPlayButtonState();
+
         } catch (error) {
             console.error('❌ Error cargando WolframEngine:', error);
             this._showNotification(t('notif.wolfram.error'), 'warning', 3000);
@@ -635,6 +666,13 @@ class UIController {
     }
 
     deactivateWolframMode() {
+        // === DETENER SIEMPRE ===
+        if (this.automaton.isRunning) {
+            this.automaton.stop();
+            this.automaton.isRunning = false;
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+        }
+
         document.getElementById('ruleSelector').disabled = false;
         document.getElementById('neighborhoodType').disabled = false;
 
@@ -648,10 +686,19 @@ class UIController {
         this._updateModeIndicator('standard');
         this.updateHeaderInfo();
         this._showNotification(t('notif.standard.enabled'), 'info', 2000);
+
+        // === SINCRONIZAR BOTÓN ===
+        this._syncPlayButtonState();
     }
 
     async activateRD2DMode() {
         try {
+            if (this.automaton.isRunning) {
+                this.automaton.stop();
+                this.automaton.isRunning = false;
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
+            }
+
             await this.automaton._initSpecialEngine('rd2d');
 
             // Desactivar Wolfram si está activo
@@ -679,6 +726,7 @@ class UIController {
             this._updateModeIndicator('rd2d');
             this._showNotification(t('notif.rd2d.enabled'), 'info', 2000);
 
+            this._syncPlayButtonState();
         } catch (error) {
             console.error('Error cargando RD2DEngine:', error);
             this._showNotification(t('notif.rd2d.error'), 'warning', 3000);
@@ -686,6 +734,12 @@ class UIController {
     }
 
     deactivateRD2DMode() {
+        if (this.automaton.isRunning) {
+            this.automaton.stop();
+            this.automaton.isRunning = false;
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+        }
+
         document.getElementById('ruleSelector').disabled = false;
         const neighborhoodSelect = document.getElementById('neighborhoodType');
         if (neighborhoodSelect) {
@@ -703,6 +757,8 @@ class UIController {
         this._updateModeIndicator('standard');
         this.updateHeaderInfo();
         this._showNotification(t('notif.standard.enabled'), 'info', 2000);
+
+        this._syncPlayButtonState();
     }
 
     /**
@@ -1321,6 +1377,20 @@ class UIController {
     // CONTROL PRINCIPAL
     // =========================================
 
+    _syncPlayButtonState() {
+        const isRunning = this.automaton.isRunning;
+        const playIcon = document.getElementById('playIcon');
+        const playBtn = document.getElementById('playBtn');
+        const stepBtn = document.getElementById('stepBtn');
+
+        if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
+
+        const playText = playBtn?.querySelector('span');
+        if (playText) playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
+
+        if (stepBtn) stepBtn.disabled = isRunning;
+    }
+
     togglePlay() {
         if (this.automaton.isLimitReached) {
             this.automaton.isLimitReached = false;
@@ -1337,13 +1407,7 @@ class UIController {
             this.automaton.undoManager.startTracking();
         }
 
-        const playIcon = document.getElementById('playIcon');
-        const playText = document.getElementById('playText');
-        const stepBtn = document.getElementById('stepBtn');
-
-        if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
-        if (playText) playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
-        if (stepBtn) stepBtn.disabled = isRunning;
+        this._syncPlayButtonState();
     }
 
     step() {
@@ -1367,7 +1431,16 @@ class UIController {
     }
 
     clear() {
+        const wasRunning = this.automaton.isRunning;
+
+        if (wasRunning) {
+            this.automaton.stop();
+            this.automaton.isRunning = false;
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+        }
+
         this.automaton.clear();
+        this._syncPlayButtonState();
     }
 
     /**
@@ -1459,11 +1532,15 @@ class UIController {
         const value = this._gridSizePendingValue;
         this._gridSizePendingValue = null;
 
-        if (!this.automaton.isRunning || confirm(t('confirm.resize'))) {
-            if (this.automaton.isRunning) this.togglePlay();
-            this.automaton.resizeGrid(value);
+        // Detener si está corriendo (sin confirmar, forzar)
+        if (this.automaton.isRunning) {
+            this.automaton.stop();
+            this.automaton.isRunning = false;
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            this._syncPlayButtonState();
         }
 
+        this.automaton.resizeGrid(value);
         this._gridSizeDebounceTimer = null;
     }
 
@@ -1577,7 +1654,16 @@ class UIController {
         const selector = document.getElementById('ruleSelector');
         const customRuleGroup = document.getElementById('customRuleGroup');
 
+        // Detener si está corriendo
+        if (this.automaton.isRunning) {
+            this.automaton.stop();
+            this.automaton.isRunning = false;
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            this._syncPlayButtonState();
+        }
+
         if (selector.value === 'custom') {
+            customRuleGroup.style.display = 'block';
             customRuleGroup.style.display = 'block';
             document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
             document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');
