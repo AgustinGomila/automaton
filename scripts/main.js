@@ -3,14 +3,7 @@ class Application {
     constructor() {
         this.automaton = null;
         this.uiController = null;
-        this.responsiveController = null;
         this.patternManager = null;
-
-        this._appState = {
-            selectedPattern: null,
-            selectedPatternKey: null,
-            selectedPatternRotation: 0
-        };
 
         this._init();
     }
@@ -42,10 +35,7 @@ class Application {
             // 6. Crear UI Controller (esto actualizará los textos dinámicos)
             this.uiController = new UIController(this.automaton);
 
-            // 7. Crear Responsive Controller
-            this.responsiveController = new ResponsiveController();
-
-            // 8. Cleanup global
+            // 7. Cleanup global
             this._setupGlobalCleanup();
 
             console.debug('✅ Aplicación inicializada completamente');
