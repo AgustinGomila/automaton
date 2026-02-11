@@ -1447,7 +1447,7 @@ class UIController {
      * Ejecuta undo y muestra feedback
      */
     undo() {
-        if (this.automaton.undoCount === 0) {  // Esta propiedad ahora delega a stateManager
+        if (this.automaton.undoCount === 0) {
             this._showNotification(t('notif.noUndo'), 'warning', 1500);
             return;
         }
@@ -1462,7 +1462,7 @@ class UIController {
      * Ejecuta redo y muestra feedback
      */
     redo() {
-        if (this.automaton.redoCount === 0) {  // Esta propiedad ahora delega a stateManager
+        if (this.automaton.redoCount === 0) {
             this._showNotification(t('notif.noRedo'), 'warning', 1500);
             return;
         }

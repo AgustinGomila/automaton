@@ -16,16 +16,24 @@
  */
 
 class RD2DEngine {
+    /**
+     * @param {CellularAutomaton} automaton - Instancia del autómata coordinador
+     */
     constructor(automaton) {
         this.automaton = automaton;
         this.isActive = false;
         this.gridSize = 0;
-        this.stateGrid = null; // Grid de estados 0-15, separado del grid binario del automaton
+        // Grid de estados 0-15, separado del grid binario del automaton
+        this.stateGrid = null;
         this.generation = 0;
+        this.initialized = false;
+        this._forceReinit = false;
     }
 
     /**
-     * Obtiene nombre/icono del estado
+     * Obtiene nombre/icono del estado para debugging
+     * @param {number} state - Estado 0-15
+     * @returns {string} Nombre del estado
      */
     static getStateName(state) {
         const names = [
@@ -35,6 +43,11 @@ class RD2DEngine {
         return names[state] || '∅';
     }
 
+    /**
+     * Cuenta cantidad de fronteras abiertas en un estado
+     * @param {number} state - Estado 0-15
+     * @returns {number} Cantidad de bits activos (0-4)
+     */
     static countBorders(state) {
         let count = 0;
         for (let i = 0; i < 4; i++) {
@@ -43,6 +56,11 @@ class RD2DEngine {
         return count;
     }
 
+    /**
+     * Convierte estado numérico a objeto de fronteras
+     * @param {number} state - Estado 0-15
+     * @returns {Object} {N: 0|1, S: 0|1, E: 0|1, W: 0|1}
+     */
     static stateToBorders(state) {
         return {
             N: (state >> 3) & 1,
@@ -52,29 +70,37 @@ class RD2DEngine {
         };
     }
 
+    /**
+     * Activa el modo RD-2D
+     * @returns {RD2DEngine} this para chaining
+     */
     activate() {
         this.gridSize = this.automaton.gridSize;
         this.isActive = true;
         this.generation = 0;
+        this.initialized = false;
+        this._forceReinit = false;
 
         // Inicializar grid de estados
         this._initStateGrid();
-
-        // Inicializar con patrón semilla (cruz en el centro con estado 15)
-        this._initializeSeed();
 
         console.debug('🔲 RD-2D activado: 16 estados [N,S,E,W]');
         return this;
     }
 
+    /**
+     * Desactiva el modo RD-2D y limpia recursos
+     */
     deactivate() {
         this.isActive = false;
         this.stateGrid = null;
+        this.initialized = false;
         console.debug('🔲 RD-2D desactivado');
     }
 
     /**
-     * Inicializa el grid de estados
+     * Inicializa el grid de estados con arrays Uint8
+     * @private
      */
     _initStateGrid() {
         this.stateGrid = new Array(this.gridSize);
@@ -84,37 +110,10 @@ class RD2DEngine {
     }
 
     /**
-     * Patrón semilla: cruz central con estado completo (15)
+     * Verifica si el usuario dibujó alguna semilla en el grid
+     * @returns {boolean} true si hay celdas vivas
+     * @private
      */
-    _initializeSeed() {
-        if (this.initialized && !this._forceReinit) return;
-
-        const center = Math.floor(this.gridSize / 2);
-        const size = this.gridSize;
-
-        // Siempre crear stateGrid fresco, nunca reusar
-        this._initStateGrid();
-
-        // Colocar cruz central
-        for (let i = -2; i <= 2; i++) {
-            const vy = center + i;
-            if (vy >= 0 && vy < size) {
-                this.stateGrid[center][vy] = 15;
-                this.automaton.grid[center][vy] = 1;
-            }
-
-            const hx = center + i;
-            if (hx >= 0 && hx < size && i !== 0) {
-                this.stateGrid[hx][center] = 15;
-                this.automaton.grid[hx][center] = 1;
-            }
-        }
-
-        this.generation = 0;
-        this.initialized = true;
-        this._forceReinit = false;
-    }
-
     _checkUserSeed() {
         for (let x = 0; x < this.gridSize; x++) {
             // Verificar que la columna existe
@@ -128,8 +127,9 @@ class RD2DEngine {
     }
 
     /**
-     * Sincroniza el estado RD desde el grid binario del autómata
-     * Convierte celdas vivas del usuario a estados RD apropiados
+     * Sincroniza el estado RD desde el grid binario del autómata.
+     * Convierte celdas vivas del usuario a estados RD apropiados.
+     * @private
      */
     _syncFromAutomatonGrid() {
         // Reiniciar stateGrid
@@ -153,8 +153,13 @@ class RD2DEngine {
     }
 
     /**
-     * Intenta inferir un estado RD razonable basado en vecinos inmediatos
-     * Si una celda tiene vecinos vivos en ciertas direcciones, abre esas fronteras
+     * Intenta inferir un estado RD razonable basado en vecinos inmediatos.
+     * Si una celda tiene vecinos vivos en ciertas direcciones, abre esas fronteras.
+     *
+     * @param {number} x - Coordenada X
+     * @param {number} y - Coordenada Y
+     * @returns {number} Estado inferido (0-15) o 15 por defecto
+     * @private
      */
     _inferStateFromNeighbors(x, y) {
         const size = this.gridSize;
@@ -183,8 +188,10 @@ class RD2DEngine {
     }
 
     /**
-     * Actualiza el grid del autómata desde el stateGrid RD
-     * Llama después de cada paso RD para sincronizar visualización
+     * Actualiza el grid del autómata desde el stateGrid RD.
+     * Llama después de cada paso RD para sincronizar visualización.
+     * Marca celdas como dirty en el renderer para actualización visual.
+     * @private
      */
     _syncToAutomatonGrid() {
         const size = this.gridSize;
@@ -195,12 +202,13 @@ class RD2DEngine {
             for (let y = 0; y < size; y++) {
                 const isAlive = this.stateGrid[x]?.[y] !== 0;
 
-                // Solo actualizar si cambió, y sin usar setCell (evitar overhead)
+                // Solo actualizar si cambió, y sin usar setCell (evitar overhead de undo)
                 if (this.automaton.grid[x][y] !== (isAlive ? 1 : 0)) {
                     this.automaton.grid[x][y] = isAlive ? 1 : 0;
 
+                    // Marcar como dirty en el renderer para actualización visual
                     if (isAlive) {
-                        this.automaton.dirtyCells.add(x * size + y);
+                        this.automaton.renderer.markDirty(x, y);
                     }
                 }
             }
@@ -209,6 +217,10 @@ class RD2DEngine {
 
     /**
      * Obtiene el estado de una celda con wrap (toroidal)
+     * @param {number} x - Coordenada X
+     * @param {number} y - Coordenada Y
+     * @returns {number} Estado 0-15
+     * @private
      */
     _getState(x, y) {
         const size = this.gridSize;
@@ -218,68 +230,10 @@ class RD2DEngine {
     }
 
     /**
-     * Renderiza una celda RD-2D mostrando sus fronteras como líneas
-     */
-    _renderRD2DCell(ctx, x, y, cellSize, state) {
-        if (state === 0) return; // Vacío, no dibujar nada
-
-        const borders = RD2DEngine.stateToBorders(state);
-        const centerX = x * cellSize + cellSize / 2;
-        const centerY = y * cellSize + cellSize / 2;
-        const half = cellSize / 2;
-
-        ctx.strokeStyle = this._getStateColor(state);
-        ctx.lineWidth = Math.max(2, cellSize / 4);
-        ctx.lineCap = 'round';
-
-        // Dibujar líneas en los bordes abiertos
-        ctx.beginPath();
-
-        if (borders.N) { // Norte (arriba)
-            ctx.moveTo(centerX, centerY);
-            ctx.lineTo(centerX, centerY - half + 1);
-        }
-        if (borders.S) { // Sur (abajo)
-            ctx.moveTo(centerX, centerY);
-            ctx.lineTo(centerX, centerY + half - 1);
-        }
-        if (borders.E) { // Este (derecha)
-            ctx.moveTo(centerX, centerY);
-            ctx.lineTo(centerX + half - 1, centerY);
-        }
-        if (borders.W) { // Oeste (izquierda)
-            ctx.moveTo(centerX, centerY);
-            ctx.lineTo(centerX - half + 1, centerY);
-        }
-
-        ctx.stroke();
-
-        // Punto central para estados con múltiples fronteras
-        if (state > 0) {
-            ctx.fillStyle = ctx.strokeStyle;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, cellSize / 6, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-
-    /**
-     * Colores por "tipo" de estado (número de fronteras abiertas)
-     */
-    _getStateColor(state) {
-        const colors = {
-            0: '#000000',  // ∅ Vacío
-            1: '#ef4444',  // 1 frontera: rojo brillante
-            2: '#f97316',  // 2 fronteras: naranja
-            3: '#eab308',  // 3 fronteras: amarillo
-            4: '#22c55e',  // 4 fronteras (NSEW): verde
-        };
-        const count = RD2DEngine.countBorders(state);
-        return colors[count] || '#94a3b8';
-    }
-
-    /**
-     * Paso de generación RD-2D
+     * Paso de generación RD-2D.
+     * Calcula siguiente estado aplicando XOR de vecinos cardinales.
+     *
+     * @returns {boolean} true si debe continuar, false si estado estable
      */
     step() {
         if (!this.isActive) return false;
@@ -305,7 +259,7 @@ class RD2DEngine {
                 this._syncFromAutomatonGrid();
             } else {
                 console.debug('🔲 RD-2D: Inicializando semilla por defecto');
-                this._initializeSeed();
+                this._initializeDefaultSeed();
             }
 
             this.initialized = true;
@@ -342,7 +296,7 @@ class RD2DEngine {
         this.stateGrid = newStateGrid;
         this.generation++;
 
-        // Sincronizar visualización
+        // Sincronizar visualización (marca dirty cells en el renderer)
         this._syncToAutomatonGrid();
 
         if (!changed) {
@@ -353,6 +307,42 @@ class RD2DEngine {
         return true;
     }
 
+    /**
+     * Inicializa patrón semilla por defecto (cruz central con estado 15).
+     * Se usa cuando no hay semilla del usuario.
+     * @private
+     */
+    _initializeDefaultSeed() {
+        const center = Math.floor(this.gridSize / 2);
+        const size = this.gridSize;
+
+        // Crear stateGrid fresco
+        this._initStateGrid();
+
+        // Colocar cruz central
+        for (let i = -2; i <= 2; i++) {
+            const vy = center + i;
+            if (vy >= 0 && vy < size) {
+                this.stateGrid[center][vy] = 15;
+                this.automaton.grid[center][vy] = 1;
+            }
+
+            const hx = center + i;
+            if (hx >= 0 && hx < size && i !== 0) {
+                this.stateGrid[hx][center] = 15;
+                this.automaton.grid[hx][center] = 1;
+            }
+        }
+
+        this.generation = 0;
+        this.initialized = true;
+        this._forceReinit = false;
+    }
+
+    /**
+     * Obtiene información del estado actual para UI/estadísticas
+     * @returns {Object} Información del motor
+     */
     getInfo() {
         const aliveCells = this.stateGrid ?
             this.stateGrid.flat().filter(s => s !== 0).length : 0;
@@ -367,12 +357,16 @@ class RD2DEngine {
         };
     }
 
+    /**
+     * Resetea el motor para reinicio controlado.
+     * La próxima llamada a step() reinicializará desde el grid actual.
+     */
     reset() {
         this.initialized = false;
         this._forceReinit = false;
         this.generation = 0;
 
-        // Limpieza inmediata de stateGrid
+        // Limpiar stateGrid inmediatamente
         if (this.stateGrid) {
             for (let x = 0; x < this.gridSize; x++) {
                 if (this.stateGrid[x]) {
@@ -385,7 +379,7 @@ class RD2DEngine {
     /**
      * Debug: Muestra estadísticas de estados en consola
      */
-    _debugStateDistribution() {
+    debugStateDistribution() {
         if (!this.stateGrid) return;
 
         const counts = new Array(16).fill(0);
@@ -416,7 +410,7 @@ class RD2DEngine {
     /**
      * Debug: Verifica sincronización entre stateGrid y automaton.grid
      */
-    _debugSyncCheck() {
+    debugSyncCheck() {
         let mismatches = 0;
         const maxChecks = 100;
         const sampleX = Math.floor(Math.random() * (this.gridSize - maxChecks));
