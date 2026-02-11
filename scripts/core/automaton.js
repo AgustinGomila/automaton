@@ -1,11 +1,12 @@
 /**
  * CellularAutomaton - Coordinador del autómata celular
  *
- * Responsabilidad: Integrar el core matemático con:
+ * Responsabilidad: Integrar todos los subsistemas:
+ * - Core matemático (CellularAutomatonCore)
+ * - Gestión de estado (StateManager)
  * - Renderizado en canvas
  * - Workers para grids grandes
  * - Motores especiales (Wolfram, RD-2D)
- * - Gestión de estado (undo, límites)
  * - Comunicación con UI (EventBus)
  */
 
@@ -23,6 +24,21 @@ class CellularAutomaton {
             neighborhoodRadius: 1,
             wrapEdges: true
         });
+
+        // === STATE MANAGER ===
+        this.stateManager = new StateManager(this.core.gridManager, {
+            maxHistory: 50,
+            maxPopulationHistory: 100
+        });
+
+        // Conectar callbacks del StateManager
+        this.stateManager.on({
+            onStateChange: (event) => this._handleStateChange(event),
+            onHistoryChange: (stats) => this._handleHistoryChange(stats)
+        });
+
+        // Iniciar tracking de estado
+        this.stateManager.startTracking();
 
         // Conectar callbacks del core
         this.core.on({
@@ -69,20 +85,12 @@ class CellularAutomaton {
         this.specialMode = null;
         this._specialEngineLoaded = false;
 
-        // === UNDO MANAGER ===
-        this.undoManager = new UndoManager(50);
-        this.undoManager.startTracking();
-
         // === LÍMITES ===
         this.limitType = 'none';
         this.limitValue = 1000;
         this.maxGenerations = null;
         this.maxPopulation = null;
         this.isLimitReached = false;
-
-        // === HISTORIAL ===
-        this.populationHistory = new CircularArray(100);
-        this._lastPopulation = 0;
 
         // === EVENTOS ===
         this._cleanupResize = this._addEventListener(window, 'resize', () => {
@@ -144,6 +152,31 @@ class CellularAutomaton {
     }
 
     // =========================================
+    // CALLBACKS DEL STATE MANAGER
+    // =========================================
+
+    // Propiedades delegadas a StateManager
+    get undoCount() {
+        return this.stateManager?.undoCount || 0;
+    }
+
+    get redoCount() {
+        return this.stateManager?.redoCount || 0;
+    }
+
+    get canUndo() {
+        return this.stateManager?.canUndo || false;
+    }
+
+    get canRedo() {
+        return this.stateManager?.canRedo || false;
+    }
+
+    get populationHistory() {
+        return this.stateManager?.populationHistory;
+    }
+
+    // =========================================
     // WORKERS
     // =========================================
 
@@ -196,12 +229,10 @@ class CellularAutomaton {
 
         this._cleanupWorker();
 
-        if (this.undoManager) {
-            try {
-                this.undoManager.clear();
-            } catch (e) {
-            }
-            this.undoManager = null;
+        // Destruir StateManager
+        if (this.stateManager) {
+            this.stateManager.destroy();
+            this.stateManager = null;
         }
 
         if (this.core) {
@@ -229,11 +260,6 @@ class CellularAutomaton {
             this.dirtyCells = null;
         }
 
-        if (this.populationHistory) {
-            this.populationHistory.clear();
-            this.populationHistory = null;
-        }
-
         this.ctx = null;
         this.canvas = null;
         this._isDestroyed = true;
@@ -248,10 +274,36 @@ class CellularAutomaton {
 
     _handleCoreGeneration(stats) {
         this.generation = stats.generation;
-        this._lastPopulation = stats.population;
-        this.populationHistory.push(stats.population);
+
+        // Registrar en StateManager
+        this.stateManager.recordPopulation(stats.population);
 
         eventBus.emit('stats:updated', stats);
+    }
+
+    // =========================================
+    // ACTIVIDAD (ESTADOS)
+    // =========================================
+
+    _handleStateChange(event) {
+        // Propagar al eventBus para la UI
+        eventBus.emit('state:changed', event);
+
+        // Manejar tipos específicos
+        switch (event.type) {
+            case 'clear':
+            case 'randomize':
+            case 'import':
+            case 'paste':
+                this._markAllDirty();
+                this.updateStats();
+                this.render();
+                break;
+        }
+    }
+
+    _handleHistoryChange(stats) {
+        eventBus.emit('history:changed', stats);
     }
 
     // =========================================
@@ -281,6 +333,7 @@ class CellularAutomaton {
                 this.renderFlags = new Uint8Array(event.size * event.size);
                 this.prevFlags = new Uint8Array(event.size * event.size);
                 this.activityAges = new Uint8Array(event.size * event.size);
+                this.dirtyCells.clear();
                 break;
 
             case 'ruleChange':
@@ -366,7 +419,9 @@ class CellularAutomaton {
                     }
 
                     this.generation = generation;
-                    this._lastPopulation = population;
+
+                    // Registrar población en StateManager
+                    this.stateManager.recordPopulation(population);
 
                     // Marcar celdas modificadas como dirty
                     this.dirtyCells.clear();
@@ -415,6 +470,52 @@ class CellularAutomaton {
         }
     }
 
+    // =========================================
+    // MÉTODOS PÚBLICOS - DELEGAN A SUBSISTEMAS
+    // =========================================
+
+    _nextGenerationWorker() {
+        if (this.isWorkerProcessing) {
+            return 0;
+        }
+
+        this.isWorkerProcessing = true;
+
+        const size = this.gridSize;
+        const flatGrid = new Uint8Array(size * size);
+
+        const grid = this.core.gridManager.grid;
+        for (let x = 0; x < size; x++) {
+            const col = grid[x];
+            const baseIdx = x * size;
+            for (let y = 0; y < size; y++) {
+                flatGrid[baseIdx + y] = col[y] ? 1 : 0;
+            }
+        }
+
+        const messageData = {
+            grid: flatGrid,
+            gridSize: size,
+            rule: {
+                birth: this.core.ruleEngine.birth,
+                survival: this.core.ruleEngine.survival
+            },
+            wrapEdges: this.core.neighborhood.wrapEdges,
+            neighborhoodType: this.core.neighborhood.type,
+            neighborhoodRadius: this.core.neighborhood.radius,
+            neighborOffsets: this.core.neighborhood._offsets,
+            generation: this.generation
+        };
+
+        try {
+            this.worker.postMessage(messageData, [flatGrid.buffer]);
+        } catch (e) {
+            this.worker.postMessage(messageData);
+        }
+
+        return 0;
+    }
+
     nextGeneration() {
         if (this.checkLimits()) return 0;
 
@@ -460,74 +561,14 @@ class CellularAutomaton {
         // Usar el core para calcular
         const stats = this.core.step();
 
-        // Sincronizar estado de actividad
-        const changedIndices = [];
-        // Necesitamos reconstruir los índices desde las coordenadas
-        // Esto es una limitación: el core no expone índices flat
-        // Por ahora, marcamos todo como dirty si hay muchos cambios
         if (stats.births + stats.deaths > this.gridSize * this.gridSize * 0.1) {
             this._markAllDirty();
-        } else {
-            // No tenemos acceso a las coordenadas específicas desde stats
-            // Esto se podría mejorar haciendo que el core devuelva changedCells
-            this._markAllDirty(); // Conservador por ahora
         }
 
         this.checkLimits();
-        this._updateActivityAges([]); // Recalcular todo
+        this._updateActivityAges([]);
 
         return stats.births + stats.deaths;
-    }
-
-    _nextGenerationWorker() {
-        if (this.isWorkerProcessing) {
-            // No loguear cada vez para no saturar la consola
-            return 0;
-        }
-
-        this.isWorkerProcessing = true;
-
-        const size = this.gridSize;
-        const flatGrid = new Uint8Array(size * size);
-
-        // Flatten column-major desde el grid del core
-        const grid = this.core.gridManager.grid;
-        for (let x = 0; x < size; x++) {
-            const col = grid[x];
-            const baseIdx = x * size;
-            for (let y = 0; y < size; y++) {
-                flatGrid[baseIdx + y] = col[y] ? 1 : 0;
-            }
-        }
-
-        const messageData = {
-            grid: flatGrid,
-            gridSize: size,
-            rule: {
-                birth: this.core.ruleEngine.birth,
-                survival: this.core.ruleEngine.survival
-            },
-            wrapEdges: this.core.neighborhood.wrapEdges,
-            neighborhoodType: this.core.neighborhood.type,
-            neighborhoodRadius: this.core.neighborhood.radius,
-            neighborOffsets: this.core.neighborhood._offsets,
-            generation: this.generation
-        };
-
-        console.log('Enviando a worker:', {
-            size,
-            population: this.core.gridManager.countPopulation(),
-            generation: this.generation
-        });
-
-        try {
-            this.worker.postMessage(messageData, [flatGrid.buffer]);
-        } catch (e) {
-            // Si Transferable Objects no funcionan, enviar sin transferir
-            this.worker.postMessage(messageData);
-        }
-
-        return 0;
     }
 
     _updateActivityAges(changedCells) {
@@ -572,7 +613,7 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // MÉTODOS PÚBLICOS (DELEGAN AL CORE DONDE SEA POSIBLE)
+    // MÉTODOS PÚBLICOS (DELEGAN AL CORE)
     // =========================================
 
     _forceFullRender() {
@@ -738,10 +779,14 @@ class CellularAutomaton {
         }
     }
 
+    // =========================================
+    // EDICIÓN - DELEGAN A STATE-MANAGER
+    // =========================================
+
     setCell(x, y, state, markDirty = true) {
         // Guardar para undo antes de modificar
-        if (markDirty && this.undoManager?.isTracking) {
-            this.undoManager.saveState(this.core.gridManager.grid, this.generation);
+        if (markDirty && this.stateManager?.isTracking) {
+            this.stateManager.saveState(this.generation);
         }
 
         const changed = this.core.setCell(x, y, state);
@@ -856,13 +901,16 @@ class CellularAutomaton {
         }
     }
 
+    // =========================================
+    // CONTROL DE EJECUCIÓN
+    // =========================================
+
     updateStats(populationOverride = null) {
         const population = populationOverride !== null
             ? populationOverride
             : this.core.gridManager.countPopulation();
 
         const density = (population / (this.gridSize * this.gridSize) * 100).toFixed(1);
-        this.populationHistory.push(population);
 
         eventBus.emit('stats:updated', {
             generation: this.generation,
@@ -880,7 +928,7 @@ class CellularAutomaton {
         if (this.limitType === 'generations' && this.maxGenerations !== null) {
             this.isLimitReached = this.generation >= this.maxGenerations;
         } else if (this.limitType === 'population' && this.maxPopulation !== null) {
-            this.isLimitReached = this._lastPopulation >= this.maxPopulation;
+            this.isLimitReached = this.core.gridManager.countPopulation() >= this.maxPopulation;
         }
 
         if (this.isLimitReached && this.isRunning) {
@@ -934,74 +982,10 @@ class CellularAutomaton {
     // =========================================
 
     copyArea(minX, minY, maxX, maxY) {
-        const width = maxX - minX + 1;
-        const height = maxY - minY + 1;
-        const grid = Array.from({length: width}, () => Array(height).fill(false));
-
-        for (let x = minX; x <= maxX; x++) {
-            for (let y = minY; y <= maxY; y++) {
-                if (x >= 0 && x < this.gridSize && y >= 0 && y < this.gridSize) {
-                    grid[x - minX][y - minY] = this.core.getCell(x, y);
-                }
-            }
-        }
-
-        return {grid, width, height};
-    }
-
-    clearArea(minX, minY, maxX, maxY) {
-        const wasRunning = this.isRunning;
-        if (wasRunning) {
-            this.stop();
-            this.isRunning = false;
-        }
-
-        if (this.isWorkerProcessing) {
-            this._cleanupWorker();
-        }
-
-        this.undoManager.saveState(this.core.gridManager.grid, this.generation);
-        this.undoManager.stopTracking();
-
-        const startX = Math.max(0, minX);
-        const endX = Math.min(maxX, this.gridSize - 1);
-        const startY = Math.max(0, minY);
-        const endY = Math.min(maxY, this.gridSize - 1);
-
-        let changed = false;
-        const dirtyIndices = [];
-        const size = this.gridSize;
-
-        for (let x = startX; x <= endX; x++) {
-            for (let y = startY; y <= endY; y++) {
-                if (this.core.getCell(x, y)) {
-                    this.core.gridManager.grid[x][y] = 0;
-                    dirtyIndices.push(x * size + y);
-                    changed = true;
-                }
-            }
-        }
-
-        if (changed) {
-            dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
-            this.prevFlags = new Uint8Array(this.renderFlags);
-            this.updateStats();
-            this.render();
-        }
-
-        this.undoManager.startTracking();
-
-        if (wasRunning) {
-            requestAnimationFrame(() => {
-                this.isRunning = true;
-                this.start();
-            });
-        }
+        return this.stateManager.copyArea(minX, minY, maxX, maxY);
     }
 
     async pasteArea(area, offsetX, offsetY) {
-        if (!area?.grid) return;
-
         const wasRunning = this.isRunning;
         if (wasRunning) {
             this.stop();
@@ -1016,38 +1000,19 @@ class CellularAutomaton {
             this._cleanupWorker();
         }
 
-        this.undoManager.saveState(this.core.gridManager.grid, this.generation);
-        this.undoManager.stopTracking();
+        const result = this.stateManager.pasteArea(area, offsetX, offsetY, {
+            saveToHistory: true,
+            generation: this.generation
+        });
 
-        const width = area.width;
-        const height = area.height;
-        let changed = false;
-        const dirtyIndices = [];
-        const size = this.gridSize;
-
-        for (let x = 0; x < width; x++) {
-            const gridX = offsetX + x;
-            if (gridX < 0 || gridX >= size) continue;
-
-            for (let y = 0; y < height; y++) {
-                const gridY = offsetY + y;
-                if (gridY < 0 || gridY >= size) continue;
-
-                const newState = area.grid[x][y] ? 1 : 0;
-                if (this.core.gridManager.grid[gridX][gridY] !== newState) {
-                    this.core.gridManager.grid[gridX][gridY] = newState;
-                    dirtyIndices.push(gridX * size + gridY);
-
-                    if (newState) {
-                        this.activityAges[gridX * size + gridY] = 0;
-                    }
-                    changed = true;
+        if (result.changedCells.length > 0) {
+            result.changedCells.forEach(cell => {
+                this.dirtyCells.add(cell.x * this.gridSize + cell.y);
+                if (cell.to === 1) {
+                    this.activityAges[cell.x * this.gridSize + cell.y] = 0;
                 }
-            }
-        }
+            });
 
-        if (changed) {
-            dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
             this.prevFlags = new Uint8Array(this.renderFlags);
             this.updateStats();
             this._forceFullRender();
@@ -1057,7 +1022,41 @@ class CellularAutomaton {
             }
         }
 
-        this.undoManager.startTracking();
+        if (wasRunning) {
+            requestAnimationFrame(() => {
+                this.isRunning = true;
+                this.start();
+            });
+        }
+
+        return result;
+    }
+
+    clearArea(minX, minY, maxX, maxY) {
+        const wasRunning = this.isRunning;
+        if (wasRunning) {
+            this.stop();
+            this.isRunning = false;
+        }
+
+        if (this.isWorkerProcessing) {
+            this._cleanupWorker();
+        }
+
+        const result = this.stateManager.clearArea(minX, minY, maxX, maxY, {
+            saveToHistory: true,
+            generation: this.generation
+        });
+
+        if (result.changedCells.length > 0) {
+            result.changedCells.forEach(cell => {
+                this.dirtyCells.add(cell.x * this.gridSize + cell.y);
+            });
+
+            this.prevFlags = new Uint8Array(this.renderFlags);
+            this.updateStats();
+            this.render();
+        }
 
         if (wasRunning) {
             requestAnimationFrame(() => {
@@ -1065,13 +1064,24 @@ class CellularAutomaton {
                 this.start();
             });
         }
+
+        return result;
     }
 
     undo() {
-        const result = this.undoManager.undo(this.core.gridManager.grid, this.generation);
+        const result = this.stateManager.undo(this.generation);
         if (result) {
-            this.core.gridManager.grid = result.grid;
             this.generation = result.generation;
+
+            // Resetear motores especiales para recalcular desde el grid restaurado
+            if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
+                this.wolframEngine.reset();
+                // No marcar como initialized, dejar que detecte la semilla del usuario
+            }
+            if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+                this.rd2dEngine.reset();
+            }
+
             this._markAllDirty();
             this.updateStats();
             this.render();
@@ -1082,10 +1092,18 @@ class CellularAutomaton {
     }
 
     redo() {
-        const result = this.undoManager.redo(this.core.gridManager.grid, this.generation);
+        const result = this.stateManager.redo(this.generation);
         if (result) {
-            this.core.gridManager.grid = result.grid;
             this.generation = result.generation;
+
+            // Resetear motores especiales para recalcular desde el grid restaurado
+            if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
+                this.wolframEngine.reset();
+            }
+            if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+                this.rd2dEngine.reset();
+            }
+
             this._markAllDirty();
             this.updateStats();
             this.render();
@@ -1110,60 +1128,25 @@ class CellularAutomaton {
             this._cleanupWorker();
         }
 
-        this.undoManager.saveState(this.core.gridManager.grid, this.generation);
-        this.undoManager.stopTracking();
+        const result = this.stateManager.importPattern(pattern, centerX, centerY, {
+            saveToHistory: true,
+            generation: this.generation
+        });
 
-        if (pattern?.pattern === 'random') {
-            this.randomize(0.35);
-            if (wasRunning) {
-                requestAnimationFrame(() => {
-                    this.isRunning = true;
-                    this.start();
-                });
-            }
-            return;
-        }
+        if (result.changedCells.length > 0) {
+            result.changedCells.forEach(cell => {
+                this.dirtyCells.add(cell.x * this.gridSize + cell.y);
+                this.activityAges[cell.x * this.gridSize + cell.y] = 0;
+            });
 
-        if (pattern?.pattern) {
-            const patternData = pattern.pattern;
-            const offsetX = Math.floor(patternData[0].length / 2);
-            const offsetY = Math.floor(patternData.length / 2);
+            this.prevFlags = new Uint8Array(this.renderFlags);
+            this.updateStats();
+            this._forceFullRender();
 
-            let changed = false;
-            const dirtyIndices = [];
-            const size = this.gridSize;
-
-            for (let row = 0; row < patternData.length; row++) {
-                for (let col = 0; col < patternData[row].length; col++) {
-                    if (patternData[row][col] === 1) {
-                        const gridX = centerX - offsetX + col;
-                        const gridY = centerY - offsetY + row;
-
-                        if (gridX >= 0 && gridX < size && gridY >= 0 && gridY < size) {
-                            if (!this.core.gridManager.grid[gridX][gridY]) {
-                                this.core.gridManager.grid[gridX][gridY] = 1;
-                                this.activityAges[gridX * size + gridY] = 0;
-                                dirtyIndices.push(gridX * size + gridY);
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (changed) {
-                dirtyIndices.forEach(idx => this.dirtyCells.add(idx));
-                this.prevFlags = new Uint8Array(this.renderFlags);
-                this.updateStats();
-                this._forceFullRender();
-
-                if (this.gridSize >= this.workerThreshold) {
-                    this._initWorker();
-                }
+            if (this.gridSize >= this.workerThreshold) {
+                this._initWorker();
             }
         }
-
-        this.undoManager.startTracking();
 
         if (wasRunning) {
             requestAnimationFrame(() => {
@@ -1171,39 +1154,16 @@ class CellularAutomaton {
                 this.start();
             });
         }
+
+        return result;
     }
 
     exportPattern() {
-        let minX = this.gridSize, minY = this.gridSize;
-        let maxX = 0, maxY = 0;
+        return this.stateManager.exportPattern();
+    }
 
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                if (this.core.getCell(x, y)) {
-                    minX = Math.min(minX, x);
-                    maxX = Math.max(maxX, x);
-                    minY = Math.min(minY, y);
-                    maxY = Math.max(maxY, y);
-                }
-            }
-        }
-
-        if (minX > maxX || minY > maxY) return null;
-
-        const pattern = [];
-        for (let y = minY; y <= maxY; y++) {
-            const row = [];
-            for (let x = minX; x <= maxX; x++) {
-                row.push(this.core.getCell(x, y) ? 1 : 0);
-            }
-            pattern.push(row);
-        }
-
-        return {
-            pattern,
-            name: `${t('patterns.export.name')} ${new Date().toLocaleDateString()}`,
-            description: t('patterns.export.description')
-        };
+    downloadPattern(filename) {
+        return this.stateManager.downloadPattern(filename);
     }
 
     randomize(density = 0.35) {
@@ -1212,63 +1172,37 @@ class CellularAutomaton {
 
         this._cleanupWorker();
 
-        if (this.undoManager?.isTracking) {
-            this.undoManager.saveState(this.core.gridManager.grid, this.generation);
-            this.undoManager.stopTracking();
+        const stats = this.stateManager.randomize({
+            density,
+            saveToHistory: true,
+            generation: this.generation
+        });
+
+        // Sincronizar estado visual
+        if (this.activityAges.length !== this.gridSize * this.gridSize) {
+            this.activityAges = new Uint8Array(this.gridSize * this.gridSize);
+        } else {
+            this.activityAges.fill(0);
         }
 
-        try {
-            // Usar el core para randomizar
-            const stats = this.core.randomize(density);
+        this.generation = 0;
+        this.isLimitReached = false;
 
-            // Sincronizar estado visual
-            if (this.activityAges.length !== this.gridSize * this.gridSize) {
-                this.activityAges = new Uint8Array(this.gridSize * this.gridSize);
-            } else {
-                this.activityAges.fill(0);
-            }
+        this.wolframEngine?.reset();
+        this.rd2dEngine?.reset();
 
-            this._lastPopulation = stats.population;
-            this.generation = 0;
-            this.isLimitReached = false;
-            this.populationHistory.clear();
+        this.renderFlags.fill(0);
+        this.prevFlags.fill(0);
+        this.dirtyCells.clear();
 
-            // Resetear motores especiales
-            this.wolframEngine?.reset();
-            this.rd2dEngine?.reset();
+        this._forceFullRender();
+        this.updateStats(stats.population);
 
-            this.renderFlags.fill(0);
-            this.prevFlags.fill(0);
-            this.dirtyCells.clear();
-
-            this._forceFullRender();
-            this.updateStats(stats.population);
-
-            eventBus.emit('automaton:randomized', {
-                density: stats.density,
-                population: stats.population,
-                gridSize: this.gridSize
-            });
-
-        } catch (error) {
-            console.error('Error en randomize:', error);
-            eventBus.emit('automaton:error', {
-                operation: 'randomize',
-                error: error.message
-            });
-        } finally {
-            if (this.undoManager) {
-                this.undoManager.startTracking();
-            }
-
-            if (this.gridSize >= this.workerThreshold) {
-                this._initWorker();
-            }
-
-            if (wasRunning) {
-                setTimeout(() => this.start(), 0);
-            }
+        if (wasRunning) {
+            setTimeout(() => this.start(), 0);
         }
+
+        return stats;
     }
 
     clear() {
@@ -1285,21 +1219,14 @@ class CellularAutomaton {
             this._cleanupWorker();
         }
 
-        this.undoManager.saveState(this.core.gridManager.grid, this.generation);
-        const wasTracking = this.undoManager.isTracking;
-        this.undoManager.stopTracking();
-
-        // Delegar al core
-        this.core.clear();
-
-        if (wasTracking) {
-            this.undoManager.startTracking();
-        }
+        this.stateManager.clear({
+            saveToHistory: true,
+            generation: this.generation
+        });
 
         this.activityAges.fill(0);
         this.generation = 0;
         this.isLimitReached = false;
-        this.populationHistory.clear();
         this.dirtyCells.clear();
 
         this._markAllDirty();
