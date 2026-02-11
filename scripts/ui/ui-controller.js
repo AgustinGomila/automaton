@@ -1982,7 +1982,7 @@ class UIController {
     }
 
     _bindPatternEvents() {
-        // Escuchar eventos DEL EVENTBUS (nueva arquitectura)
+        // Escuchar eventos DEL EVENTBUS
         this._cleanups.push(
             eventBus.on('pattern:selected', () => {
                 console.debug('UIController: Evento pattern:selected recibido');
