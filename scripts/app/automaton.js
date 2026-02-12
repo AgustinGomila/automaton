@@ -339,7 +339,7 @@ class CellularAutomaton {
 
         if (this.gridSize >= this.workerThreshold && window.Worker) {
             try {
-                this.worker = new Worker('scripts/workers/automaton-worker.js');
+                this.worker = new Worker('scripts/infrastructure/workers/automaton-worker.js');
                 const handlerId = `worker_handler_${Date.now()}`;
                 this._currentHandlerId = handlerId;
 
@@ -1059,13 +1059,13 @@ class CellularAutomaton {
 
         if (engineName === 'rd2d') {
             if (typeof RD2DEngine === 'undefined') {
-                await this._loadScript('scripts/core/rd2d-engine.js');
+                await this._loadScript('scripts/core/engines/rd2d-engine.js');
             }
             this.rd2dEngine = new RD2DEngine(this);
             this.specialMode = 'rd2d';
         } else if (engineName === 'wolfram') {
             if (typeof WolframEngine === 'undefined') {
-                await this._loadScript('scripts/core/wolfram-engine.js');
+                await this._loadScript('scripts/core/engines/wolfram-engine.js');
             }
             this.wolframEngine = new WolframEngine(this);
             this.specialMode = 'wolfram';

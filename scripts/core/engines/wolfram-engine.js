@@ -257,7 +257,7 @@ class WolframEngine {
 
                 if (newState) {
                     this.automaton.grid[x][y] = 1;
-                    this.automaton.dirtyCells.add(x * size + y);
+                    this.automaton.renderer.markDirty(x, y);
                 }
             }
 
@@ -275,7 +275,7 @@ class WolframEngine {
 
                 if (newState) {
                     this.automaton.grid[x][y] = 1;
-                    this.automaton.dirtyCells.add(x * size + y);
+                    this.automaton.renderer.markDirty(x, y);
                 }
             }
 

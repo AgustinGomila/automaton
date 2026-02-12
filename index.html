@@ -585,27 +585,32 @@
 </div>
 <!-- Scripts base -->
 <script src="scripts/utils/circular-array.js"></script>
-<script src="scripts/core/event-bus.js"></script>
+<script src="scripts/infrastructure/event-bus.js"></script>
 <script src="scripts/ui/i18n.js"></script>
 
-<!-- Módulos del core -->
-<script src="scripts/rendering/grid-renderer.js"></script>
+<!-- Core matemático -->
 <script src="scripts/core/grid-manager.js"></script>
 <script src="scripts/core/neighborhood-calculator.js"></script>
 <script src="scripts/core/rule-engine.js"></script>
 <script src="scripts/core/cellular-automaton.js"></script>
+<script src="scripts/core/engines/rd2d-engine.js"></script>
+<script src="scripts/core/engines/wolfram-engine.js"></script>
 
-<!-- Módulos de estado -->
-<script src="scripts/core/state-manager.js"></script>
+<!-- Rendering -->
+<script src="scripts/rendering/grid-renderer.js"></script>
 
-<!-- Módulos de reglas y patrones -->
-<script src="scripts/core/rules-loader.js"></script>
-<script src="scripts/core/rules.js"></script>
-<script src="scripts/core/pattern-loader.js"></script>
-<script src="scripts/core/patterns.js"></script>
+<!-- Configuración -->
+<script src="scripts/config/rules.js"></script>
+<script src="scripts/config/rules-loader.js"></script>
+<script src="scripts/config/patterns.js"></script>
+<script src="scripts/config/pattern-loader.js"></script>
 
-<!-- Coordinador principal -->
-<script src="scripts/core/automaton.js"></script>
+<!-- Infraestructura -->
+<script src="scripts/infrastructure/workers/automaton-worker.js"></script>
+
+<!-- Aplicación -->
+<script src="scripts/app/state-manager.js"></script>
+<script src="scripts/app/automaton.js"></script>
 
 <!-- UI -->
 <script src="scripts/ui/ui-controller.js"></script>
