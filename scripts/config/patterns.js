@@ -63,7 +63,7 @@ class PatternManager {
             patternBtn.dataset.patternKey = key;
 
             const categoryText = pattern.category ? `[${pattern.category}]\n` : '';
-            const cellCountText = pattern.cellCount ? `\n${t('patterns.cells', {count: pattern.cellCount})}` : '';
+            const cellCountText = pattern.cellCount ? `\n ${t('patterns.cells', {count: pattern.cellCount})}` : '';
             patternBtn.dataset.tooltip = `${categoryText}${pattern.description}${cellCountText}\n\n${t('patterns.rotate')}`;
 
             const thumbnail = document.createElement('div');
@@ -193,7 +193,7 @@ class PatternManager {
 
             const categoryText = originalPattern.category ? t('patterns.category', {category: originalPattern.category}) : '';
             const cellCountText = originalPattern.cellCount ? t('patterns.cells', {count: originalPattern.cellCount}) : '';
-            detailsEl.textContent = `${categoryText}${cellCountText}`;
+            detailsEl.textContent = `${categoryText} ${cellCountText}`;
 
             if (descEl) {
                 descEl.textContent = originalPattern.description || '';
