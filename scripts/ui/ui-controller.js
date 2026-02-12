@@ -1402,9 +1402,9 @@ class UIController {
 
         // Controlar seguimiento durante simulación
         if (isRunning) {
-            this.automaton.undoManager.stopTracking();
+            this.automaton.stateManager?.stopTracking();
         } else {
-            this.automaton.undoManager.startTracking();
+            this.automaton.stateManager?.startTracking();
         }
 
         this._syncPlayButtonState();
@@ -1412,7 +1412,7 @@ class UIController {
 
     step() {
         // Guardar estado para permitir retroceder este paso específico
-        this.automaton.undoManager.saveState(this.automaton.grid, this.automaton.generation);
+        this.automaton.stateManager?.saveState(this.automaton.generation);
 
         this.automaton.nextGeneration();
         this.automaton.render();
@@ -1447,7 +1447,7 @@ class UIController {
      * Ejecuta undo y muestra feedback
      */
     undo() {
-        if (this.automaton.undoManager.undoCount === 0) {
+        if (this.automaton.undoCount === 0) {
             this._showNotification(t('notif.noUndo'), 'warning', 1500);
             return;
         }
@@ -1462,7 +1462,7 @@ class UIController {
      * Ejecuta redo y muestra feedback
      */
     redo() {
-        if (this.automaton.undoManager.redoCount === 0) {
+        if (this.automaton.redoCount === 0) {
             this._showNotification(t('notif.noRedo'), 'warning', 1500);
             return;
         }
@@ -1982,7 +1982,7 @@ class UIController {
     }
 
     _bindPatternEvents() {
-        // Escuchar eventos DEL EVENTBUS (nueva arquitectura)
+        // Escuchar eventos DEL EVENTBUS
         this._cleanups.push(
             eventBus.on('pattern:selected', () => {
                 console.debug('UIController: Evento pattern:selected recibido');
