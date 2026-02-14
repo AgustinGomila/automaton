@@ -28,6 +28,7 @@ class RD2DEngine {
         this.generation = 0;
         this.initialized = false;
         this._forceReinit = false;
+        this._changedCells = [];
     }
 
     /**
@@ -202,14 +203,10 @@ class RD2DEngine {
             for (let y = 0; y < size; y++) {
                 const isAlive = this.stateGrid[x]?.[y] !== 0;
 
-                // Solo actualizar si cambió, y sin usar setCell (evitar overhead de undo)
                 if (this.automaton.grid[x][y] !== (isAlive ? 1 : 0)) {
                     this.automaton.grid[x][y] = isAlive ? 1 : 0;
-
-                    // Marcar como dirty en el renderer para actualización visual
-                    if (isAlive) {
-                        this.automaton.renderer.markDirty(x, y);
-                    }
+                    // Siempre marcar dirty, sin condición
+                    this.automaton.renderer.markDirty(x, y);
                 }
             }
         }
@@ -264,6 +261,15 @@ class RD2DEngine {
 
             this.initialized = true;
             this.generation = 0;
+            // Marcar todas como cambiadas en inicialización
+            this._changedCells = [];
+            for (let x = 0; x < this.gridSize; x++) {
+                for (let y = 0; y < this.gridSize; y++) {
+                    if (this.stateGrid[x][y] !== 0) {
+                        this._changedCells.push(x * this.gridSize + y);
+                    }
+                }
+            }
             return true;
         }
 
@@ -275,6 +281,8 @@ class RD2DEngine {
         }
 
         let changed = false;
+        // Limpiar array de celdas cambiadas (reutilizar)
+        this._changedCells.length = 0;
 
         for (let y = 0; y < size; y++) {
             for (let x = 0; x < size; x++) {
@@ -289,6 +297,8 @@ class RD2DEngine {
 
                 if (newState !== this.stateGrid[x][y]) {
                     changed = true;
+                    // NUEVO: Guardar índice de celda cambiada
+                    this._changedCells.push(x * size + y);
                 }
             }
         }
@@ -296,7 +306,7 @@ class RD2DEngine {
         this.stateGrid = newStateGrid;
         this.generation++;
 
-        // Sincronizar visualización (marca dirty cells en el renderer)
+        // Sincronizar visualización
         this._syncToAutomatonGrid();
 
         if (!changed) {
@@ -305,6 +315,11 @@ class RD2DEngine {
         }
 
         return true;
+    }
+
+    // Getter para acceder a celdas cambiadas
+    getChangedCells() {
+        return this._changedCells;
     }
 
     /**
@@ -365,8 +380,8 @@ class RD2DEngine {
         this.initialized = false;
         this._forceReinit = false;
         this.generation = 0;
+        this._changedCells.length = 0;
 
-        // Limpiar stateGrid inmediatamente
         if (this.stateGrid) {
             for (let x = 0; x < this.gridSize; x++) {
                 if (this.stateGrid[x]) {

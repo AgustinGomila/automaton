@@ -478,6 +478,10 @@ class CellularAutomaton {
             }
             this.generation = this.rd2dEngine.generation;
             this.updateStats();
+
+            // Usar array pre-calculado del engine, sin crear nuevos objetos
+            this.renderer.updateActivityAges(this.rd2dEngine.getChangedCells());
+
             this.render();
             return 1;
         }
@@ -490,6 +494,12 @@ class CellularAutomaton {
             }
             this.generation = this.wolframEngine.generation;
             this.updateStats();
+
+            // Para Wolfram, usar dirty cells del renderer
+            const changedIndices = [];
+            this.renderer._dirtyCells.forEach(index => changedIndices.push(index));
+            this.renderer.updateActivityAges(changedIndices);
+
             this.render();
             return 1;
         }
@@ -565,12 +575,6 @@ class CellularAutomaton {
     }
 
     setRule(survival, birth) {
-        if (this.isRunning) {
-            this.stop();
-            this.isRunning = false;
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
-        }
-
         this.core.setRule({birth, survival});
     }
 

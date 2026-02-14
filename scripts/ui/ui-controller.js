@@ -680,7 +680,6 @@ class UIController {
 
         this.automaton.wolframEngine?.deactivate();
         this.automaton.specialMode = null;
-        this.automaton.clear();
         this.automaton.render();
 
         this._updateModeIndicator('standard');
@@ -751,7 +750,6 @@ class UIController {
 
         this.automaton.rd2dEngine?.deactivate();
         this.automaton.specialMode = null;
-        this.automaton.clear();
         this.automaton.render();
 
         this._updateModeIndicator('standard');
@@ -1654,14 +1652,6 @@ class UIController {
         const selector = document.getElementById('ruleSelector');
         const customRuleGroup = document.getElementById('customRuleGroup');
 
-        // Detener si está corriendo
-        if (this.automaton.isRunning) {
-            this.automaton.stop();
-            this.automaton.isRunning = false;
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
-            this._syncPlayButtonState();
-        }
-
         if (selector.value === 'custom') {
             customRuleGroup.style.display = 'block';
             customRuleGroup.style.display = 'block';
@@ -1770,8 +1760,6 @@ class UIController {
 
         // === MODO RD-2D ===
         if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
-            const info = this.automaton.rd2dEngine.getInfo();
-
             const headerTitle = document.querySelector('h1');
             if (headerTitle) {
                 headerTitle.innerHTML = `<i class="fas fa-border-style"></i> ${t('header.title', {ruleName: 'RD-2D'})}`;
@@ -1783,8 +1771,6 @@ class UIController {
                 rulesSpecific.innerHTML = `
                 <p><span class="rd2d-states"><i class="fas fa-cube"></i> ${t('rd2d.states.label')}:</span> 16 [N,S,E,W]</p>
                 <p><span class="rd2d-rule"><i class="fas fa-project-diagram"></i> ${t('rd2d.rule.label')}:</span> XOR(${t('rd2d.neighbors')})</p>
-                <p><span class="rd2d-gen"><i class="fas fa-clock"></i> ${t('stats.generation')}:</span> ${info.generation}</p>
-                <p><span class="rd2d-alive"><i class="fas fa-fire"></i> ${t('rd2d.alive')}:</span> ${info.aliveCells}</p>
             `;
             }
 
