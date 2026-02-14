@@ -297,7 +297,6 @@ class RD2DEngine {
 
                 if (newState !== this.stateGrid[x][y]) {
                     changed = true;
-                    // NUEVO: Guardar índice de celda cambiada
                     this._changedCells.push(x * size + y);
                 }
             }

@@ -163,6 +163,21 @@ class I18n {
                 'rd2d.alive': 'Activas',
                 'rd2d.neighborhood': 'RD-2D: Von Neumann (4 vecinos)',
 
+                'triangle.title': 'Triangular (ETA)',
+                'triangle.enable': 'Autómata Triangular',
+                'triangle.rule': 'Regla (0-255):',
+                'triangle.mode': 'Modo de vecindad',
+                'triangle.mode.edge': 'Aristas (3 vecinos)',
+                'triangle.mode.vertex': 'Vértices (6 vecinos)',
+                'triangle.preset.90': '90 (Sierpiński)',
+                'triangle.preset.30': '30 (Caos)',
+                'triangle.preset.110': '110 (Universal)',
+                'triangle.preset.184': '184 (Tráfico)',
+                'triangle.neighborhood': 'ETA: Vecindad Triangular (Paul Cousin)',
+                'app.title.triangle': 'Autómata Celular - ETA R{rule}',
+                'notif.triangle.enabled': 'Modo Triangular: Regla {rule}',
+                'notif.triangle.error': 'Error cargando motor Triangular',
+
                 // Estadísticas
                 'stats.generation': 'Generación',
                 'stats.population': 'Población',
@@ -356,6 +371,21 @@ class I18n {
                 'rd2d.neighbors': 'neighbors',
                 'rd2d.alive': 'Alive',
                 'rd2d.neighborhood': 'RD-2D: Von Neumann (4 neighbors)',
+
+                'triangle.title': 'Triangular (ETA)',
+                'triangle.enable': 'Triangular Automaton',
+                'triangle.rule': 'Rule (0-255):',
+                'triangle.mode': 'Neighborhood mode',
+                'triangle.mode.edge': 'Edge (3 neighbors)',
+                'triangle.mode.vertex': 'Vertex (6 neighbors)',
+                'triangle.preset.90': '90 (Sierpiński)',
+                'triangle.preset.30': '30 (Chaos)',
+                'triangle.preset.110': '110 (Universal)',
+                'triangle.preset.184': '184 (Traffic)',
+                'triangle.neighborhood': 'ETA: Triangular Neighborhood (Paul Cousin)',
+                'app.title.triangle': 'Cellular Automaton - ETA R{rule}',
+                'notif.triangle.enabled': 'Triangular Mode: Rule {rule}',
+                'notif.triangle.error': 'Error loading Triangular engine',
 
                 // Estadísticas
                 'stats.generation': 'Generation',

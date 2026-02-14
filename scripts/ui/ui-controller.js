@@ -484,21 +484,12 @@ class UIController {
     }
 
     _bindSpecialEnginesEvents() {
-        const debugBtn = document.getElementById('debugRD2D');
-        if (debugBtn) {
-            this._addEventListener(debugBtn, 'click', () => {
-                if (this.automaton.rd2dEngine) {
-                    this.automaton.rd2dEngine._debugStateDistribution();
-                    this.automaton.rd2dEngine._debugSyncCheck();
-                }
-            });
-        }
-
         // Toggle RD-2D
         const rd2dToggle = document.getElementById('rd2dToggle');
         if (rd2dToggle) {
             this._addEventListener(rd2dToggle, 'change', () => {
                 if (rd2dToggle.checked) {
+                    this._deactivateOtherModes('rd2d');
                     this.activateRD2DMode();
                 } else {
                     this.deactivateRD2DMode();
@@ -506,28 +497,34 @@ class UIController {
             });
         }
 
-        // Toggle Wolfram (actualizado)
+        // Toggle Wolfram
         const wolframToggle = document.getElementById('wolframToggle');
-        const wolframControls = document.getElementById('wolframControls');
-
         if (wolframToggle) {
             this._addEventListener(wolframToggle, 'change', () => {
                 if (wolframToggle.checked) {
-                    // Desactivar RD-2D si está activo
-                    const rd2dToggle = document.getElementById('rd2dToggle');
-                    if (rd2dToggle) {
-                        rd2dToggle.checked = false;
-                        this._toggleRD2DControls(false);
-                    }
-
-                    this._toggleWolframControls(true);
+                    this._deactivateOtherModes('wolfram');
 
                     const rule = parseInt(document.getElementById('wolframRule')?.value) || 30;
                     const direction = document.getElementById('wolframDirection')?.value || 'vertical';
                     this.activateWolframMode(rule, direction);
                 } else {
-                    this._toggleWolframControls(false);
                     this.deactivateWolframMode();
+                }
+            });
+        }
+
+        // Toggle Triangular
+        const triangleToggle = document.getElementById('triangleToggle');
+        if (triangleToggle) {
+            this._addEventListener(triangleToggle, 'change', () => {
+                if (triangleToggle.checked) {
+                    this._deactivateOtherModes('triangle');
+
+                    const rule = parseInt(document.getElementById('triangleRule')?.value) || 50;
+                    const mode = document.getElementById('triangleMode')?.value || 'edge';
+                    this.activateTriangleMode(rule, mode);
+                } else {
+                    this.deactivateTriangleMode();
                 }
             });
         }
@@ -615,6 +612,112 @@ class UIController {
                 }
             });
         });
+
+        // Controles de regla triangular
+        const triangleRuleInput = document.getElementById('triangleRule');
+        if (triangleRuleInput) {
+            this._addEventListener(triangleRuleInput, 'input', () => {
+                const rule = parseInt(String(triangleRuleInput.value), 10) || 50;
+                const display = document.getElementById('triangleRuleDisplay');
+                if (display) display.textContent = String(rule);
+
+                if (this.automaton.triangleEngine?.isActive) {
+                    if (this.automaton.isRunning) {
+                        this.automaton.stop();
+                        this.automaton.isRunning = false;
+                        eventBus.emit('automaton:runningChanged', {isRunning: false});
+                    }
+
+                    const mode = document.getElementById('triangleMode')?.value || 'edge';
+                    this.automaton.triangleEngine.activate({rule, mode});
+                    this.updateHeaderInfo();
+                    this._syncPlayButtonState();
+                }
+            });
+        }
+
+        // Selector de modo de vecindad triangular
+        const triangleModeSelect = document.getElementById('triangleMode');
+        if (triangleModeSelect) {
+            this._addEventListener(triangleModeSelect, 'change', () => {
+                if (this.automaton.triangleEngine?.isActive) {
+                    const rule = this.automaton.triangleEngine.ruleNumber;
+                    const mode = triangleModeSelect.value;
+
+                    if (this.automaton.isRunning) {
+                        this.automaton.stop();
+                        this.automaton.isRunning = false;
+                        eventBus.emit('automaton:runningChanged', {isRunning: false});
+                    }
+
+                    this.automaton.triangleEngine.activate({rule, mode});
+                    this.automaton.triangleEngine.reset();
+                    this.automaton.render();
+                    this.updateHeaderInfo();
+                    this._syncPlayButtonState();
+                }
+            });
+        }
+
+        // Presets de reglas triangulares
+        document.querySelectorAll('.btn-preset[data-triangle-rule]').forEach(btn => {
+            this._addEventListener(btn, 'click', () => {
+                const rule = parseInt(btn.dataset.triangleRule);
+                const ruleInput = document.getElementById('triangleRule');
+                const display = document.getElementById('triangleRuleDisplay');
+
+                if (ruleInput) ruleInput.value = rule;
+                if (display) display.textContent = rule.toString();
+
+                if (this.automaton.triangleEngine?.isActive) {
+                    if (this.automaton.isRunning) {
+                        this.automaton.stop();
+                        this.automaton.isRunning = false;
+                        eventBus.emit('automaton:runningChanged', {isRunning: false});
+                    }
+
+                    const mode = this.automaton.triangleEngine.neighborhoodMode;
+                    this.automaton.triangleEngine.activate({rule, mode});
+                    this.automaton.triangleEngine.reset();
+                    this.automaton.render();
+                    this.updateHeaderInfo();
+                    this._showNotification(t('notif.rule.enabled', {rule}), 'info', 1500);
+                    this._syncPlayButtonState();
+                }
+            });
+        });
+    }
+
+    _deactivateOtherModes(activeMode) {
+        // Desactivar Wolfram si no es el modo activo
+        if (activeMode !== 'wolfram') {
+            const wolframToggle = document.getElementById('wolframToggle');
+            if (wolframToggle && wolframToggle.checked) {
+                wolframToggle.checked = false;
+                this._toggleWolframControls(false);
+                this.automaton.wolframEngine?.deactivate();
+            }
+        }
+
+        // Desactivar RD-2D si no es el modo activo
+        if (activeMode !== 'rd2d') {
+            const rd2dToggle = document.getElementById('rd2dToggle');
+            if (rd2dToggle && rd2dToggle.checked) {
+                rd2dToggle.checked = false;
+                this._toggleRD2DControls(false);
+                this.automaton.rd2dEngine?.deactivate();
+            }
+        }
+
+        // Desactivar Triangular si no es el modo activo
+        if (activeMode !== 'triangle') {
+            const triangleToggle = document.getElementById('triangleToggle');
+            if (triangleToggle && triangleToggle.checked) {
+                triangleToggle.checked = false;
+                this._toggleTriangleControls(false);
+                this.automaton.triangleEngine?.deactivate();
+            }
+        }
     }
 
     async activateWolframMode(rule = 30, direction = 'vertical') {
@@ -759,6 +862,132 @@ class UIController {
         this._syncPlayButtonState();
     }
 
+    // Métodos para activar/desactivar modo triangular
+    async activateTriangleMode(rule = 50, mode = 'edge') {
+        if (!this.automaton || !this.automaton.grid) {
+            console.error('❌ Autómata no inicializado');
+            this._showNotification(t('notif.automata.error'), 'warning', 3000);
+            return;
+        }
+
+        try {
+            // Detener si está corriendo
+            if (this.automaton.isRunning) {
+                this.automaton.stop();
+                this.automaton.isRunning = false;
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
+            }
+
+            // Limpiar grid del autómata antes de iniciar modo triangular
+            for (let x = 0; x < this.automaton.gridSize; x++) {
+                for (let y = 0; y < this.automaton.gridSize; y++) {
+                    this.automaton.grid[x][y] = 0;
+                }
+            }
+
+            // Inicializar motor triangular
+            await this.automaton._initSpecialEngine('triangle');
+
+            // Activar controles UI
+            this._toggleTriangleControls(true);
+            document.getElementById('ruleSelector').disabled = true;
+            document.getElementById('neighborhoodType').disabled = true;
+
+            // Activar el motor
+            this.automaton.triangleEngine.activate({rule, mode});
+
+            // Conectar gridManager al renderer
+            if (this.automaton.triangleEngine.gridManager) {
+                this.automaton.renderer.setGridManager(this.automaton.triangleEngine.gridManager);
+            }
+
+            // Inicializar desde autómata (vacío en este caso)
+            this.automaton.triangleEngine._initializeFromAutomaton();
+            this.automaton.triangleEngine.initialized = true;
+
+            // Forzar renderizado
+            this.automaton.renderer.markAllDirty();
+            this.automaton.render();
+
+            // Actualizar UI
+            this.updateHeaderInfo();
+            this._updateModeIndicator('triangle');
+            this._showNotification(t('notif.triangle.enabled', {rule}), 'info', 2000);
+            this._syncPlayButtonState();
+
+        } catch (error) {
+            console.error('❌ Error cargando TriangleEngine:', error);
+            this._showNotification(t('notif.triangle.error'), 'warning', 3000);
+            this.deactivateTriangleMode();
+        }
+    }
+
+    deactivateTriangleMode() {
+        // Detener si está corriendo
+        if (this.automaton.isRunning) {
+            this.automaton.stop();
+            this.automaton.isRunning = false;
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+        }
+
+        // Desactivar controles UI
+        this._toggleTriangleControls(false);
+        document.getElementById('ruleSelector').disabled = false;
+        document.getElementById('neighborhoodType').disabled = false;
+
+        // Limpiar el motor triangular antes de destruirlo
+        if (this.automaton.triangleEngine) {
+            this.automaton.triangleEngine.clear();
+            this.automaton.triangleEngine.deactivate();
+            this.automaton.triangleEngine = null;
+        }
+
+        // Restaurar renderer y core originales
+        if (this.automaton._originalRenderer) {
+            this.automaton.renderer = this.automaton._originalRenderer;
+            this.automaton._originalRenderer = null;
+        }
+        if (this.automaton._originalCore) {
+            this.automaton.core = this.automaton._originalCore;
+            this.automaton._originalCore = null;
+        }
+
+        this.automaton.specialMode = null;
+        this.automaton.generation = 0;
+
+        // Limpiar grid del autómata también
+        for (let x = 0; x < this.automaton.gridSize; x++) {
+            for (let y = 0; y < this.automaton.gridSize; y++) {
+                this.automaton.grid[x][y] = 0;
+            }
+        }
+
+        // Forzar re-renderizado
+        this.automaton.renderer.markAllDirty();
+        this.automaton.render();
+
+        // Actualizar UI
+        this._updateModeIndicator('standard');
+        this.updateHeaderInfo();
+        this._showNotification(t('notif.standard.enabled'), 'info', 2000);
+        this._syncPlayButtonState();
+    }
+
+    _toggleTriangleControls(show) {
+        const triangleControls = document.getElementById('triangleControls');
+        if (!triangleControls) return;
+
+        if (show) {
+            triangleControls.classList.add('active');
+            triangleControls.style.opacity = '1';
+            triangleControls.style.pointerEvents = 'all';
+        } else {
+            triangleControls.classList.remove('active');
+            triangleControls.style.opacity = '0.5';
+            triangleControls.style.pointerEvents = 'none';
+        }
+    }
+
     /**
      * Activa o desactiva visualmente los controles de Wolfram
      * @param {boolean} show - true para mostrar, false para ocultar
@@ -801,7 +1030,14 @@ class UIController {
         const indicator = document.getElementById('modeIndicator');
         if (!indicator) return;
 
-        if (mode === 'wolfram') {
+        if (mode === 'triangle') {
+            const info = this.automaton.triangleEngine.getInfo();
+            indicator.className = 'mode-indicator triangle-mode';
+            indicator.innerHTML = `
+            <i class="fa-solid fa-play"></i>
+            ETA R${info.rule} ${info.mode === 'edge' ? '△' : '▽'}
+        `;
+        } else if (mode === 'wolfram') {
             const info = this.automaton.wolframEngine.getInfo();
             indicator.className = 'mode-indicator wolfram-mode';
             indicator.innerHTML = `
@@ -819,6 +1055,25 @@ class UIController {
         e.preventDefault();
 
         this.isMouseDown = true;
+
+        // Soporte para modo triangular
+        if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+            const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+            if (result) {
+                this.lastCell = {q: result.q, r: result.r, mode: 'triangle'};
+
+                const state = !this.ctrlPressed; // true = dibujar, false = borrar
+                const changed = this.automaton.triangleEngine.gridManager.setCell(result.q, result.r, state ? 1 : 0);
+
+                if (changed) {
+                    this.automaton.renderer.markDirty(result.q, result.r);
+                    this.automaton.renderer.render();
+                    this.automaton.updateStats(this.automaton.triangleEngine.gridManager.countPopulation());
+                }
+            }
+            return;
+        }
+
         const {x, y} = this.automaton.getCellFromMouse(e);
         this.lastCell = {x, y};
 
@@ -853,6 +1108,30 @@ class UIController {
     }
 
     _handleMouseMove(e) {
+        if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+            const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+            if (result) {
+                this.updateMouseCoords(result.q, result.r);
+
+                if (this.isMouseDown && this.lastCell?.mode === 'triangle') {
+                    const {q, r} = result;
+
+                    // Evitar redibujar la misma celda
+                    if (this.lastCell.q === q && this.lastCell.r === r) return;
+
+                    const state = !this.ctrlPressed;
+                    const changed = this.automaton.triangleEngine.gridManager.setCell(q, r, state ? 1 : 0);
+
+                    if (changed) {
+                        this.automaton.renderer.markDirty(q, r);
+                        this.automaton.renderer.render();
+                        this.lastCell = {q, r, mode: 'triangle'};
+                    }
+                }
+            }
+            return;
+        }
+
         const {x, y} = this.automaton.getCellFromMouse(e);
         this.updateMouseCoords(x, y);
 
@@ -1566,7 +1845,19 @@ class UIController {
     }
 
     toggleGrid() {
-        this.automaton.toggleGrid();
+        // Funciona para ambos modos (estándar y triangular)
+        const newState = this.automaton.renderer.toggleGrid();
+
+        // Actualizar visual del botón
+        const gridToggle = document.getElementById('gridToggle');
+        if (gridToggle) {
+            gridToggle.classList.toggle('active', newState);
+        }
+
+        // Forzar renderizado
+        this.automaton.render();
+
+        return newState;
     }
 
     toggleInfluenceArea() {
@@ -1803,8 +2094,7 @@ class UIController {
                 rulesSpecific.innerHTML = `
                 <p><span class="wolfram-rule"><i class="fas fa-hashtag"></i> ${t('config.rule')}</span> ${info.rule}</p>
                 <p><span class="wolfram-binary"><i class="fas fa-binary"></i> ${t('wolfram.binary')}</span> ${binary}</p>
-                <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-${info.direction === 'vertical' ? 'v' : 'h'}"></i> ${t('wolfram.direction')}:</span> ${directionText} ${directionSymbol}</p>
-                <p><span class="wolfram-gen"><i class="fas fa-clock"></i> ${t('stats.generation')}:</span> ${info.generation}</p>
+                <p><span class="wolfram-direction"><i class="fas fa-arrows-alt-${info.direction === 'vertical' ? 'v' : 'h'}"></i> ${t('wolfram.direction')}:</span> ${directionText} ${directionSymbol}</p>                
                 <p class="notation">${t('wolfram.progress')} <span class="highlight">${info.progress}/${info.max}</span></p>
             `;
             }
@@ -1814,6 +2104,40 @@ class UIController {
             if (neighborhoodText) {
                 neighborhoodText.textContent = t('wolfram.neighborhood');
             }
+            this.updateNeighborhoodInfo();
+            return;
+        }
+
+        // === MODO TRIANGULAR ===
+        if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+            const info = this.automaton.triangleEngine.getInfo();
+            const modeLabel = info.mode === 'edge' ? t('triangle.mode.edge') : t('triangle.mode.vertex');
+
+            // Actualizar título principal
+            const headerTitle = document.querySelector('h1');
+            if (headerTitle) {
+                headerTitle.innerHTML = `<i class="fa-solid fa-play"></i> ${t('header.title', {ruleName: `ETA R${info.rule}`})}`;
+            }
+
+            document.title = t('app.title.triangle', {rule: info.rule});
+
+            // Actualizar reglas específicas
+            const rulesSpecific = document.getElementById('rulesSpecific');
+            if (rulesSpecific) {
+                const binary = (info.rule).toString(2).padStart(8, '0');
+                rulesSpecific.innerHTML = `
+                <p><span class="triangle-rule"><i class="fas fa-hashtag"></i> ${t('config.rule')}</span> ${info.rule}</p>
+                <p><span class="triangle-mode"><i class="fas fa-project-diagram"></i> ${t('triangle.mode')}:</span> ${modeLabel}</p>                
+                <p class="notation">${t('wolfram.binary')} <span class="highlight">${binary}</span></p>
+            `;
+            }
+
+            // Actualizar info de vecindad
+            const neighborhoodText = document.getElementById('neighborhoodText');
+            if (neighborhoodText) {
+                neighborhoodText.textContent = t('triangle.neighborhood');
+            }
+
             this.updateNeighborhoodInfo();
             return;
         }
@@ -1889,6 +2213,8 @@ class UIController {
             infoElement.innerHTML = `<i class="fas fa-dice"></i> ${t('wolfram.neighborhood')}`;
         } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
             infoElement.innerHTML = `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood')}`;
+        } else if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+            infoElement.innerHTML = `<i class="fa-solid fa-play"></i> ${t('triangle.neighborhood')}`;
         } else {
             const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
             const radius = this.automaton.neighborhoodRadius;
@@ -2025,7 +2351,15 @@ class UIController {
 
     updateMouseCoords(x, y) {
         const coords = document.getElementById('mouseCoords');
-        if (coords) coords.textContent = t('header.coords', {x, y});
+        if (coords) {
+            if (typeof x === 'object' && x.q !== undefined) {
+                // Formato triangular
+                coords.textContent = `Q: ${x.q}, R: ${x.r}`;
+            } else {
+                // Formato estándar
+                coords.textContent = t('header.coords', {x, y});
+            }
+        }
     }
 
     _updateStatsDisplay(stats) {
@@ -2037,6 +2371,10 @@ class UIController {
             console.warn('❌ Elementos de estadísticas no encontrados');
             return;
         }
+
+        // Solo actualizar si cambió significativamente o cada 10 frames
+        // this._frameCount = (this._frameCount || 0) + 1;
+        // if (this._frameCount % 10 !== 0) return;
 
         genEl.textContent = (stats.generation || 0).toLocaleString();
         popEl.textContent = (stats.population || 0).toLocaleString();

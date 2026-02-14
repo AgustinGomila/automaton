@@ -2403,3 +2403,74 @@ h1 i.fa-border-style {
         height: auto;
     }
 }
+
+/* ============================================
+   CONTROLES TRIANGULARES (ETA)
+   ============================================ */
+
+.triangle-controls {
+    transition: opacity 0.3s ease;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.triangle-controls.active {
+    opacity: 1 !important;
+    pointer-events: all !important;
+}
+
+.triangle-presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* Estilos para información Triangular en el header */
+.triangle-rule {
+    color: #ec4899;
+    font-weight: 600;
+}
+
+.triangle-mode {
+    color: #8b5cf6;
+    font-weight: 600;
+}
+
+.triangle-gen {
+    color: #10b981;
+    font-weight: 600;
+}
+
+/* Icono triangular en título */
+h1 i.fa-solid fa-play {
+    color: #ec4899;
+}
+
+.mode-indicator.triangle-mode {
+    background: rgba(236, 72, 153, 0.2);
+    border: 1px solid #ec4899;
+    color: #ec4899;
+}
+
+/* Selector de modo triangular */
+#triangleMode {
+    width: 100%;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--light-text);
+    font-size: 0.9rem;
+    margin-top: 8px;
+}
+
+#triangleMode:focus {
+    outline: none;
+    border-color: #ec4899;
+}
+
+/* Canvas triangular - ajustes especiales */
+canvas.triangle-mode {
+    image-rendering: auto; /* Mejor para triángulos */
+}

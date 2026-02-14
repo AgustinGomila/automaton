@@ -6,7 +6,7 @@
     <title data-i18n="app.title">Autómata Celular</title>
     <link href="styles/main.css" rel="stylesheet">
     <link href="images/favicon.ico" rel="icon" type="image/x-icon">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" rel="stylesheet">
 </head>
 <body>
 <div class="container">
@@ -34,7 +34,7 @@
                 </div>
                 <div class="header-quick-controls">
                     <span id="mouseCoords" class="coords">X: 0, Y: 0</span>
-                    <button id="gridToggle" class="btn-toggle" data-i18n="tooltip.grid" data-i18n-attr="title"
+                    <button id="gridToggle" class="btn-toggle active" data-i18n="tooltip.grid" data-i18n-attr="title"
                             title="Mostrar/Ocultar Grilla (G)">
                         <i class="fas fa-border-all"></i>
                     </button>
@@ -356,6 +356,53 @@
                                 <p data-i18n="rd2d.states">16 estados: [N,S,E,W]</p>
                                 <p data-i18n="rd2d.rule">Regla: XOR de vecinos</p>
                             </div>
+
+                            <h4 style="margin: 15px 0 8px; font-size: 0.95rem; color: var(--gray-text); border-top: 1px solid var(--border-color); padding-top: 10px;">
+                                <i class="fa-solid fa-play"></i> <span data-i18n="triangle.title">Triangular (ETA)</span>
+                            </h4>
+                            <div class="toggle-switch" style="margin-bottom: 10px;">
+                                <input type="checkbox" id="triangleToggle" class="toggle-checkbox">
+                                <label for="triangleToggle" class="toggle-label">
+                                    <span data-i18n="triangle.enable">Autómata Triangular</span>
+                                    <span class="toggle-switch-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="triangle-controls" id="triangleControls"
+                                 style="opacity: 0.5; pointer-events: none;">
+                                <div class="config-group">
+                                    <label><span data-i18n="triangle.rule">Regla (0-255):</span> <span
+                                            id="triangleRuleDisplay" class="value-display">50</span></label>
+                                    <input type="range" id="triangleRule" min="0" max="255" value="50">
+                                    <div class="range-ticks">
+                                        <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
+                                    </div>
+                                </div>
+
+                                <div class="config-group">
+                                    <label data-i18n="triangle.mode">Modo de vecindad</label>
+                                    <select id="triangleMode">
+                                        <option value="edge" data-i18n="triangle.mode.edge">Aristas (3 vecinos)</option>
+                                        <option value="vertex" data-i18n="triangle.mode.vertex">Vértices (6 vecinos)
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <div class="triangle-presets">
+                                    <button class="btn-preset" data-triangle-rule="30" data-i18n="triangle.preset.30"
+                                            title="30 (Caos)">30
+                                    </button>
+                                    <button class="btn-preset" data-triangle-rule="90" data-i18n="triangle.preset.90"
+                                            title="90 (Sierpiński)">90
+                                    </button>
+                                    <button class="btn-preset" data-triangle-rule="110" data-i18n="triangle.preset.110"
+                                            title="110 (Universal)">110
+                                    </button>
+                                    <button class="btn-preset" data-triangle-rule="184" data-i18n="triangle.preset.184"
+                                            title="184 (Tráfico)">184
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -595,6 +642,11 @@
 <script src="scripts/core/cellular-automaton.js"></script>
 <script src="scripts/core/engines/rd2d-engine.js"></script>
 <script src="scripts/core/engines/wolfram-engine.js"></script>
+
+<!-- Motor y renderer triangular -->
+<script src="scripts/core/triangle-grid-manager.js"></script>
+<script src="scripts/core/engines/triangle-engine.js"></script>
+<script src="scripts/rendering/triangle-renderer.js"></script>
 
 <!-- Rendering -->
 <script src="scripts/rendering/grid-renderer.js"></script>

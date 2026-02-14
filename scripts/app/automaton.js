@@ -74,8 +74,11 @@ class CellularAutomaton {
         // === MOTORES ESPECIALES ===
         this.wolframEngine = null;
         this.rd2dEngine = null;
+        this.triangleEngine = null;
         this.specialMode = null;
         this._specialEngineLoaded = false;
+        this._originalRenderer = null;
+        this._originalCore = null;
 
         // === LÍMITES ===
         this.limitType = 'none';
@@ -504,6 +507,35 @@ class CellularAutomaton {
             return 1;
         }
 
+        // === MODO TRIANGULAR ===
+        if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
+            // Verificar que tenemos gridManager
+            if (!this.triangleEngine.gridManager) {
+                console.error('❌ TriangleEngine sin gridManager');
+                return 0;
+            }
+
+            const continued = this.triangleEngine.step();
+
+            if (!continued) {
+                this.stop();
+                console.debug('Triangle: Sin cambios');
+            }
+
+            this.generation = this.triangleEngine.generation;
+
+            // Actualizar población desde el grid triangular
+            const population = this.triangleEngine.gridManager?.countPopulation() ?? 0;
+            this.updateStats(population);
+
+            // Actualizar activity ages en el renderer triangular
+            const changedCells = this.triangleEngine.getChangedCells();
+            this.renderer.updateActivityAges(changedCells);
+
+            this.render();
+            return 1;
+        }
+
         this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
 
         if (this.worker && this.gridSize >= this.workerThreshold) {
@@ -511,6 +543,23 @@ class CellularAutomaton {
         } else {
             return this._nextGenerationCore();
         }
+    }
+
+    // Método para restaurar modo estándar
+    restoreStandardMode() {
+        if (this._originalRenderer) {
+            this.renderer = this._originalRenderer;
+            this._originalRenderer = null;
+        }
+        if (this._originalCore) {
+            this.core = this._originalCore;
+            this._originalCore = null;
+        }
+        this.specialMode = null;
+
+        // Re-inicializar renderer estándar
+        this.renderer.resize(this.gridSize, this.cellSize);
+        this.renderer.markAllDirty();
     }
 
     _nextGenerationCore() {
@@ -884,6 +933,30 @@ class CellularAutomaton {
 
         this._cleanupWorker();
 
+        // Si estamos en modo triangular
+        if (this.specialMode === 'triangle' && this.triangleEngine?.gridManager) {
+            const width = this.triangleEngine.gridManager.width;
+            const height = this.triangleEngine.gridManager.height;
+
+            for (let q = 0; q < width; q++) {
+                for (let r = 0; r < height; r++) {
+                    const state = Math.random() < density ? 1 : 0;
+                    this.triangleEngine.gridManager.setCell(q, r, state);
+                }
+            }
+
+            this.generation = 0;
+            this.renderer.markAllDirty();
+            this.renderer.resetActivity();
+            this.updateStats(this.triangleEngine.gridManager.countPopulation());
+            this.render();
+
+            if (wasRunning) {
+                setTimeout(() => this.start(), 0);
+            }
+            return;
+        }
+
         const stats = this.stateManager.randomize({
             density,
             saveToHistory: true,
@@ -909,18 +982,90 @@ class CellularAutomaton {
     }
 
     clear() {
-        if (this.isRunning) {
+        const wasRunning = this.isRunning;
+
+        if (wasRunning) {
             this.stop();
             this.isRunning = false;
             eventBus.emit('automaton:runningChanged', {isRunning: false});
         }
 
-        this.wolframEngine?.reset();
-        this.rd2dEngine?.reset();
-
         if (this.isWorkerProcessing) {
             this._cleanupWorker();
         }
+
+        // === MODO WOLFRAM ===
+        if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
+            // Limpiar grid del autómata
+            for (let x = 0; x < this.gridSize; x++) {
+                for (let y = 0; y < this.gridSize; y++) {
+                    this.grid[x][y] = 0;
+                }
+            }
+
+            // Reinicializar semilla de Wolfram
+            this.wolframEngine.reset();
+            this.wolframEngine._initializeSeed();
+
+            this.renderer.markAllDirty();
+            this.render();
+            this.updateStats();
+            return;
+        }
+
+        // === MODO RD-2D ===
+        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+            // Limpiar grid del autómata
+            for (let x = 0; x < this.gridSize; x++) {
+                for (let y = 0; y < this.gridSize; y++) {
+                    this.grid[x][y] = 0;
+                }
+            }
+
+            // Limpiar estado RD-2D
+            this.rd2dEngine.reset();
+
+            this.renderer.markAllDirty();
+            this.render();
+            this.updateStats();
+            return;
+        }
+
+        // === MODO TRIANGULAR ===
+        if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
+            // Limpiar grid triangular real
+            if (this.triangleEngine.gridManager) {
+                // Limpiar todo el grid a 0
+                for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
+                    this.triangleEngine.gridManager.grid[q].fill(0);
+                }
+            }
+
+            // Resetear estado del motor
+            this.triangleEngine.generation = 0;
+            this.triangleEngine._changedCells = [];
+
+            // Limpiar grid del autómata también
+            for (let x = 0; x < this.gridSize; x++) {
+                for (let y = 0; y < this.gridSize; y++) {
+                    this.grid[x][y] = 0;
+                }
+            }
+
+            // Forzar renderizado completo
+            this.renderer._isFirstRender = true;
+            this.renderer.markAllDirty();
+            this.render();
+            this.updateStats(0);
+
+            console.debug('🔺 Triangle: Grid limpiado completamente');
+            return;
+        }
+
+        // === MODO ESTÁNDAR ===
+        this.wolframEngine?.reset();
+        this.rd2dEngine?.reset();
+        this.triangleEngine?.reset();
 
         this.stateManager.clear({
             saveToHistory: true,
@@ -987,40 +1132,42 @@ class CellularAutomaton {
     _animateRAF(currentTime = 0) {
         if (!this.isRunning) return;
 
-        if (this.generation === 0 && this._lastFrameTime === currentTime) {
-            for (let x = 0; x < this.gridSize; x++) {
-                for (let y = 0; y < this.gridSize; y++) {
-                    if (this.core.getCell(x, y)) {
-                        this.renderer.markDirty(x, y);
-                    }
-                }
-            }
-            this.renderer.markAllDirty();
-        }
-
         const deltaTime = currentTime - this._lastFrameTime;
 
         if (deltaTime >= this.updateInterval) {
             this._lastFrameTime = currentTime - (deltaTime % this.updateInterval);
 
-            this.nextGeneration();
+            // Para modo triangular, usar estrategia diferente
+            if (this.specialMode === 'triangle') {
+                // Procesar generación
+                const changed = this.nextGeneration();
 
-            eventBus.emit('automaton:generation', {
-                generation: this.generation,
-                population: this.core.gridManager.countPopulation(),
-                density: this.core.gridManager.getStats().density
-            });
+                // Solo renderizar si hubo cambios o cada 5 frames mínimo
+                if (changed || this.generation % 5 === 0) {
+                    this.render();
+                }
 
-            this.render();
+                // Actualizar stats solo cada 10 generaciones
+                if (this.generation % 10 === 0) {
+                    this.updateStats();
+                }
+            } else {
+                // Modo estándar
+                this.nextGeneration();
+                this.render();
+            }
         }
 
         this.rafId = requestAnimationFrame((time) => this._animateRAF(time));
     }
 
     setSpeed(level) {
-        const minSpeed = 500;
-        const maxSpeed = 30;
-        this.updateInterval = minSpeed - ((level - 1) * (minSpeed - maxSpeed) / 9);
+        const minSpeed = 500;  // Más lento = más tiempo entre frames
+        const maxSpeed = 16;   // ~60fps máximo
+
+        // Mapeo no-lineal para mejor control
+        const speedMap = [500, 250, 125, 60, 30, 16, 16, 16, 16, 16];
+        this.updateInterval = speedMap[Math.min(level - 1, 9)] || 16;
 
         if (this.isRunning) {
             this.stop();
@@ -1054,11 +1201,25 @@ class CellularAutomaton {
             return Promise.resolve();
         }
 
+        // Desactivar todos los motores especiales activos
         if (this.wolframEngine?.isActive) {
             this.wolframEngine.deactivate();
         }
         if (this.rd2dEngine?.isActive) {
             this.rd2dEngine.deactivate();
+        }
+        if (this.triangleEngine?.isActive) {
+            this.triangleEngine.deactivate();
+        }
+
+        // Restaurar renderer y core originales si existen
+        if (this._originalRenderer) {
+            this.renderer = this._originalRenderer;
+            this._originalRenderer = null;
+        }
+        if (this._originalCore) {
+            this.core = this._originalCore;
+            this._originalCore = null;
         }
 
         if (engineName === 'rd2d') {
@@ -1073,6 +1234,51 @@ class CellularAutomaton {
             }
             this.wolframEngine = new WolframEngine(this);
             this.specialMode = 'wolfram';
+        } else if (engineName === 'triangle') {
+            // Cargar dependencias si no existen
+            if (typeof TriangleGridManager === 'undefined') {
+                await this._loadScript('scripts/core/engines/triangle-grid-manager.js');
+            }
+            if (typeof TriangleEngine === 'undefined') {
+                await this._loadScript('scripts/core/engines/triangle-engine.js');
+            }
+            if (typeof TriangleRenderer === 'undefined') {
+                await this._loadScript('scripts/rendering/triangle-renderer.js');
+            }
+
+            // Guardar referencias originales ANTES de crear el nuevo renderer
+            // Usar this.renderer (el actual) en lugar de this._originalRenderer
+            if (!this._originalRenderer) {
+                this._originalRenderer = this.renderer;
+            }
+            if (!this._originalCore) {
+                this._originalCore = this.core;
+            }
+
+            // Crear motor triangular PRIMERO (esto crea el gridManager)
+            this.triangleEngine = new TriangleEngine(this);
+
+            // Crear renderer triangular DESPUÉS del engine
+            const canvas = document.getElementById('canvas');
+            const container = document.getElementById('canvas-container');
+
+            // Limpiar canvas anterior
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Crear nuevo renderer triangular
+            this.renderer = new TriangleRenderer({
+                canvas: canvas,
+                container: container,
+                cellSize: Math.max(3, Math.min(6, this.cellSize)),
+                showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
+                showActivityEffect: this._originalRenderer?.getConfig('showActivityEffect') ?? true,
+                colorAlive: '#ec4899',
+                colorDead: '#0f172a',
+                colorGrid: 'rgba(255,255,255,0.1)'
+            });
+
+            this.specialMode = 'triangle';
         }
 
         this._specialEngineLoaded = true;
