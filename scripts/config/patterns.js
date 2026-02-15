@@ -53,6 +53,9 @@ class PatternManager {
             const patternB = PATTERNS[b];
             if (patternA.pattern === 'random') return 1;
             if (patternB.pattern === 'random') return -1;
+
+            const nameCompare = patternA.name.localeCompare(patternB.name);
+            if (nameCompare !== 0) return nameCompare;
             return patternA.cellCount - patternB.cellCount;
         });
 
