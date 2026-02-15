@@ -150,7 +150,7 @@ class I18n {
                 'wolfram.horizontal.short': 'Horizontal',
                 'wolfram.binary': 'Binario:',
                 'wolfram.progress': 'Progreso:',
-                'wolfram.neighborhood': 'Wolfram 1D (Vecindad: 3 celdas)',
+                'wolfram.neighborhood': 'Wolfram 1D (Vecindad: 3 celdas) {wrap}',
 
                 // RD-2D
                 'rd2d.title': 'RD-2D',
@@ -161,7 +161,7 @@ class I18n {
                 'rd2d.rule.label': 'Regla',
                 'rd2d.neighbors': 'vecinos',
                 'rd2d.alive': 'Activas',
-                'rd2d.neighborhood': 'RD-2D: Von Neumann (4 vecinos)',
+                'rd2d.neighborhood': 'RD-2D: Von Neumann (4 vecinos) {wrap}',
 
                 'triangle.title': 'Triangular (ETA)',
                 'triangle.enable': 'Autómata Triangular',
@@ -172,7 +172,7 @@ class I18n {
                 'triangle.preset.106': '106',
                 'triangle.preset.210': '210',
                 'triangle.preset.214': '214',
-                'triangle.neighborhood': 'ETA: Vecindad Triangular (Paul Cousin)',
+                'triangle.neighborhood': 'ETA: Vecindad Triangular (P. Cousin) {wrap}',
                 'app.title.triangle': 'Autómata Celular - ETA R{rule}',
                 'notif.triangle.enabled': 'Modo Triangular: Regla {rule}',
                 'notif.triangle.error': 'Error cargando motor Triangular',
@@ -215,6 +215,7 @@ class I18n {
                 'instructions.shortcut.r': 'Rotar patrón',
                 'instructions.shortcut.a': 'Aleatorio',
                 'instructions.shortcut.c': 'Limpiar',
+                'instructions.shortcut.h': 'Mostrar/Ocultar grilla',
                 'instructions.shortcut.esc': 'Cancelar/Clear',
                 'instructions.shortcut.undo': 'Deshacer',
                 'instructions.shortcut.redo': 'Rehacer',
@@ -358,7 +359,7 @@ class I18n {
                 'wolfram.horizontal.short': 'Horizontal',
                 'wolfram.binary': 'Binary:',
                 'wolfram.progress': 'Progress:',
-                'wolfram.neighborhood': 'Wolfram 1D (Neighborhood: 3 cells)',
+                'wolfram.neighborhood': 'Wolfram 1D (Neighborhood: 3 cells) {wrap}',
 
                 // RD-2D
                 'rd2d.title': 'RD-2D',
@@ -369,7 +370,7 @@ class I18n {
                 'rd2d.rule.label': 'Rule',
                 'rd2d.neighbors': 'neighbors',
                 'rd2d.alive': 'Alive',
-                'rd2d.neighborhood': 'RD-2D: Von Neumann (4 neighbors)',
+                'rd2d.neighborhood': 'RD-2D: Von Neumann (4 neighbors) {wrap}',
 
                 'triangle.title': 'Triangular (ETA)',
                 'triangle.enable': 'Triangular Automaton',
@@ -380,7 +381,7 @@ class I18n {
                 'triangle.preset.106': '106',
                 'triangle.preset.210': '210',
                 'triangle.preset.214': '214',
-                'triangle.neighborhood': 'ETA: Triangular Neighborhood (Paul Cousin)',
+                'triangle.neighborhood': 'ETA: Triangular Neighborhood (P. Cousin) {wrap}',
                 'app.title.triangle': 'Cellular Automaton - ETA R{rule}',
                 'notif.triangle.enabled': 'Triangular Mode: Rule {rule}',
                 'notif.triangle.error': 'Error loading Triangular engine',
@@ -423,6 +424,7 @@ class I18n {
                 'instructions.shortcut.r': 'Rotate pattern',
                 'instructions.shortcut.a': 'Random',
                 'instructions.shortcut.c': 'Clear',
+                'instructions.shortcut.h': 'Toggle grid',
                 'instructions.shortcut.esc': 'Cancel/Clear',
                 'instructions.shortcut.undo': 'Undo',
                 'instructions.shortcut.redo': 'Redo',

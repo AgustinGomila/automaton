@@ -1655,6 +1655,8 @@ class UIController {
                 }
                 break;
             case 'h':
+                this.toggleGrid()
+                break;
             case '?':
                 e.preventDefault();
                 document.getElementById('instructionsModal').classList.add('show');
@@ -2083,8 +2085,10 @@ class UIController {
             }
 
             const neighborhoodText = document.getElementById('neighborhoodText');
+            const wrap = this.automaton.wrapEdges ? '∞' : '■';
+
             if (neighborhoodText) {
-                neighborhoodText.textContent = t('rd2d.neighborhood');
+                neighborhoodText.textContent = t('rd2d.neighborhood', {wrap});
             }
             this.updateNeighborhoodInfo();
             return;
@@ -2118,8 +2122,10 @@ class UIController {
 
             // Actualizar info de vecindad
             const neighborhoodText = document.getElementById('neighborhoodText');
+            const wrap = this.automaton.wrapEdges ? '∞' : '■';
+
             if (neighborhoodText) {
-                neighborhoodText.textContent = t('wolfram.neighborhood');
+                neighborhoodText.textContent = t('wolfram.neighborhood', {wrap});
             }
             this.updateNeighborhoodInfo();
             return;
@@ -2195,7 +2201,7 @@ class UIController {
         if (neighborhoodText) {
             const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
             const radius = this.automaton.neighborhoodRadius;
-            const wrap = this.automaton.wrapEdges ? '∞' : '▏▕';
+            const wrap = this.automaton.wrapEdges ? '∞' : '■';
             neighborhoodText.textContent = t('header.neighborhood', {type, radius, wrap});
         }
     }
@@ -2224,16 +2230,17 @@ class UIController {
             return;
         }
 
+        const wrap = this.automaton.wrapEdges ? '∞' : '■'; // Símbolos visuales
+
         if (this.automaton.specialMode === 'wolfram' && this.automaton.wolframEngine?.isActive) {
-            infoElement.innerHTML = `<i class="fas fa-dice"></i> ${t('wolfram.neighborhood')}`;
+            infoElement.innerHTML = `<i class="fas fa-dice"></i> ${t('wolfram.neighborhood', {wrap})}`;
         } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
-            infoElement.innerHTML = `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood')}`;
+            infoElement.innerHTML = `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood', {wrap})}`;
         } else if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
-            infoElement.innerHTML = `<i class="fa-solid fa-play"></i> ${t('triangle.neighborhood')}`;
+            infoElement.innerHTML = `<i class="fa-solid fa-play"></i> ${t('triangle.neighborhood', {wrap})}`;
         } else {
             const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
             const radius = this.automaton.neighborhoodRadius;
-            const wrap = this.automaton.wrapEdges ? '∞' : '▏▕'; // Símbolos visuales
 
             infoElement.innerHTML = `<i class="fas fa-crosshairs"></i> ${t('header.neighborhood', {
                 type,

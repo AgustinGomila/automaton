@@ -1,7 +1,7 @@
 # Autómata Celular Interactivo
 
-Una implementación interactiva de autómata celular con soporte para **múltiples reglas**, **autómatas de Wolfram 1D** y
-**Distinción Recursiva 2D**.
+Una implementación interactiva de autómata celular con soporte para **múltiples reglas**, **autómatas de Wolfram 1D**,
+**Distinción Recursiva 2D** y **Autómatas triangulares elementales (ETA's)**.
 
 ## 🎯 Experimentar con el Autómata
 
@@ -11,10 +11,10 @@ Una implementación interactiva de autómata celular con soporte para **múltipl
 
 ### Reglas Disponibles
 
-- **Kauffman B37/S4567** - Regla presentada por Louis Kauffman
 - **Conway's Life B3/S23** - El autómata celular más famoso
 - **HighLife B36/S23** - Variación con replicador
 - **Day & Night B3678/S34678** - Simétrico con comportamiento interesante
+- **Kauffman B37/S4567** - Regla presentada por Louis Kauffman
 - **30+ reglas predefinidas** más
 - **Regla personalizada** - Define tus propios parámetros B/S
 
@@ -22,6 +22,7 @@ Una implementación interactiva de autómata celular con soporte para **múltipl
 
 - **Wolfram 1D** - Autómatas elementales unidimensionales (reglas 0-255) con evolución vertical u horizontal
 - **RD-2D** - Distinción Recursiva 2D con 16 estados basados en fronteras [N,S,E,W] y regla XOR
+- **ETA** - Autómatas triangulares elementales
 
 ### Funcionalidades
 
@@ -65,6 +66,7 @@ Una implementación interactiva de autómata celular con soporte para **múltipl
 - **Shift + Z**: Rehacer
 - **A**: Aleatorio
 - **C**: Limpiar
+- **G**: Mostrar/Ocultar grilla
 - **H / ?**: Ayuda
 
 ## 📚 Referencias
@@ -73,3 +75,4 @@ Una implementación interactiva de autómata celular con soporte para **múltipl
 - **Reglas de autómatas**: [LifeWiki](https://conwaylife.com/wiki/)
 - **Autómatas de Wolfram**: [Wikipedia](https://en.wikipedia.org/wiki/Elementary_cellular_automaton)
 - **Louis Kauffman**: [Mathematics Genealogy](https://www.mathgenealogy.org/id.php?id=4492)
+- **Ruliología**: [Ruliología](https://www.wolframcloud.com/obj/international-essays/Published/WhatIsRuliology_ES.nb)
