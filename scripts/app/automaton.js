@@ -984,6 +984,7 @@ class CellularAutomaton {
     clear() {
         const wasRunning = this.isRunning;
 
+        // === PASO 1: Detener siempre (común a todos los modos) ===
         if (wasRunning) {
             this.stop();
             this.isRunning = false;
@@ -994,91 +995,88 @@ class CellularAutomaton {
             this._cleanupWorker();
         }
 
-        // === MODO WOLFRAM ===
-        if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
-            // Limpiar grid del autómata
-            for (let x = 0; x < this.gridSize; x++) {
-                for (let y = 0; y < this.gridSize; y++) {
-                    this.grid[x][y] = 0;
-                }
+        // === PASO 2: Limpiar grid del autómata base (siempre) ===
+        this._clearBaseGrid();
+
+        // === PASO 3: Limpiar motor especial activo ===
+        this._clearSpecialEngine();
+
+        // === PASO 4: Resetear estado común (SIEMPRE, sin condiciones) ===
+        this._resetCommonState();
+
+        // === PASO 5: Renderizado y actualización ===
+        this.renderer._isFirstRender = true;
+        this.renderer.markAllDirty();
+        this.render();
+        this.updateStats(0);
+
+        console.debug('🧹 Clear completado - Modo:', this.specialMode || 'estándar');
+    }
+
+    /**
+     * Limpia el grid base del autómata (array 2D estándar)
+     * @private
+     */
+    _clearBaseGrid() {
+        for (let x = 0; x < this.gridSize; x++) {
+            for (let y = 0; y < this.gridSize; y++) {
+                this.grid[x][y] = 0;
             }
-
-            // Reinicializar semilla de Wolfram
-            this.wolframEngine.reset();
-            this.wolframEngine._initializeSeed();
-
-            this.renderer.markAllDirty();
-            this.render();
-            this.updateStats();
-            return;
         }
+    }
 
-        // === MODO RD-2D ===
-        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
-            // Limpiar grid del autómata
-            for (let x = 0; x < this.gridSize; x++) {
-                for (let y = 0; y < this.gridSize; y++) {
-                    this.grid[x][y] = 0;
+    /**
+     * Limpia el motor especial activo según el modo
+     * @private
+     */
+    _clearSpecialEngine() {
+        switch (this.specialMode) {
+            case 'wolfram':
+                this.wolframEngine?.reset();
+                this.wolframEngine?._initializeSeed?.();
+                break;
+
+            case 'rd2d':
+                this.rd2dEngine?.reset();
+                break;
+
+            case 'triangle':
+                // Limpiar grid triangular
+                if (this.triangleEngine?.gridManager) {
+                    for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
+                        this.triangleEngine.gridManager.grid[q].fill(0);
+                    }
                 }
-            }
+                // Resetear estado del motor triangular
+                this.triangleEngine?.reset?.();
+                break;
 
-            // Limpiar estado RD-2D
-            this.rd2dEngine.reset();
-
-            this.renderer.markAllDirty();
-            this.render();
-            this.updateStats();
-            return;
+            default:
+                // Modo estándar: limpiar stateManager
+                this.stateManager?.clear({
+                    saveToHistory: true,
+                    generation: this.generation
+                });
+                break;
         }
+    }
 
-        // === MODO TRIANGULAR ===
-        if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
-            // Limpiar grid triangular real
-            if (this.triangleEngine.gridManager) {
-                // Limpiar todo el grid a 0
-                for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
-                    this.triangleEngine.gridManager.grid[q].fill(0);
-                }
-            }
-
-            // Resetear estado del motor
-            this.triangleEngine.generation = 0;
-            this.triangleEngine._changedCells = [];
-
-            // Limpiar grid del autómata también
-            for (let x = 0; x < this.gridSize; x++) {
-                for (let y = 0; y < this.gridSize; y++) {
-                    this.grid[x][y] = 0;
-                }
-            }
-
-            // Forzar renderizado completo
-            this.renderer._isFirstRender = true;
-            this.renderer.markAllDirty();
-            this.render();
-            this.updateStats(0);
-
-            console.debug('🔺 Triangle: Grid limpiado completamente');
-            return;
-        }
-
-        // === MODO ESTÁNDAR ===
-        this.wolframEngine?.reset();
-        this.rd2dEngine?.reset();
-        this.triangleEngine?.reset();
-
-        this.stateManager.clear({
-            saveToHistory: true,
-            generation: this.generation
-        });
-
-        this.renderer.resetActivity();
+    /**
+     * Resetea estado común SIEMPRE, independientemente del modo
+     * @private
+     */
+    _resetCommonState() {
+        // Estas líneas son CRÍTICAS y deben ejecutarse SIEMPRE
         this.generation = 0;
         this.isLimitReached = false;
 
-        this.renderer.markAllDirty();
-        this.render();
-        this.updateStats();
+        // Resetear activity del renderer
+        this.renderer?.resetActivity();
+
+        // Resetear todos los motores especiales por si acaso
+        this.wolframEngine?.reset?.();
+        this.rd2dEngine?.reset?.();
+        this.triangleEngine?.reset?.();
     }
 
     // =========================================

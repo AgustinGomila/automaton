@@ -395,15 +395,25 @@ class UIController {
         const wrapToggle = document.getElementById('wrapToggle');
         if (wrapToggle) {
             this._addEventListener(wrapToggle, 'change', () => {
-                this.automaton.wrapEdges = wrapToggle.checked;
+                const wrap = wrapToggle.checked;
+
+                // Actualizar autómata base
+                this.automaton.wrapEdges = wrap;
                 this.automaton.generation = 0;
                 this.automaton.updateStats();
                 this.automaton._markAllDirty();
                 this.automaton.render();
                 this.updateNeighborhoodInfo();
 
-                // Emitir evento para cualquier otro listener
-                eventBus.emit('automaton:wrapChanged', {wrap: wrapToggle.checked});
+                // Actualizar también el motor triangular si está activo
+                if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine) {
+                    this.automaton.triangleEngine.wrapEdges = wrap;
+                    // Opcional: resetear para que el cambio tenga efecto inmediato
+                    this.automaton.triangleEngine.reset();
+                    this.automaton.triangleEngine.step(); // Forzar recálculo
+                }
+
+                eventBus.emit('automaton:wrapChanged', {wrap});
             });
         }
 
@@ -863,7 +873,7 @@ class UIController {
     }
 
     // Métodos para activar/desactivar modo triangular
-    async activateTriangleMode(rule = 50, mode = 'edge') {
+    async activateTriangleMode(rule = 50) {
         if (!this.automaton || !this.automaton.grid) {
             console.error('❌ Autómata no inicializado');
             this._showNotification(t('notif.automata.error'), 'warning', 3000);
@@ -893,8 +903,15 @@ class UIController {
             document.getElementById('ruleSelector').disabled = true;
             document.getElementById('neighborhoodType').disabled = true;
 
+            // Obtener estado actual del toggle
+            const wrapToggle = document.getElementById('wrapToggle');
+            const wrap = wrapToggle ? wrapToggle.checked : true;
+
             // Activar el motor
-            this.automaton.triangleEngine.activate({rule, mode});
+            this.automaton.triangleEngine.activate({
+                rule,
+                wrap  // Pasar explícitamente
+            });
 
             // Conectar gridManager al renderer
             if (this.automaton.triangleEngine.gridManager) {
@@ -2111,7 +2128,6 @@ class UIController {
         // === MODO TRIANGULAR ===
         if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
             const info = this.automaton.triangleEngine.getInfo();
-            const modeLabel = info.mode === 'edge' ? t('triangle.mode.edge') : t('triangle.mode.vertex');
 
             // Actualizar título principal
             const headerTitle = document.querySelector('h1');
@@ -2126,8 +2142,7 @@ class UIController {
             if (rulesSpecific) {
                 const binary = (info.rule).toString(2).padStart(8, '0');
                 rulesSpecific.innerHTML = `
-                <p><span class="triangle-rule"><i class="fas fa-hashtag"></i> ${t('config.rule')}</span> ${info.rule}</p>
-                <p><span class="triangle-mode"><i class="fas fa-project-diagram"></i> ${t('triangle.mode')}:</span> ${modeLabel}</p>                
+                <p><span class="triangle-rule"><i class="fas fa-hashtag"></i> ${t('config.rule')}</span> ${info.rule}</p>           
                 <p class="notation">${t('wolfram.binary')} <span class="highlight">${binary}</span></p>
             `;
             }

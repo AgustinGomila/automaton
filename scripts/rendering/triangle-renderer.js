@@ -19,8 +19,7 @@ class TriangleRenderer {
         this._cachedCellSize = 0;
         this._isFirstRender = true;
 
-        // Grid cada N celdas (ajustable para rendimiento)
-        this.gridStep = 5; // Dibujar línea cada 5 celdas
+        this.gridStep = 5;
     }
 
     setGridManager(gridManager) {
@@ -37,16 +36,18 @@ class TriangleRenderer {
         const size = this.cellSize;
         const h = size * Math.sqrt(3) / 2;
 
+        // △ UP: vértice en top, base en bottom
         const pathUp = new Path2D();
-        pathUp.moveTo(size * 0.5, 0);
-        pathUp.lineTo(0, h);
-        pathUp.lineTo(size, h);
+        pathUp.moveTo(size * 0.5, 0);   // Top
+        pathUp.lineTo(0, h);            // Bottom-left
+        pathUp.lineTo(size, h);         // Bottom-right
         pathUp.closePath();
 
+        // ▽ DOWN: vértice en bottom, base en top
         const pathDown = new Path2D();
-        pathDown.moveTo(size * 0.5, h);
-        pathDown.lineTo(0, 0);
-        pathDown.lineTo(size, 0);
+        pathDown.moveTo(0, 0);          // Top-left
+        pathDown.lineTo(size, 0);       // Top-right
+        pathDown.lineTo(size * 0.5, h); // Bottom
         pathDown.closePath();
 
         this._pathCache.set('up', pathUp);
@@ -67,17 +68,20 @@ class TriangleRenderer {
     _resizeCanvas() {
         if (!this.gridManager) return;
 
-        const width = this.gridManager.width * this.cellSize * 0.5 + this.cellSize;
-        const height = this.gridManager.height * this.cellSize * Math.sqrt(3) / 2 + this.cellSize;
+        const size = this.cellSize;
+        const h = size * Math.sqrt(3) / 2;
 
-        this.canvas.width = width;
-        this.canvas.height = height;
-        this.canvas.style.width = width + 'px';
-        this.canvas.style.height = height + 'px';
+        const width = (this.gridManager.width - 1) * (size / 2) + size;
+        const height = (this.gridManager.height - 1) * h + h;
+
+        this.canvas.width = Math.ceil(width);
+        this.canvas.height = Math.ceil(height);
+        this.canvas.style.width = this.canvas.width + 'px';
+        this.canvas.style.height = this.canvas.height + 'px';
 
         if (this.container) {
-            this.container.style.width = (width + 20) + 'px';
-            this.container.style.height = (height + 20) + 'px';
+            this.container.style.width = (this.canvas.width + 20) + 'px';
+            this.container.style.height = (this.canvas.height + 20) + 'px';
         }
     }
 
@@ -87,31 +91,30 @@ class TriangleRenderer {
         const fullRender = options.force || this._isFirstRender || this._dirtyCells.size === 0;
 
         if (fullRender) {
-            this._renderFullOptimized();
+            this._renderFull();
             this._isFirstRender = false;
         } else {
-            this._renderDirtyOptimized();
+            this._renderDirty();
         }
 
         this._dirtyCells.clear();
     }
 
-    // Grid visible cada N celdas + celdas vivas
-    _renderFullOptimized() {
+    _renderFull() {
         const ctx = this.ctx;
         const width = this.canvas.width;
         const height = this.canvas.height;
 
-        // 1. Fondo sólido
+        // Fondo
         ctx.fillStyle = this.colorDead;
         ctx.fillRect(0, 0, width, height);
 
-        // 2. Dibujar GRID cada N celdas (si está activado)
+        // Grid de fondo
         if (this.showGrid) {
             this._drawBackgroundGrid();
         }
 
-        // 3. Dibujar SOLO celdas vivas
+        // Dibujar celdas vivas
         ctx.fillStyle = this.colorAlive;
         ctx.strokeStyle = this.colorGrid;
         ctx.lineWidth = 0.5;
@@ -128,8 +131,6 @@ class TriangleRenderer {
                     ctx.save();
                     ctx.translate(pos.x, pos.y);
                     ctx.fill(path);
-
-                    // Borde de celda viva siempre visible
                     ctx.stroke(path);
                     ctx.restore();
                 }
@@ -137,129 +138,137 @@ class TriangleRenderer {
         }
     }
 
-    // Dibujar grid de fondo cada N celdas
     _drawBackgroundGrid() {
         const ctx = this.ctx;
-        const h = this.cellSize * Math.sqrt(3) / 2;
-        const step = this.gridStep;
+        const size = this.cellSize;
+        const h = size * Math.sqrt(3) / 2;
+        const width = this.canvas.width;
+        const height = this.canvas.height;
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)'; // Más sutil que el grid de celdas vivas
+        ctx.strokeStyle = this.colorGrid;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
 
-        // Líneas verticales cada N columnas
-        for (let q = 0; q < this.gridManager.width; q += step) {
-            const x = q * this.cellSize * 0.5;
-            // Offset para alinear con el patrón triangular
-            const offset = (q & 1) * (this.cellSize * 0.25);
-            ctx.moveTo(x + offset, 0);
-            ctx.lineTo(x + offset, this.canvas.height);
-        }
-
-        // Líneas horizontales cada N filas
-        for (let r = 0; r < this.gridManager.height; r += step) {
+        // Líneas horizontales (bases) cada gridStep filas
+        for (let r = 0; r <= this.gridManager.height; r += this.gridStep) {
             const y = r * h;
-            ctx.moveTo(0, y);
-            ctx.lineTo(this.canvas.width, y);
+            if (y >= 0 && y <= height) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
         }
 
-        // Líneas diagonales para patrón triangular (opcional, cada 10 celdas)
-        if (step <= 5) {
-            for (let r = 0; r < this.gridManager.height; r += step * 2) {
-                for (let q = 0; q < this.gridManager.width; q += step * 2) {
-                    const pos = this.gridManager.toCartesian(q, r, this.cellSize);
-                    const x = pos.x + this.cellSize * 0.5;
-                    const y = pos.y;
+        const sqrt3 = Math.sqrt(3);
+        // Rango aproximado de parámetros para diagonales
+        const kMin = Math.floor(0);
+        const kMax = Math.ceil(height / h + sqrt3 * width / h);
 
-                    // Línea diagonal corta para sugerir triángulos
-                    ctx.moveTo(x - this.cellSize * 0.25, y + h * 0.5);
-                    ctx.lineTo(x + this.cellSize * 0.25, y + h * 0.5);
-                }
+        // Diagonales con pendiente negativa (q+r constante) → y = -√3·x + k·h
+        for (let k = kMin; k <= kMax; k += this.gridStep) {
+            const b = k * h;
+            const points = [];
+
+            // Intersección con borde izquierdo (x=0)
+            const yLeft = b;
+            if (yLeft >= 0 && yLeft <= height) points.push({x: 0, y: yLeft});
+
+            // Intersección con borde derecho (x=width)
+            const yRight = b - sqrt3 * width;
+            if (yRight >= 0 && yRight <= height) points.push({x: width, y: yRight});
+
+            // Intersección con borde superior (y=0)
+            const xTop = b / sqrt3;
+            if (xTop >= 0 && xTop <= width) points.push({x: xTop, y: 0});
+
+            // Intersección con borde inferior (y=height)
+            const xBottom = (b - height) / sqrt3;
+            if (xBottom >= 0 && xBottom <= width) points.push({x: xBottom, y: height});
+
+            if (points.length >= 2) {
+                points.sort((a, b) => a.x - b.x);
+                ctx.moveTo(points[0].x, points[0].y);
+                ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+            }
+        }
+
+        // Diagonales con pendiente positiva (q-r constante) → y = √3·x + k·h
+        for (let k = kMin; k <= kMax; k += this.gridStep) {
+            const b = k * h;
+            const points = [];
+
+            // x=0
+            const yLeft = b;
+            if (yLeft >= 0 && yLeft <= height) points.push({x: 0, y: yLeft});
+
+            // x=width
+            const yRight = sqrt3 * width + b;
+            if (yRight >= 0 && yRight <= height) points.push({x: width, y: yRight});
+
+            // y=0
+            const xTop = -b / sqrt3;
+            if (xTop >= 0 && xTop <= width) points.push({x: xTop, y: 0});
+
+            // y=height
+            const xBottom = (height - b) / sqrt3;
+            if (xBottom >= 0 && xBottom <= width) points.push({x: xBottom, y: height});
+
+            if (points.length >= 2) {
+                points.sort((a, b) => a.x - b.x);
+                ctx.moveTo(points[0].x, points[0].y);
+                ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
             }
         }
 
         ctx.stroke();
     }
 
-    _renderDirtyOptimized() {
+    _drawBackgroundSquareGrid() {
         const ctx = this.ctx;
-        const pathUp = this._pathCache.get('up');
-        const pathDown = this._pathCache.get('down');
-        const h = this.cellSize * Math.sqrt(3) / 2;
+        const size = this.cellSize;
+        const h = size * Math.sqrt(3) / 2;
 
-        for (const key of this._dirtyCells) {
-            const [q, r] = key.split(',').map(Number);
-            const state = this.gridManager.grid[q][r];
-            const pos = this.gridManager.toCartesian(q, r, this.cellSize);
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
 
-            // Limpiar área local
-            ctx.fillStyle = this.colorDead;
-            ctx.fillRect(pos.x - 1, pos.y - 1, this.cellSize + 2, h + 2);
-
-            // Redibujar líneas de grid en esta área (si están cerca de línea de grid)
-            if (this.showGrid) {
-                this._redrawGridInArea(q, r, pos);
-            }
-
-            // Dibujar celda si está viva
-            if (state === 1) {
-                const path = pos.orientation === 'up' ? pathUp : pathDown;
-
-                ctx.save();
-                ctx.translate(pos.x, pos.y);
-                ctx.fillStyle = this.colorAlive;
-                ctx.fill(path);
-                ctx.strokeStyle = this.colorGrid;
-                ctx.lineWidth = 0.5;
-                ctx.stroke(path);
-                ctx.restore();
-            }
+        // Líneas verticales cada N columnas
+        for (let q = 0; q < this.gridManager.width; q += this.gridStep) {
+            const x = q * (size / 2);
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, this.canvas.height);
         }
+
+        // Líneas horizontales cada N filas
+        for (let r = 0; r < this.gridManager.height; r += this.gridStep) {
+            const y = r * h;
+            ctx.moveTo(0, y);
+            ctx.lineTo(this.canvas.width, y);
+        }
+
+        ctx.stroke();
     }
 
-    // Redibujar líneas de grid en área específica
-    _redrawGridInArea(q, r, pos) {
-        const ctx = this.ctx;
-        const step = this.gridStep;
-
-        // Solo dibujar si esta celda está en una línea de grid
-        if (q % step === 0 || r % step === 0) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-
-            if (q % step === 0) {
-                const offset = (q & 1) * (this.cellSize * 0.25);
-                ctx.moveTo(pos.x + this.cellSize * 0.5 + offset, pos.y - 5);
-                ctx.lineTo(pos.x + this.cellSize * 0.5 + offset, pos.y + this.cellSize + 5);
-            }
-
-            if (r % step === 0) {
-                ctx.moveTo(pos.x - 5, pos.y);
-                ctx.lineTo(pos.x + this.cellSize + 5, pos.y);
-            }
-
-            ctx.stroke();
-        }
+    _renderDirty() {
+        // Por simplicidad, hacer full render en dirty cells
+        // (puedes optimizar esto después)
+        this._renderFull();
     }
 
     markDirty(q, r) {
         if (!this.gridManager) return;
-        if (q >= 0 && q < this.gridManager.width &&
-            r >= 0 && r < this.gridManager.height) {
+        if (q >= 0 && q < this.gridManager.width && r >= 0 && r < this.gridManager.height) {
             this._dirtyCells.add(`${q},${r}`);
         }
     }
 
     markAllDirty() {
         if (!this.gridManager) return;
-        this._dirtyCells.clear();
         this._isFirstRender = true;
     }
 
     toggleGrid() {
         this.showGrid = !this.showGrid;
-        this._isFirstRender = true; // Forzar redraw completo para mostrar/ocultar grid
+        this._isFirstRender = true;
         this.markAllDirty();
         return this.showGrid;
     }

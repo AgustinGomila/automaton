@@ -321,6 +321,7 @@ class WolframEngine {
         this._forceReinit = false;
         this.currentRow = 0;
         this.currentCol = 0;
+        this.generation = 0;
     }
 
     /**

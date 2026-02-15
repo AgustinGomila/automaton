@@ -1,9 +1,5 @@
 /**
  * TriangleGridManager - Gestión de grid triangular
- *
- * Usa coordenadas "doubled" para simplificar:
- * - Celdas apuntando arriba (△): (q, r) donde q + r es par
- * - Celdas apuntando abajo (▽): (q, r) donde q + r es impar
  */
 class TriangleGridManager {
     constructor(width, height) {
@@ -17,37 +13,10 @@ class TriangleGridManager {
     }
 
     getOrientation(q, r) {
+        // Sistema correcto: alternancia por (q + r)
+        // (0,0)=up, (0,1)=down, (0,2)=up...
+        // (1,0)=down, (1,1)=up, (1,2)=down...
         return ((q + r) & 1) === 0 ? 'up' : 'down';
-    }
-
-    /**
-     * 3 vecinos: comparten arista
-     */
-    getEdgeNeighbors(q, r) {
-        const orientation = this.getOrientation(q, r);
-        const offsets = orientation === 'up'
-            ? [[-1, 0], [1, 0], [0, 1]]   // NW, NE, S
-            : [[0, -1], [-1, 0], [1, 0]]; // N, SW, SE
-
-        return this._applyOffsets(q, r, offsets);
-    }
-
-    /**
-     * 6 vecinos: aristas + vértices
-     */
-    getVertexNeighbors(q, r) {
-        const orientation = this.getOrientation(q, r);
-        const offsets = orientation === 'up'
-            ? [[-1, 0], [1, 0], [0, 1], [0, -1], [-1, 1], [1, 1]]
-            : [[0, -1], [-1, 0], [1, 0], [-1, -1], [1, -1], [0, 1]];
-
-        return this._applyOffsets(q, r, offsets);
-    }
-
-    _applyOffsets(q, r, offsets) {
-        return offsets
-            .map(([dq, dr]) => [q + dq, r + dr])
-            .filter(([nq, nr]) => this.isValid(nq, nr));
     }
 
     isValid(q, r) {
@@ -66,45 +35,51 @@ class TriangleGridManager {
         return changed;
     }
 
-    /**
-     * Convierte a cartesianas para renderizado
-     */
     toCartesian(q, r, size) {
-        const x = q * size * 0.5;
-        const y = r * size * Math.sqrt(3) / 2;
-        const xOffset = (r & 1) * (size * 0.25);
+        const h = size * Math.sqrt(3) / 2;
+        const isUp = this.getOrientation(q, r) === 'up';
+
+        const x = q * (size / 2);
+        const y = r * h;
 
         return {
-            x: x + xOffset,
+            x: x,
             y: y,
-            orientation: this.getOrientation(q, r)
+            orientation: isUp ? 'up' : 'down'
         };
     }
 
-    /**
-     * Hit-testing para mouse
-     */
     fromCartesian(x, y, size) {
-        const height = size * Math.sqrt(3) / 2;
-        const r = Math.floor(y / height);
-        const xOffset = (r & 1) * (size * 0.25);
-        const q = Math.floor((x - xOffset) / (size * 0.5));
+        const h = size * Math.sqrt(3) / 2;
 
-        // Encontrar triángulo más cercano
-        const candidates = [[q, r], [q + 1, r], [q, r + 1], [q - 1, r], [q, r - 1]];
+        const qApprox = x / (size / 2);
+        const rApprox = y / h;
+
+        const q = Math.floor(qApprox);
+        const r = Math.floor(rApprox);
+
+        // Buscar mejor celda en vecindad
         let best = null, bestDist = Infinity;
 
-        for (const [cq, cr] of candidates) {
-            if (!this.isValid(cq, cr)) continue;
-            const center = this.toCartesian(cq, cr, size);
-            center.y += height / 3 * (center.orientation === 'up' ? 1 : -1);
+        for (let dq = -1; dq <= 1; dq++) {
+            for (let dr = -1; dr <= 1; dr++) {
+                const cq = q + dq, cr = r + dr;
+                if (!this.isValid(cq, cr)) continue;
 
-            const dx = x - center.x, dy = y - center.y;
-            const dist = dx * dx + dy * dy;
+                const pos = this.toCartesian(cq, cr, size);
+                const orient = this.getOrientation(cq, cr);
 
-            if (dist < bestDist) {
-                bestDist = dist;
-                best = [cq, cr];
+                // Centro del triángulo
+                const cx = pos.x + size / 2;
+                const cy = pos.y + (orient === 'up' ? h / 3 : 2 * h / 3);
+
+                const dx = x - cx, dy = y - cy;
+                const dist = dx * dx + dy * dy;
+
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = [cq, cr];
+                }
             }
         }
 
@@ -125,23 +100,18 @@ class TriangleGridManager {
         this.width = newWidth;
         this.height = newHeight;
         this.grid = newGrid;
-
         return {grid: newGrid, wasResized: true};
     }
 
     clear() {
-        for (let q = 0; q < this.width; q++) {
-            this.grid[q].fill(0);
-        }
+        for (let q = 0; q < this.width; q++) this.grid[q].fill(0);
     }
 
     countPopulation() {
         let count = 0;
-        for (let q = 0; q < this.width; q++) {
-            for (let r = 0; r < this.height; r++) {
+        for (let q = 0; q < this.width; q++)
+            for (let r = 0; r < this.height; r++)
                 if (this.grid[q][r]) count++;
-            }
-        }
         return count;
     }
 }
