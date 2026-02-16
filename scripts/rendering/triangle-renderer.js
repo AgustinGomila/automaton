@@ -222,42 +222,48 @@ class TriangleRenderer {
         ctx.stroke();
     }
 
-    _drawBackgroundSquareGrid() {
+    _renderDirty() {
         const ctx = this.ctx;
         const size = this.cellSize;
         const h = size * Math.sqrt(3) / 2;
+        const pathUp = this._pathCache.get('up');
+        const pathDown = this._pathCache.get('down');
+        const gm = this.gridManager;
 
-        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillStyle = this.colorAlive;
+        ctx.strokeStyle = this.colorGrid;
         ctx.lineWidth = 0.5;
-        ctx.beginPath();
 
-        // Líneas verticales cada N columnas
-        for (let q = 0; q < this.gridManager.width; q += this.gridStep) {
-            const x = q * (size / 2);
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, this.canvas.height);
+        // Procesar celdas dirty
+        for (const packed of this._dirtyCells) {
+            const q = packed >>> 16;
+            const r = packed & 0xFFFF;
+
+            const state = gm.grid[q][r];
+            const pos = gm.toCartesian(q, r, size);
+            const path = pos.orientation === 'up' ? pathUp : pathDown;
+
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+
+            if (state === 1) {
+                ctx.fill(path);
+                ctx.stroke(path);
+            } else {
+                // Clear: dibujar fondo local
+                ctx.fillStyle = this.colorDead;
+                ctx.fill(path);
+                ctx.fillStyle = this.colorAlive; // restore
+            }
+
+            ctx.restore();
         }
-
-        // Líneas horizontales cada N filas
-        for (let r = 0; r < this.gridManager.height; r += this.gridStep) {
-            const y = r * h;
-            ctx.moveTo(0, y);
-            ctx.lineTo(this.canvas.width, y);
-        }
-
-        ctx.stroke();
-    }
-
-    _renderDirty() {
-        // Por simplicidad, hacer full render en dirty cells
-        // (puedes optimizar esto después)
-        this._renderFull();
     }
 
     markDirty(q, r) {
         if (!this.gridManager) return;
         if (q >= 0 && q < this.gridManager.width && r >= 0 && r < this.gridManager.height) {
-            this._dirtyCells.add(`${q},${r}`);
+            this._dirtyCells.add((q << 16) | r);
         }
     }
 
@@ -281,23 +287,6 @@ class TriangleRenderer {
         const y = (clientY - rect.top) * scaleY;
 
         return this.gridManager.fromCartesian(x, y, this.cellSize);
-    }
-
-    setCellFromMouse(clientX, clientY, state) {
-        if (!this.gridManager) return null;
-
-        const result = this.getCellFromMouse(clientX, clientY);
-        if (!result) return null;
-
-        const {q, r} = result;
-        const changed = this.gridManager.setCell(q, r, state);
-
-        if (changed) {
-            this.markDirty(q, r);
-            this._activityAges.set(`${q},${r}`, 0);
-        }
-
-        return {q, r, changed};
     }
 
     updateActivityAges(changedCells) {

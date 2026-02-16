@@ -20,14 +20,6 @@ class TriangleEngine {
         this._changedCells = [];
         this._newGrid = null;
 
-        // ETA estándar: vecindad de arista (3 vecinos)
-        // Orientación "up" (△): vecinos NW, NE, S
-        // Orientación "down" (▽): vecinos N, SW, SE
-        this._neighborOffsets = {
-            up: [[-1, 0], [1, 0], [0, 1]],
-            down: [[0, -1], [-1, 0], [1, 0]]
-        };
-
         this.initialized = false;
 
         // Worker support
@@ -184,7 +176,7 @@ class TriangleEngine {
         }
     }
 
-    // Método para warm-up del worker
+    // Warm-up del worker
     async _warmupWorker() {
         if (!this.worker || !this.useWorker) return false;
 
@@ -321,79 +313,162 @@ class TriangleEngine {
         const height = this.gridManager.height;
         const currentGrid = this.gridManager.grid;
         const newGrid = this._newGrid;
+        const ruleTable = this._ruleTable;
+
+        // Cache bounds
+        const w = width, h = height;
+        const wrap = this.wrapEdges;
 
         this._changedCells.length = 0;
-        let changed = false;
+        let changedCount = 0;
+        const CHANGED_CAP = 100000;
 
-        // Elegir función de computación según modo
-        const computeFn = this.wrapEdges
-            ? this._computeConfigurationWrapped.bind(this)
-            : this._computeConfigurationBounded.bind(this);
+        if (wrap) {
+            // VERSIÓN WRAP - Sin branches de bounds, aritmética modular
+            for (let r = 0; r < h; r++) {
+                const rUp = (r - 1 + h) % h;
+                const rDown = (r + 1) % h;
 
-        for (let r = 0; r < height; r++) {
-            for (let q = 0; q < width; q++) {
-                const currentState = currentGrid[q][r];
-                const orientation = ((q + r) & 1) === 0 ? 'up' : 'down';
-                const config = computeFn(q, r, currentState, orientation, currentGrid, width, height);
-                const newState = this._ruleTable[config];
+                for (let q = 0; q < w; q++) {
+                    const isUp = ((q + r) & 1) === 0;
+                    const col = currentGrid[q];
+                    const currentState = col[r];
 
-                newGrid[q][r] = newState;
+                    let sum = 0;
 
-                if (newState !== currentState) {
-                    changed = true;
-                    this._changedCells.push({x: q, y: r});
+                    if (isUp) {
+                        // △: vecinos [-1,0], [1,0], [0,1]
+                        const leftQ = (q - 1 + w) % w;
+                        const rightQ = (q + 1) % w;
+
+                        sum = currentGrid[leftQ][r] + currentGrid[rightQ][r] + col[rDown];
+                    } else {
+                        // ▽: vecinos [0,-1], [-1,0], [1,0]
+                        const leftQ = (q - 1 + w) % w;
+                        const rightQ = (q + 1) % w;
+
+                        sum = col[rUp] + currentGrid[leftQ][r] + currentGrid[rightQ][r];
+                    }
+
+                    const config = (currentState << 2) | sum;
+                    const newState = ruleTable[config];
+
+                    newGrid[q][r] = newState;
+
+                    if (newState !== currentState && changedCount < CHANGED_CAP) {
+                        this._changedCells[changedCount++] = (q << 16) | r;
+                    }
+                }
+            }
+        } else {
+            // VERSIÓN BOUNDED - Con checks de límites
+            for (let r = 0; r < h; r++) {
+                for (let q = 0; q < w; q++) {
+                    const isUp = ((q + r) & 1) === 0;
+                    const col = currentGrid[q];
+                    const currentState = col[r];
+
+                    let sum = 0;
+
+                    if (isUp) {
+                        // △: [-1,0], [1,0], [0,1]
+                        if (q > 0) sum += currentGrid[q - 1][r];
+                        if (q < w - 1) sum += currentGrid[q + 1][r];
+                        if (r < h - 1) sum += col[r + 1];
+                    } else {
+                        // ▽: [0,-1], [-1,0], [1,0]
+                        if (r > 0) sum += col[r - 1];
+                        if (q > 0) sum += currentGrid[q - 1][r];
+                        if (q < w - 1) sum += currentGrid[q + 1][r];
+                    }
+
+                    const config = (currentState << 2) | sum;
+                    const newState = ruleTable[config];
+
+                    newGrid[q][r] = newState;
+
+                    if (newState !== currentState && changedCount < CHANGED_CAP) {
+                        this._changedCells[changedCount++] = (q << 16) | r;
+                    }
                 }
             }
         }
 
-        // Swap grids
-        for (let q = 0; q < width; q++) {
+        // Swap grid references
+        for (let q = 0; q < w; q++) {
             const temp = currentGrid[q];
             currentGrid[q] = newGrid[q];
             newGrid[q] = temp;
         }
 
+        this._changedCells.length = changedCount;
         this.generation++;
-        this._syncToAutomaton();
-        return changed;
+
+        this._syncChangedToAutomaton();
+
+        return changedCount > 0;
     }
 
-    _computeConfigurationWrapped(q, r, centerState, orientation, grid, width, height) {
-        const neighborOffsets = this._neighborOffsets[orientation];
-        let sumNeighbors = 0;
+    _syncChangedToAutomaton() {
+        const autoSize = this.automaton.gridSize;
+        const triWidth = this.gridManager.width;
+        const triHeight = this.gridManager.height;
+        const autoGrid = this.automaton.grid;
+        const triGrid = this.gridManager.grid;
 
-        for (let i = 0; i < 3; i++) {
-            const [dq, dr] = neighborOffsets[i];
-            let nq = q + dq;
-            let nr = r + dr;
+        // Scale factors
+        const scaleX = triWidth / autoSize;
+        const scaleY = triHeight / autoSize;
 
-            if (nq < 0) nq += width;
-            else if (nq >= width) nq -= width;
+        // Track which auto cells were modified to avoid redundant marks
+        const modifiedAutoCells = new Uint8Array(autoSize * autoSize);
+        let modifiedCount = 0;
 
-            if (nr < 0) nr += height;
-            else if (nr >= height) nr -= height;
+        for (let i = 0; i < this._changedCells.length; i++) {
+            const packed = this._changedCells[i];
+            const q = packed >>> 16;
+            const r = packed & 0xFFFF;
 
-            sumNeighbors += grid[nq][nr];
-        }
+            // Mapeo inverso: triangular -> automaton
+            const autoX = Math.floor(q / scaleX);
+            const autoY = Math.floor(r / scaleY);
 
-        return (centerState << 2) | sumNeighbors;
-    }
+            if (autoX >= 0 && autoX < autoSize && autoY >= 0 && autoY < autoSize) {
+                const autoIdx = autoX * autoSize + autoY;
 
-    _computeConfigurationBounded(q, r, centerState, orientation, grid, width, height) {
-        const neighborOffsets = this._neighborOffsets[orientation];
-        let sumNeighbors = 0;
+                if (!modifiedAutoCells[autoIdx]) {
+                    modifiedAutoCells[autoIdx] = 1;
+                    modifiedCount++;
 
-        for (let i = 0; i < 3; i++) {
-            const [dq, dr] = neighborOffsets[i];
-            const nq = q + dq;
-            const nr = r + dr;
+                    // Samplear área del triángulo para determinar estado
+                    const qStart = Math.floor(autoX * scaleX);
+                    const qEnd = Math.min(Math.floor((autoX + 1) * scaleX), triWidth);
+                    const rStart = Math.floor(autoY * scaleY);
+                    const rEnd = Math.min(Math.floor((autoY + 1) * scaleY), triHeight);
 
-            if (nq >= 0 && nq < width && nr >= 0 && nr < height) {
-                sumNeighbors += grid[nq][nr];
+                    let aliveCount = 0;
+                    let totalCount = 0;
+
+                    for (let tq = qStart; tq < qEnd; tq++) {
+                        const triCol = triGrid[tq];
+                        for (let tr = rStart; tr < rEnd; tr++) {
+                            if (triCol[tr]) aliveCount++;
+                            totalCount++;
+                        }
+                    }
+
+                    // Mayoría determina estado
+                    const newState = aliveCount > (totalCount >> 1) ? 1 : 0;
+
+                    if (autoGrid[autoX][autoY] !== newState) {
+                        autoGrid[autoX][autoY] = newState;
+                        this.automaton.renderer.markDirty(autoX, autoY);
+                    }
+                }
             }
         }
 
-        return (centerState << 2) | sumNeighbors;
+        return modifiedCount;
     }
 
     _initializeFromAutomaton() {
