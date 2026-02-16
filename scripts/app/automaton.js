@@ -645,6 +645,11 @@ class CellularAutomaton {
         this.gridSize = this.core.gridManager.size;
         this.renderer.resize(this.gridSize, this.cellSize);
 
+        // Notificar al motor triangular si está activo
+        if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
+            this.triangleEngine.resize(size);
+        }
+
         this.updateStats();
         this.render();
 
