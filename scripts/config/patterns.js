@@ -42,7 +42,7 @@ class PatternManager {
     // RENDERIZADO DE PATRONES
     // =========================================
 
-    renderPatterns() {
+    renderPatterns(sortByCount = false) {
         const container = document.getElementById('patternsContainer');
         if (!container) return;
 
@@ -51,12 +51,22 @@ class PatternManager {
         const sortedPatterns = Object.keys(PATTERNS).sort((a, b) => {
             const patternA = PATTERNS[a];
             const patternB = PATTERNS[b];
+
+            // Random siempre al final
             if (patternA.pattern === 'random') return 1;
             if (patternB.pattern === 'random') return -1;
 
-            const nameCompare = patternA.name.localeCompare(patternB.name);
-            if (nameCompare !== 0) return nameCompare;
-            return patternA.cellCount - patternB.cellCount;
+            if (sortByCount) {
+                // Orden por cantidad primero, luego alfabético
+                const countCompare = patternA.cellCount - patternB.cellCount;
+                if (countCompare !== 0) return countCompare;
+                return patternA.name.localeCompare(patternB.name);
+            } else {
+                // Orden alfabético primero, luego por cantidad
+                const nameCompare = patternA.name.localeCompare(patternB.name);
+                if (nameCompare !== 0) return nameCompare;
+                return patternA.cellCount - patternB.cellCount;
+            }
         });
 
         sortedPatterns.forEach(key => {

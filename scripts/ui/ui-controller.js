@@ -10,7 +10,7 @@ class UIController {
         this.showInfluenceArea = false;
         this.patternsTwoRows = false;
         this.patternsCompactView = false;
-        this.rulesLoaded = false;
+        this.patternsSortByCount = false;
 
         this._gridSizeDebounceTimer = null;
         this._gridSizePendingValue = null;
@@ -258,14 +258,12 @@ class UIController {
 
     async _waitForRules() {
         if (window.RULES && Object.keys(window.RULES).length > 0) {
-            this.rulesLoaded = true;
             return;
         }
 
         await new Promise(resolve => {
             const check = () => {
                 if (window.RULES && Object.keys(window.RULES).length > 0) {
-                    this.rulesLoaded = true;
                     resolve();
                 } else {
                     setTimeout(check, 100);
@@ -2247,6 +2245,7 @@ class UIController {
     _bindPatternsControls() {
         const toggleRowsBtn = document.getElementById('patternsToggleRows');
         const toggleCompactBtn = document.getElementById('patternsToggleCompact');
+        const toggleSortBtn = document.getElementById('patternsToggleSort');
         const container = document.getElementById('patternsContainer');
 
         if (toggleRowsBtn && container) {
@@ -2267,6 +2266,22 @@ class UIController {
                 });
                 const icon = toggleCompactBtn.querySelector('i');
                 if (icon) icon.className = this.patternsCompactView ? 'fas fa-expand-alt' : 'fas fa-compress';
+            });
+        }
+
+        // Botón de ordenamiento
+        if (toggleSortBtn && window.patternManager) {
+            this._addEventListener(toggleSortBtn, 'click', () => {
+                this.patternsSortByCount = !this.patternsSortByCount;
+
+                // Actualizar icono
+                const icon = toggleSortBtn.querySelector('i');
+                if (icon) {
+                    icon.className = this.patternsSortByCount ? 'fas fa-sort-numeric-down' : 'fas fa-sort-alpha-down';
+                }
+
+                // Re-renderizar patrones con nuevo orden
+                window.patternManager.renderPatterns(this.patternsSortByCount);
             });
         }
     }

@@ -88,6 +88,7 @@ class I18n {
                 'tooltip.speed.slower': 'Más lento',
                 'tooltip.speed.faster': 'Más rápido',
                 'tooltip.patterns.rows': 'Alternar 1/2 filas',
+                'tooltip.patterns.order': 'Ordenar por células/alfabético',
                 'tooltip.patterns.compact': 'Vista compacta',
 
                 // Configuración
@@ -297,6 +298,7 @@ class I18n {
                 'tooltip.speed.slower': 'Slower',
                 'tooltip.speed.faster': 'Faster',
                 'tooltip.patterns.rows': 'Toggle 1/2 rows',
+                'tooltip.patterns.order': 'Order by cellular amount/alphabetic',
                 'tooltip.patterns.compact': 'Compact view',
 
                 // Configuración
