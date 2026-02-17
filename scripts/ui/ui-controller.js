@@ -399,8 +399,6 @@ class UIController {
 
                 // Actualizar autómata base
                 this.automaton.wrapEdges = wrap;
-                this.automaton.generation = 0;
-                this.automaton.updateStats();
                 this.automaton._markAllDirty();
                 this.automaton.render();
                 this.updateNeighborhoodInfo();
@@ -408,9 +406,6 @@ class UIController {
                 // Actualizar también el motor triangular si está activo
                 if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine) {
                     this.automaton.triangleEngine.wrapEdges = wrap;
-                    // Opcional: resetear para que el cambio tenga efecto inmediato
-                    this.automaton.triangleEngine.reset();
-                    this.automaton.triangleEngine.step(); // Forzar recálculo
                 }
 
                 eventBus.emit('automaton:wrapChanged', {wrap});
@@ -638,8 +633,8 @@ class UIController {
                         eventBus.emit('automaton:runningChanged', {isRunning: false});
                     }
 
-                    const mode = document.getElementById('triangleMode')?.value || 'edge';
-                    this.automaton.triangleEngine.activate({rule, mode});
+                    const mode = this.automaton.triangleEngine.neighborhoodMode;  // Mantener modo actual
+                    this.automaton.triangleEngine.activate({rule, wrap: this.automaton.triangleEngine.wrapEdges});  // NO pasar mode, NO reinicializar
                     this.updateHeaderInfo();
                     this._syncPlayButtonState();
                 }
@@ -1963,7 +1958,6 @@ class UIController {
         const customRuleGroup = document.getElementById('customRuleGroup');
 
         if (selector.value === 'custom') {
-            customRuleGroup.style.display = 'block';
             customRuleGroup.style.display = 'block';
             document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
             document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');

@@ -32,33 +32,35 @@ class TriangleEngine {
     }
 
     activate(options = {}) {
+        const width = this.automaton.gridSize * 2;
+        const height = this.automaton.gridSize;
+
         this.ruleNumber = options.rule ?? 50;
         this.wrapEdges = options.wrap ?? true;
 
-        const size = this.automaton.gridSize;
-        // Grid triangular: el doble de ancho para mantener proporción
-        const width = size * 2;
-        const height = size;
-
+        // Solo recrear grid si no existe o cambiaron dimensiones
         if (!this.gridManager || this.gridManager.width !== width || this.gridManager.height !== height) {
             this.gridManager = new TriangleGridManager(width, height);
             this._newGrid = Array.from({length: width}, () => new Uint8Array(height));
-        } else {
-            this.gridManager.clear();
+            this.initialized = false;
+            this.isActive = true;
+        } else if (!this.isActive) {
+            // Reactivando después de desactivar
+            this.isActive = true;
+            this.initialized = false;
         }
 
         this._buildRuleTable();
-        this.isActive = true;
         this.generation = 0;
-        this.initialized = false;
-        this._workerReady = false;
 
-        this.useWorker = size >= this.workerThreshold && typeof Worker !== 'undefined';
-        if (this.useWorker) {
+        // Worker init solo si es necesario
+        if (!this.worker && this.useWorker) {
             this._initWorker();
         }
+        if (this.worker && !this._workerReady) {
+            this._syncToWorker();
+        }
 
-        console.debug(`🔺 Triangle Engine (ETA): regla ${this.ruleNumber}, worker: ${this.useWorker}`);
         return this;
     }
 
@@ -538,11 +540,17 @@ class TriangleEngine {
         };
     }
 
-    reset() {
+    /**
+     * @param {boolean} clearGrid - Si true, limpia el grid. Default false para cambios de config.
+     */
+    reset(clearGrid = false) {
         this.initialized = false;
         this.generation = 0;
         this._changedCells.length = 0;
-        this.gridManager?.clear();
+
+        if (clearGrid && this.gridManager) {
+            this.gridManager.clear();
+        }
 
         if (this.useWorker && this.worker && this._workerReady) {
             this._syncToWorker();
