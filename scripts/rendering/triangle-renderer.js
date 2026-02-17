@@ -142,80 +142,100 @@ class TriangleRenderer {
         const ctx = this.ctx;
         const size = this.cellSize;
         const h = size * Math.sqrt(3) / 2;
+        const w = size / 2;
         const width = this.canvas.width;
         const height = this.canvas.height;
+        const gm = this.gridManager;
+        const step = this.gridStep;
 
         ctx.strokeStyle = this.colorGrid;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
 
-        // Líneas horizontales (bases) cada gridStep filas
-        for (let r = 0; r <= this.gridManager.height; r += this.gridStep) {
+        // 1. LÍNEAS HORIZONTALES - en y = r * h para r múltiplo de step
+        for (let r = 0; r <= gm.height; r += step) {
             const y = r * h;
-            if (y >= 0 && y <= height) {
-                ctx.moveTo(0, y);
-                ctx.lineTo(width, y);
+            if (y > height) break;
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+
+        // 2. DIAGONALES ↘ (\) - pasan por vértices donde (col + row) es impar
+        // col = x/w, row = y/h
+        // Ecuación: x/w + y/h = impar, o x/w - y/h = impar (para la otra dirección)
+
+        // Para \: y = -√3(x - x0), pasa por (x0, 0)
+        // En celda (q,r), vértice superior de △ está en x = (q+1)*w, y = r*h
+        // y (q+1) + r debe ser impar para que sea vértice de △
+
+        // Generar líneas \ que pasan por la fila superior (y=0) en x = k*step*w
+        // pero desplazadas para coincidir con vértices: x = w, 3w, 5w... = (2k+1)*w
+
+        const xOffsetDiag = w;  // Empezar en primera línea de vértices
+
+        for (let k = -Math.ceil(height / h); k <= Math.ceil(width / w) + 1; k += step) {
+            // Línea que pasa por (xOffsetDiag + k*2*w, 0) si k es par... no
+            // Simplemente: xBase = (2k+1)*w para cubrir todos los vértices
+
+            const xBase = xOffsetDiag + k * 2 * w;  // w, 3w, 5w, ... o desplazado
+
+            // Encontrar segmento visible
+            const pts = [];
+
+            // y = -√3 * (x - xBase)
+
+            // x=0: y = √3 * xBase
+            const yLeft = Math.sqrt(3) * xBase;
+            if (yLeft >= 0 && yLeft <= height) pts.push({x: 0, y: yLeft});
+
+            // x=width: y = -√3 * (width - xBase)
+            const yRight = -Math.sqrt(3) * (width - xBase);
+            if (yRight >= 0 && yRight <= height) pts.push({x: width, y: yRight});
+
+            // y=0: x = xBase
+            if (xBase >= 0 && xBase <= width) pts.push({x: xBase, y: 0});
+
+            // y=height: x = xBase - height/√3 = xBase - h*2*w/h = xBase - 2w? No
+            // height/√3 = height * w / h = (gm.height * h) * w / h = gm.height * w
+            const xBottom = xBase - height / Math.sqrt(3);
+            if (xBottom >= 0 && xBottom <= width) pts.push({x: xBottom, y: height});
+
+            if (pts.length >= 2) {
+                pts.sort((a, b) => a.x - b.x);
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
             }
         }
 
-        const sqrt3 = Math.sqrt(3);
-        // Rango aproximado de parámetros para diagonales
-        const kMin = Math.floor(0);
-        const kMax = Math.ceil(height / h + sqrt3 * width / h);
+        // 3. DIAGONALES ↗ (/) - pendiente +√3
+        // y = √3 * (x - xBase)
 
-        // Diagonales con pendiente negativa (q+r constante) → y = -√3·x + k·h
-        for (let k = kMin; k <= kMax; k += this.gridStep) {
-            const b = k * h;
-            const points = [];
+        for (let k = -Math.ceil(height / h); k <= Math.ceil(width / w) + 1; k += step) {
+            const xBase = xOffsetDiag + k * 2 * w;  // Mismos xBase que \
 
-            // Intersección con borde izquierdo (x=0)
-            const yLeft = b;
-            if (yLeft >= 0 && yLeft <= height) points.push({x: 0, y: yLeft});
+            const pts = [];
 
-            // Intersección con borde derecho (x=width)
-            const yRight = b - sqrt3 * width;
-            if (yRight >= 0 && yRight <= height) points.push({x: width, y: yRight});
+            // y = √3 * (x - xBase)
 
-            // Intersección con borde superior (y=0)
-            const xTop = b / sqrt3;
-            if (xTop >= 0 && xTop <= width) points.push({x: xTop, y: 0});
+            // x=0: y = -√3 * xBase
+            const yLeft = -Math.sqrt(3) * xBase;
+            if (yLeft >= 0 && yLeft <= height) pts.push({x: 0, y: yLeft});
 
-            // Intersección con borde inferior (y=height)
-            const xBottom = (b - height) / sqrt3;
-            if (xBottom >= 0 && xBottom <= width) points.push({x: xBottom, y: height});
+            // x=width: y = √3 * (width - xBase)
+            const yRight = Math.sqrt(3) * (width - xBase);
+            if (yRight >= 0 && yRight <= height) pts.push({x: width, y: yRight});
 
-            if (points.length >= 2) {
-                points.sort((a, b) => a.x - b.x);
-                ctx.moveTo(points[0].x, points[0].y);
-                ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-            }
-        }
+            // y=0: x = xBase
+            if (xBase >= 0 && xBase <= width) pts.push({x: xBase, y: 0});
 
-        // Diagonales con pendiente positiva (q-r constante) → y = √3·x + k·h
-        for (let k = kMin; k <= kMax; k += this.gridStep) {
-            const b = k * h;
-            const points = [];
+            // y=height: x = xBase + height/√3
+            const xBottom = xBase + height / Math.sqrt(3);
+            if (xBottom >= 0 && xBottom <= width) pts.push({x: xBottom, y: height});
 
-            // x=0
-            const yLeft = b;
-            if (yLeft >= 0 && yLeft <= height) points.push({x: 0, y: yLeft});
-
-            // x=width
-            const yRight = sqrt3 * width + b;
-            if (yRight >= 0 && yRight <= height) points.push({x: width, y: yRight});
-
-            // y=0
-            const xTop = -b / sqrt3;
-            if (xTop >= 0 && xTop <= width) points.push({x: xTop, y: 0});
-
-            // y=height
-            const xBottom = (height - b) / sqrt3;
-            if (xBottom >= 0 && xBottom <= width) points.push({x: xBottom, y: height});
-
-            if (points.length >= 2) {
-                points.sort((a, b) => a.x - b.x);
-                ctx.moveTo(points[0].x, points[0].y);
-                ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+            if (pts.length >= 2) {
+                pts.sort((a, b) => a.x - b.x);
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
             }
         }
 
