@@ -702,8 +702,13 @@ class CellularAutomaton {
             this.isLimitReached = this.core.gridManager.countPopulation() >= this.maxPopulation;
         }
 
+        // Si se alcanzó el límite y estábamos corriendo, detener y sincronizar UI
         if (this.isLimitReached && this.isRunning) {
             this.stop();
+            this.isRunning = false;
+
+            // Notificar a UI para actualizar botón Play/Pause y habilitar Step
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
         }
 
         return this.isLimitReached;

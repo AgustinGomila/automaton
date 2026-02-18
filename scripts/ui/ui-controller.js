@@ -99,13 +99,7 @@ class UIController {
         this.loadRules();
 
         eventBus.on('automaton:runningChanged', ({isRunning}) => {
-            const playIcon = document.getElementById('playIcon');
-            const playText = document.getElementById('playText');
-
-            if (playIcon && playText) {
-                playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
-                playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
-            }
+            this._syncPlayButtonState();
         });
 
         eventBus.emit('ui:ready');
@@ -1670,12 +1664,13 @@ class UIController {
         const isRunning = this.automaton.isRunning;
         const playIcon = document.getElementById('playIcon');
         const playBtn = document.getElementById('playBtn');
+        const playText = document.getElementById('playText');
         const stepBtn = document.getElementById('stepBtn');
 
         if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
 
-        const playText = playBtn?.querySelector('span');
-        if (playText) playText.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
+        const playTextEl = playText || playBtn?.querySelector('span');
+        if (playTextEl) playTextEl.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
 
         if (stepBtn) stepBtn.disabled = isRunning;
     }
