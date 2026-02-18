@@ -1245,12 +1245,16 @@ class CellularAutomaton {
             if (typeof TriangleEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/triangle-engine.js');
             }
+
+            // === Cargar ambos renderers ===
             if (typeof TriangleRenderer === 'undefined') {
                 await this._loadScript('scripts/rendering/triangle-renderer.js');
             }
+            if (typeof TriangleWebGL2Renderer === 'undefined') {
+                await this._loadScript('scripts/rendering/triangle-webgl2-renderer.js');
+            }
 
-            // Guardar referencias originales ANTES de crear el nuevo renderer
-            // Usar this.renderer (el actual) en lugar de this._originalRenderer
+            // Guardar referencias originales
             if (!this._originalRenderer) {
                 this._originalRenderer = this.renderer;
             }
@@ -1258,34 +1262,56 @@ class CellularAutomaton {
                 this._originalCore = this.core;
             }
 
-            // Crear motor triangular PRIMERO (esto crea el gridManager)
+            // Crear motor triangular
             this.triangleEngine = new TriangleEngine(this);
 
-            // Crear renderer triangular DESPUÉS del engine
+            // === Selección dinámica de renderer ===
             const canvas = document.getElementById('canvas');
             const container = document.getElementById('canvas-container');
 
             // Limpiar canvas anterior
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Crear nuevo renderer triangular
-            this.renderer = new TriangleRenderer({
+            // Detectar WebGL2 y crear renderer apropiado
+            const useWebGL2 = this._detectWebGL2Support();
+
+            const rendererOptions = {
                 canvas: canvas,
                 container: container,
                 cellSize: Math.max(3, Math.min(6, this.cellSize)),
                 showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
-                showActivityEffect: this._originalRenderer?.getConfig('showActivityEffect') ?? true,
                 colorAlive: '#ec4899',
                 colorDead: '#0f172a',
                 colorGrid: 'rgba(255,255,255,0.1)'
-            });
+            };
+
+            this.renderer = useWebGL2
+                ? new TriangleWebGL2Renderer(rendererOptions)
+                : new TriangleRenderer(rendererOptions);
 
             this.specialMode = 'triangle';
         }
 
         this._specialEngineLoaded = true;
         return Promise.resolve();
+    }
+
+    /**
+     * Detecta soporte WebGL2 con instancing
+     * @private
+     */
+    _detectWebGL2Support() {
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl2');
+            if (!gl) return false;
+            // Instancing el core en WebGL2, pero verificamos por seguridad
+            return typeof gl.createVertexArray === 'function' &&
+                typeof gl.drawArraysInstanced === 'function';
+        } catch (e) {
+            return false;
+        }
     }
 
     _loadScript(src) {
