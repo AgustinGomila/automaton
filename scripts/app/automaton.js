@@ -641,19 +641,22 @@ class CellularAutomaton {
 
         if (this.isRunning) this.stop();
 
+        // Siempre redimensionar el core primero (para mantener grid base válido)
         this.core.resize(size);
         this.gridSize = this.core.gridManager.size;
-        this.renderer.resize(this.gridSize, this.cellSize);
 
-        // Notificar al motor triangular si está activo
         if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
+            // Modo triangular: redimensionar engine y sincronizar renderer
             this.triangleEngine.resize(size);
+        } else {
+            // Modo estándar
+            this.renderer.resize(this.gridSize, this.cellSize);
         }
 
         this.updateStats();
         this.render();
 
-        if (size >= this.workerThreshold) {
+        if (size >= this.workerThreshold && this.specialMode !== 'triangle') {
             this._initWorker();
         }
 

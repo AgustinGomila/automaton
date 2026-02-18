@@ -369,6 +369,12 @@ class TriangleWebGL2Renderer {
      */
     setGridManager(gridManager) {
         this.gridManager = gridManager;
+
+        // Sincronizar fallback si existe
+        if (this._fallbackRenderer) {
+            this._fallbackRenderer.setGridManager(gridManager);
+        }
+
         this._resizeCanvas();
         this._isFirstRender = true;
         this.markAllDirty();
