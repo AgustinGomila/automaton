@@ -66,12 +66,6 @@ class Application {
     _emergencyCleanup() {
         try {
             this.uiController?.destroy();
-
-            if (this.automaton?.worker) {
-                this.automaton.worker.terminate();
-                this.automaton.worker = null;
-            }
-
             this.automaton?.destroy();
             this.patternManager?.destroy();
             window.eventBus?.destroy();

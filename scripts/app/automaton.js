@@ -58,34 +58,65 @@ class CellularAutomaton {
         });
 
         // === ESTADO DE EJECUCIÓN ===
-        this.isRunning = false;
         this.generation = 0;
-        this.updateInterval = 100;
-        this.rafId = null;
-        this._lastFrameTime = 0;
+        this._loop = new AnimationLoop({
+            onStep: () => this._step()
+        });
 
         // === WORKERS ===
-        this.worker = null;
-        this.workerThreshold = 100;
-        this.isWorkerProcessing = false;
-        this._currentHandlerId = null;
-        this._initWorker();
+        this._workerManager = new GridWorkerManager({
+            workerPath: 'scripts/infrastructure/workers/automaton-worker.js',
+            threshold: 100,
+            getGridSize: () => this.gridSize,
+            getCore: () => this.core,
+            onResult: ({generation, population, changedCells, size}) => {
+                this.generation = generation;
+                this.stateManager.recordPopulation(population);
+
+                if (Array.isArray(changedCells)) {
+                    changedCells.forEach(index => {
+                        if (index >= 0 && index < size * size) {
+                            this.renderer.markDirty(Math.floor(index / size), index % size);
+                        }
+                    });
+                } else {
+                    this.renderer.markAllDirty();
+                }
+
+                this.updateStats();
+                this.checkLimits();
+                this.renderer.updateActivityAges(changedCells || []);
+                this.render();
+            },
+            onError: () => {
+                this.renderer.markAllDirty();
+                this.render();
+            }
+        });
+        this._workerManager.init();
 
         // === MOTORES ESPECIALES ===
-        this.wolframEngine = null;
-        this.rd2dEngine = null;
-        this.triangleEngine = null;
-        this.specialMode = null;
-        this._specialEngineLoaded = false;
-        this._originalRenderer = null;
-        this._originalCore = null;
+        this._engineManager = new SpecialEngineManager({
+            getRenderer: () => this.renderer,
+            setRenderer: (r) => {
+                this.renderer = r;
+            },
+            getCore: () => this.core,
+            setCore: (c) => {
+                this.core = c;
+            },
+            getGridSize: () => this.gridSize,
+            getCellSize: () => this.cellSize,
+            getAutomaton: () => this
+        });
 
         // === LÍMITES ===
-        this.limitType = 'none';
-        this.limitValue = 1000;
-        this.maxGenerations = null;
-        this.maxPopulation = null;
-        this.isLimitReached = false;
+        this._limiter = new SimulationLimiter({
+            onLimitReached: () => {
+                this.stop();
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
+            }
+        });
 
         // === EVENTOS ===
         this._cleanupResize = this._addEventListener(window, 'resize', () => {
@@ -122,6 +153,18 @@ class CellularAutomaton {
         if (this.core?.gridManager) {
             this.core.gridManager.grid = value;
         }
+    }
+
+    get limitType() {
+        return this._limiter.limitType;
+    }
+
+    get isLimitReached() {
+        return this._limiter.isLimitReached;
+    }
+
+    set isLimitReached(v) {
+        this._limiter.isLimitReached = v;
     }
 
     get rule() {
@@ -169,8 +212,78 @@ class CellularAutomaton {
         return this.stateManager?.populationHistory;
     }
 
+    get specialMode() {
+        return this._engineManager.specialMode;
+    }
+
+    set specialMode(v) {
+        this._engineManager.specialMode = v;
+    }
+
+    get wolframEngine() {
+        return this._engineManager.wolframEngine;
+    }
+
+    set wolframEngine(v) {
+        this._engineManager.wolframEngine = v;
+    }
+
+    get rd2dEngine() {
+        return this._engineManager.rd2dEngine;
+    }
+
+    set rd2dEngine(v) {
+        this._engineManager.rd2dEngine = v;
+    }
+
+    get triangleEngine() {
+        return this._engineManager.triangleEngine;
+    }
+
+    set triangleEngine(v) {
+        this._engineManager.triangleEngine = v;
+    }
+
+    get _originalRenderer() {
+        return this._engineManager._originalRenderer;
+    }
+
+    set _originalRenderer(v) {
+        this._engineManager._originalRenderer = v;
+    }
+
+    get worker() {
+        return this._workerManager._worker;
+    }
+
+    get workerThreshold() {
+        return this._workerManager.threshold;
+    }
+
+    get isWorkerProcessing() {
+        return this._workerManager.isProcessing;
+    }
+
+    set isWorkerProcessing(v) {
+        this._workerManager.isProcessing = v;
+    }
+
     // =========================================
     // INICIALIZACIÓN
+    // =========================================
+
+    get isRunning() {
+        return this._loop.isRunning;
+    }
+
+    set isRunning(_) {
+        // Las asignaciones directas (this.isRunning = false) son redundantes
+        // tras llamar a start()/stop(). Este setter las convierte en no-ops
+        // para mantener compatibilidad sin efectos secundarios.
+    }
+
+    // =========================================
+    // LIFECYCLE & CLEANUP
     // =========================================
 
     async _init() {
@@ -205,7 +318,7 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // LIFECYCLE & CLEANUP
+    // CALLBACKS DEL CORE
     // =========================================
 
     destroy() {
@@ -247,6 +360,18 @@ class CellularAutomaton {
             this.rd2dEngine = null;
         }
 
+        this._loop?.destroy();
+        this._loop = null;
+
+        this._limiter?.destroy();
+        this._limiter = null;
+
+        this._engineManager?.destroy();
+        this._engineManager = null;
+
+        this._workerManager?.destroy();
+        this._workerManager = null;
+
         this._isDestroyed = true;
         eventBus.emit('automaton:destroyed');
     }
@@ -255,10 +380,6 @@ class CellularAutomaton {
         target.addEventListener(event, handler, options);
         return () => target.removeEventListener(event, handler, options);
     }
-
-    // =========================================
-    // CALLBACKS DEL CORE
-    // =========================================
 
     _handleCoreGeneration(stats) {
         this.generation = stats.generation;
@@ -284,6 +405,10 @@ class CellularAutomaton {
     _handleHistoryChange(stats) {
         eventBus.emit('history:changed', stats);
     }
+
+    // =========================================
+    // WORKERS
+    // =========================================
 
     _handleCoreCellChange(cells) {
         for (const cell of cells) {
@@ -329,146 +454,21 @@ class CellularAutomaton {
         }
     }
 
-    // =========================================
-    // WORKERS
-    // =========================================
-
     _initWorker() {
-        if (this.worker) {
-            this.worker.terminate();
-            this.worker = null;
-            this.isWorkerProcessing = false;
-        }
-
-        if (this.gridSize >= this.workerThreshold && window.Worker) {
-            try {
-                this.worker = new Worker('scripts/infrastructure/workers/automaton-worker.js');
-                const handlerId = `worker_handler_${Date.now()}`;
-                this._currentHandlerId = handlerId;
-
-                this.worker.onmessage = (e) => {
-                    if (this._currentHandlerId !== handlerId) return;
-
-                    const {newGrid, changedCells, population, generation, error} = e.data;
-
-                    if (error) {
-                        console.error('Error en worker:', error);
-                        this.isWorkerProcessing = false;
-                        this._cleanupWorker();
-                        return;
-                    }
-
-                    if (!this.worker || this._currentHandlerId !== handlerId) return;
-
-                    if (!newGrid || !Array.isArray(newGrid)) {
-                        console.error('Grid inválido desde worker:', newGrid);
-                        this.isWorkerProcessing = false;
-                        return;
-                    }
-
-                    const size = this.gridSize;
-                    for (let x = 0; x < size; x++) {
-                        const col = newGrid[x];
-                        if (col instanceof Uint8Array && col.length === size) {
-                            this.core.gridManager.grid[x].set(col);
-                        } else if (Array.isArray(col) || ArrayBuffer.isView(col)) {
-                            for (let y = 0; y < size && y < col.length; y++) {
-                                this.core.gridManager.grid[x][y] = col[y] ? 1 : 0;
-                            }
-                        }
-                    }
-
-                    this.generation = generation;
-                    this.stateManager.recordPopulation(population);
-
-                    if (Array.isArray(changedCells)) {
-                        changedCells.forEach(index => {
-                            if (index >= 0 && index < size * size) {
-                                const x = Math.floor(index / size);
-                                const y = index % size;
-                                this.renderer.markDirty(x, y);
-                            }
-                        });
-                    } else {
-                        this.renderer.markAllDirty();
-                    }
-
-                    this.updateStats();
-                    this.checkLimits();
-                    this.renderer.updateActivityAges(changedCells || []);
-                    this.render();
-
-                    this.isWorkerProcessing = false;
-                };
-
-                this.worker.onerror = (error) => {
-                    if (this._currentHandlerId !== handlerId) return;
-                    console.error('Worker error:', error);
-                    this.isWorkerProcessing = false;
-                    this._cleanupWorker();
-                    this.renderer.markAllDirty();
-                    this.render();
-                };
-
-            } catch (error) {
-                console.warn('No se pudo crear worker:', error);
-                this._cleanupWorker();
-            }
-        }
+        this._workerManager.init();
     }
 
     _cleanupWorker() {
-        if (this.worker) {
-            this._currentHandlerId = null;
-            this.worker.terminate();
-            this.worker = null;
-            this.isWorkerProcessing = false;
-        }
-    }
-
-    _nextGenerationWorker() {
-        if (this.isWorkerProcessing) return 0;
-
-        this.isWorkerProcessing = true;
-
-        const size = this.gridSize;
-        const flatGrid = new Uint8Array(size * size);
-
-        const grid = this.core.gridManager.grid;
-        for (let x = 0; x < size; x++) {
-            const col = grid[x];
-            const baseIdx = x * size;
-            for (let y = 0; y < size; y++) {
-                flatGrid[baseIdx + y] = col[y] ? 1 : 0;
-            }
-        }
-
-        const messageData = {
-            grid: flatGrid,
-            gridSize: size,
-            rule: {
-                birth: this.core.ruleEngine.birth,
-                survival: this.core.ruleEngine.survival
-            },
-            wrapEdges: this.core.neighborhood.wrapEdges,
-            neighborhoodType: this.core.neighborhood.type,
-            neighborhoodRadius: this.core.neighborhood.radius,
-            neighborOffsets: this.core.neighborhood._offsets,
-            generation: this.generation
-        };
-
-        try {
-            this.worker.postMessage(messageData, [flatGrid.buffer]);
-        } catch (e) {
-            this.worker.postMessage(messageData);
-        }
-
-        return 0;
+        this._workerManager.cleanup();
     }
 
     // =========================================
     // GENERACIÓN
     // =========================================
+
+    _nextGenerationWorker() {
+        return this._workerManager.requestNextGeneration(this.generation) ? 0 : 0;
+    }
 
     nextGeneration() {
         if (this.checkLimits()) return 0;
@@ -540,24 +540,15 @@ class CellularAutomaton {
 
         if (this.worker && this.gridSize >= this.workerThreshold) {
             return this._nextGenerationWorker();
-        } else {
-            return this._nextGenerationCore();
         }
     }
 
-    // Método para restaurar modo estándar
-    restoreStandardMode() {
-        if (this._originalRenderer) {
-            this.renderer = this._originalRenderer;
-            this._originalRenderer = null;
-        }
-        if (this._originalCore) {
-            this.core = this._originalCore;
-            this._originalCore = null;
-        }
-        this.specialMode = null;
+    // =========================================
+    // RENDERIZADO (DELEGADO)
+    // =========================================
 
-        // Re-inicializar renderer estándar
+    restoreStandardMode() {
+        this._engineManager.restoreStandardMode();
         this.renderer.resize(this.gridSize, this.cellSize);
         this.renderer.markAllDirty();
     }
@@ -581,7 +572,7 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // RENDERIZADO (DELEGADO)
+    // MÉTODOS PÚBLICOS
     // =========================================
 
     render() {
@@ -592,10 +583,6 @@ class CellularAutomaton {
     _markAllDirty() {
         this.renderer?.markAllDirty();
     }
-
-    // =========================================
-    // MÉTODOS PÚBLICOS
-    // =========================================
 
     setCell(x, y, state, markDirty = true) {
         if (markDirty && this.stateManager?.isTracking) {
@@ -694,49 +681,14 @@ class CellularAutomaton {
     }
 
     checkLimits() {
-        if (this.limitType === 'none') {
-            this.isLimitReached = false;
-            return false;
-        }
-
-        if (this.limitType === 'generations' && this.maxGenerations !== null) {
-            this.isLimitReached = this.generation >= this.maxGenerations;
-        } else if (this.limitType === 'population' && this.maxPopulation !== null) {
-            this.isLimitReached = this.core.gridManager.countPopulation() >= this.maxPopulation;
-        }
-
-        // Si se alcanzó el límite y estábamos corriendo, detener y sincronizar UI
-        if (this.isLimitReached && this.isRunning) {
-            this.stop();
-            this.isRunning = false;
-
-            // Notificar a UI para actualizar botón Play/Pause y habilitar Step
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
-        }
-
-        return this.isLimitReached;
+        return this._limiter.check(
+            this.generation,
+            () => this.core.gridManager.countPopulation()
+        );
     }
 
     setLimit(type, value) {
-        this.limitType = type;
-
-        switch (type) {
-            case 'none':
-                this.maxGenerations = null;
-                this.maxPopulation = null;
-                break;
-            case 'generations':
-                this.maxGenerations = parseInt(value);
-                this.maxPopulation = null;
-                break;
-            case 'population':
-                this.maxPopulation = parseInt(value);
-                this.maxGenerations = null;
-                break;
-        }
-
-        this.limitValue = value;
-        this.isLimitReached = false;
+        this._limiter.setLimit(type, value);
         eventBus.emit('automaton:limitChanged', {type, value});
     }
 
@@ -946,7 +898,6 @@ class CellularAutomaton {
 
         this._cleanupWorker();
 
-        // Si estamos en modo triangular
         if (this.specialMode === 'triangle' && this.triangleEngine?.gridManager) {
             const width = this.triangleEngine.gridManager.width;
             const height = this.triangleEngine.gridManager.height;
@@ -986,6 +937,8 @@ class CellularAutomaton {
         this.renderer.markAllDirty();
         this.updateStats(stats.population);
         this.render();
+
+        this._initWorker();
 
         if (wasRunning) {
             setTimeout(() => this.start(), 0);
@@ -1103,22 +1056,17 @@ class CellularAutomaton {
             this.updateStats();
         }
 
-        this.isRunning = !this.isRunning;
-
-        if (this.isRunning) {
-            this.start();
-        } else {
+        if (this._loop.isRunning) {
             this.stop();
+        } else {
+            this.start();
         }
 
-        return this.isRunning;
+        return this._loop.isRunning;
     }
 
     start() {
-        if (this.rafId) {
-            console.warn('RAF ya activo');
-            return;
-        }
+        if (this._loop.isRunning) return;
 
         for (let x = 0; x < this.gridSize; x++) {
             for (let y = 0; y < this.gridSize; y++) {
@@ -1128,65 +1076,32 @@ class CellularAutomaton {
             }
         }
         this.renderer.markAllDirty();
-
-        this._lastFrameTime = performance.now();
-        this._animateRAF();
+        this._loop.start();
     }
 
     stop() {
-        if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-            this.rafId = null;
-        }
+        this._loop.stop();
     }
 
-    _animateRAF(currentTime = 0) {
-        if (!this.isRunning) return;
-
-        const deltaTime = currentTime - this._lastFrameTime;
-
-        if (deltaTime >= this.updateInterval) {
-            this._lastFrameTime = currentTime - (deltaTime % this.updateInterval);
-
-            // Para modo triangular, usar estrategia diferente
-            if (this.specialMode === 'triangle') {
-                // Procesar generación
-                const changed = this.nextGeneration();
-
-                // Solo renderizar si hubo cambios o cada 5 frames mínimo
-                if (changed || this.generation % 5 === 0) {
-                    this.render();
-                }
-
-                // Actualizar stats solo cada 10 generaciones
-                if (this.generation % 10 === 0) {
-                    this.updateStats();
-                }
-            } else {
-                // Modo estándar
-                this.nextGeneration();
+    _step() {
+        if (this.specialMode === 'triangle') {
+            const changed = this.nextGeneration();
+            if (changed || this.generation % 5 === 0) {
                 this.render();
             }
+            if (this.generation % 10 === 0) {
+                this.updateStats();
+            }
+        } else {
+            this.nextGeneration();
+            this.render();
         }
-
-        this.rafId = requestAnimationFrame((time) => this._animateRAF(time));
     }
 
     setSpeed(level) {
-        const minSpeed = 500;  // Más lento = más tiempo entre frames
-        const maxSpeed = 16;   // ~60fps máximo
-
-        // Mapeo no-lineal para mejor control
-        const speedMap = [500, 250, 125, 60, 30, 16, 16, 16, 16, 16];
-        this.updateInterval = speedMap[Math.min(level - 1, 9)] || 16;
-
-        if (this.isRunning) {
-            this.stop();
-            this.start();
-        }
-
-        eventBus.emit('automaton:speedChanged', {speed: this.updateInterval});
-        return this.updateInterval;
+        const interval = this._loop.setSpeed(level);
+        eventBus.emit('automaton:speedChanged', {speed: interval});
+        return interval;
     }
 
     toggleGrid() {
@@ -1208,128 +1123,7 @@ class CellularAutomaton {
     // =========================================
 
     async _initSpecialEngine(engineName) {
-        if (this.specialMode === engineName && this._specialEngineLoaded) {
-            return Promise.resolve();
-        }
-
-        // Desactivar todos los motores especiales activos
-        if (this.wolframEngine?.isActive) {
-            this.wolframEngine.deactivate();
-        }
-        if (this.rd2dEngine?.isActive) {
-            this.rd2dEngine.deactivate();
-        }
-        if (this.triangleEngine?.isActive) {
-            this.triangleEngine.deactivate();
-        }
-
-        // Restaurar renderer y core originales si existen
-        if (this._originalRenderer) {
-            this.renderer = this._originalRenderer;
-            this._originalRenderer = null;
-        }
-        if (this._originalCore) {
-            this.core = this._originalCore;
-            this._originalCore = null;
-        }
-
-        if (engineName === 'rd2d') {
-            if (typeof RD2DEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/rd2d-engine.js');
-            }
-            this.rd2dEngine = new RD2DEngine(this);
-            this.specialMode = 'rd2d';
-        } else if (engineName === 'wolfram') {
-            if (typeof WolframEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/wolfram-engine.js');
-            }
-            this.wolframEngine = new WolframEngine(this);
-            this.specialMode = 'wolfram';
-        } else if (engineName === 'triangle') {
-            // Cargar dependencias si no existen
-            if (typeof TriangleGridManager === 'undefined') {
-                await this._loadScript('scripts/core/engines/triangle-grid-manager.js');
-            }
-            if (typeof TriangleEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/triangle-engine.js');
-            }
-
-            // === Cargar ambos renderers ===
-            if (typeof TriangleRenderer === 'undefined') {
-                await this._loadScript('scripts/rendering/triangle-renderer.js');
-            }
-            if (typeof TriangleWebGL2Renderer === 'undefined') {
-                await this._loadScript('scripts/rendering/triangle-webgl2-renderer.js');
-            }
-
-            // Guardar referencias originales
-            if (!this._originalRenderer) {
-                this._originalRenderer = this.renderer;
-            }
-            if (!this._originalCore) {
-                this._originalCore = this.core;
-            }
-
-            // Crear motor triangular
-            this.triangleEngine = new TriangleEngine(this);
-
-            // === Selección dinámica de renderer ===
-            const canvas = document.getElementById('canvas');
-            const container = document.getElementById('canvas-container');
-
-            // Limpiar canvas anterior
-            const ctx = canvas.getContext('2d');
-            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Detectar WebGL2 y crear renderer apropiado
-            const useWebGL2 = this._detectWebGL2Support();
-
-            const rendererOptions = {
-                canvas: canvas,
-                container: container,
-                cellSize: Math.max(3, Math.min(6, this.cellSize)),
-                showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
-                colorAlive: '#ec4899',
-                colorDead: '#0f172a',
-                colorGrid: 'rgba(255,255,255,0.1)'
-            };
-
-            this.renderer = useWebGL2
-                ? new TriangleWebGL2Renderer(rendererOptions)
-                : new TriangleRenderer(rendererOptions);
-
-            this.specialMode = 'triangle';
-        }
-
-        this._specialEngineLoaded = true;
-        return Promise.resolve();
-    }
-
-    /**
-     * Detecta soporte WebGL2 con instancing
-     * @private
-     */
-    _detectWebGL2Support() {
-        try {
-            const canvas = document.createElement('canvas');
-            const gl = canvas.getContext('webgl2');
-            if (!gl) return false;
-            // Instancing el core en WebGL2, pero verificamos por seguridad
-            return typeof gl.createVertexArray === 'function' &&
-                typeof gl.drawArraysInstanced === 'function';
-        } catch (e) {
-            return false;
-        }
-    }
-
-    _loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = src;
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
+        return this._engineManager.activate(engineName);
     }
 }
 

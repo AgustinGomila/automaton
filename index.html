@@ -642,17 +642,18 @@
 <!-- Core matemático -->
 <script src="scripts/core/grid-manager.js"></script>
 <script src="scripts/core/neighborhood-calculator.js"></script>
-<script src="scripts/core/rule-engine.js"></script>
 <script src="scripts/core/cellular-automaton.js"></script>
+
+<!-- Engines -->
+<script src="scripts/core/engines/special-engine-manager.js"></script>
+<script src="scripts/core/engines/rule-engine.js"></script>
 <script src="scripts/core/engines/rd2d-engine.js"></script>
 <script src="scripts/core/engines/wolfram-engine.js"></script>
-
-<!-- Motor y renderer triangular -->
-<script src="scripts/core/triangle-grid-manager.js"></script>
 <script src="scripts/core/engines/triangle-engine.js"></script>
-<script src="scripts/rendering/triangle-renderer.js"></script>
 
-<!-- Rendering -->
+<!-- Renderer -->
+<script src="scripts/core/triangle-grid-manager.js"></script>
+<script src="scripts/rendering/triangle-renderer.js"></script>
 <script src="scripts/rendering/grid-renderer.js"></script>
 
 <!-- Configuración -->
@@ -662,11 +663,14 @@
 <script src="scripts/config/pattern-loader.js"></script>
 
 <!-- Infraestructura -->
+<script src="scripts/infrastructure/workers/grid-worker-manager.js"></script>
 <script src="scripts/infrastructure/workers/automaton-worker.js"></script>
 
 <!-- Aplicación -->
 <script src="scripts/app/state-manager.js"></script>
 <script src="scripts/app/automaton.js"></script>
+<script src="scripts/app/automaton-loop.js"></script>
+<script src="scripts/app/simulator-limiter.js"></script>
 
 <!-- UI -->
 <script src="scripts/ui/ui-controller.js"></script>
