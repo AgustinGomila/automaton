@@ -370,9 +370,12 @@ class TriangleWebGL2Renderer {
     setGridManager(gridManager) {
         this.gridManager = gridManager;
 
-        // Sincronizar fallback si existe
         if (this._fallbackRenderer) {
+            // Fallback controla el canvas: delegar y salir
             this._fallbackRenderer.setGridManager(gridManager);
+            this._isFirstRender = true;
+            this.markAllDirty();
+            return;
         }
 
         this._resizeCanvas();
@@ -385,6 +388,12 @@ class TriangleWebGL2Renderer {
      */
     resize(gridSize, cellSize) {
         this.cellSize = Math.max(3, Math.min(8, cellSize || this.cellSize));
+
+        if (this._fallbackRenderer) {
+            // Fallback controla el canvas: delegar completamente
+            this._fallbackRenderer.resize(gridSize, this.cellSize);
+            return;
+        }
 
         if (this.gridManager) {
             this._resizeCanvas();
