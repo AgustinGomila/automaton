@@ -544,34 +544,6 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // RENDERIZADO (DELEGADO)
-    // =========================================
-
-    restoreStandardMode() {
-        this._engineManager.restoreStandardMode();
-        this.renderer.resize(this.gridSize, this.cellSize);
-        this.renderer.markAllDirty();
-    }
-
-    _nextGenerationCore() {
-        const stats = this.core.step();
-
-        if (stats.births + stats.deaths > this.gridSize * this.gridSize * 0.1) {
-            this.renderer.markAllDirty();
-        }
-
-        this.checkLimits();
-
-        const changedIndices = [];
-        this.renderer._dirtyCells.forEach(index => {
-            changedIndices.push(index);
-        });
-        this.renderer.updateActivityAges(changedIndices);
-
-        return stats.births + stats.deaths;
-    }
-
-    // =========================================
     // MÉTODOS PÚBLICOS
     // =========================================
 
