@@ -7,8 +7,8 @@ class UIController {
         this.automaton = automatonInstance;
 
         this.showInfluenceArea = false;
-        this.patternsTwoRows = false;
-        this.patternsCompactView = false;
+        this.patternsTwoRows = true;
+        this.patternsCompactView = true;
         this.patternsSortByCount = false;
 
         this._gridSizeDebounceTimer = null;
@@ -847,6 +847,8 @@ class UIController {
                 const icon = toggleRowsBtn.querySelector('i');
                 if (icon) icon.className = this.patternsTwoRows ? 'fas fa-grip-lines-vertical' : 'fas fa-grip-lines';
             });
+            container.classList.add('two-rows');
+            toggleRowsBtn.querySelector('i')?.classList.add('fa-grip-lines-vertical');
         }
 
         if (toggleCompactBtn && container) {
@@ -859,22 +861,19 @@ class UIController {
                 const icon = toggleCompactBtn.querySelector('i');
                 if (icon) icon.className = this.patternsCompactView ? 'fas fa-expand-alt' : 'fas fa-compress';
             });
+            container.classList.add('compact-view');
+            toggleCompactBtn.querySelector('i')?.classList.add('fa-expand-alt');
         }
 
-        // Botón de ordenamiento
         if (toggleSortBtn && window.patternManager) {
             this._addEventListener(toggleSortBtn, 'click', () => {
                 this.patternsSortByCount = !this.patternsSortByCount;
-
-                // Actualizar icono
                 const icon = toggleSortBtn.querySelector('i');
-                if (icon) {
-                    icon.className = this.patternsSortByCount ? 'fas fa-sort-numeric-down' : 'fas fa-sort-alpha-down';
-                }
-
-                // Re-renderizar patrones con nuevo orden
+                if (icon) icon.className = this.patternsSortByCount ? 'fas fa-sort-numeric-down' : 'fas fa-sort-alpha-down';
                 window.patternManager.renderPatterns(this.patternsSortByCount);
             });
+            window.patternManager.renderPatterns(false);
+            toggleSortBtn.querySelector('i')?.classList.add('fa-sort-alpha-down');
         }
     }
 
