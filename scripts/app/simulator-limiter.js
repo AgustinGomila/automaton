@@ -15,7 +15,7 @@ class SimulationLimiter {
         this._onLimitReached = onLimitReached;
 
         this.limitType = 'none';
-        this.limitValue = 1000;
+        this.limitValue = 100;
         this.maxGenerations = null;
         this.maxPopulation = null;
         this.isLimitReached = false;
