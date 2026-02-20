@@ -595,10 +595,12 @@ class CellularAutomaton {
             this.renderer.markDirty(x, y);
 
             if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
-                if (state) {
-                    this.rd2dEngine.stateGrid[x][y] = this.rd2dEngine._inferStateFromNeighbors(x, y) || 15;
-                } else {
-                    this.rd2dEngine.stateGrid[x][y] = 0;
+                if (this.rd2dEngine.stateGrid?.[x]) {
+                    if (state) {
+                        this.rd2dEngine.stateGrid[x][y] = this.rd2dEngine._inferStateFromNeighbors(x, y) || 15;
+                    } else {
+                        this.rd2dEngine.stateGrid[x][y] = 0;
+                    }
                 }
             }
         }
@@ -628,16 +630,20 @@ class CellularAutomaton {
 
         if (this.isRunning) this.stop();
 
-        // Siempre redimensionar el core primero (para mantener grid base válido)
         this.core.resize(size);
         this.gridSize = this.core.gridManager.size;
 
         if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
-            // Modo triangular: redimensionar engine y sincronizar renderer
             this.triangleEngine.resize(size);
         } else {
-            // Modo estándar
             this.renderer.resize(this.gridSize, this.cellSize);
+        }
+
+        // Sincronizar stateGrid de RD-2D con el nuevo tamaño
+        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+            this.rd2dEngine.gridSize = this.gridSize;
+            this.rd2dEngine._initStateGrid();
+            this.rd2dEngine.initialized = false;
         }
 
         this.updateStats();
