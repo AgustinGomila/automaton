@@ -477,6 +477,8 @@ class CellularAutomaton {
             const continued = this.rd2dEngine.step();
             if (!continued) {
                 this.stop();
+                this.isRunning = false;
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
                 console.debug('RD-2D: Simulación detenida (estable)');
             }
             this.generation = this.rd2dEngine.generation;
@@ -493,12 +495,13 @@ class CellularAutomaton {
             const continued = this.wolframEngine.step();
             if (!continued) {
                 this.stop();
+                this.isRunning = false;
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
                 console.debug('Wolfram: Límite alcanzado');
             }
             this.generation = this.wolframEngine.generation;
             this.updateStats();
 
-            // Para Wolfram, usar dirty cells del renderer
             const changedIndices = [];
             this.renderer._dirtyCells.forEach(index => changedIndices.push(index));
             this.renderer.updateActivityAges(changedIndices);
@@ -519,6 +522,8 @@ class CellularAutomaton {
 
             if (!continued) {
                 this.stop();
+                this.isRunning = false;
+                eventBus.emit('automaton:runningChanged', {isRunning: false});
                 console.debug('Triangle: Sin cambios');
             }
 

@@ -57,7 +57,9 @@ class AnimationLoop {
             this._lastFrameTime = currentTime - (deltaTime % this.updateInterval);
             this._onStep();
         }
-        this._rafId = requestAnimationFrame(t => this._tick(t));
+        if (this._running) {
+            this._rafId = requestAnimationFrame(t => this._tick(t));
+        }
     }
 
     destroy() {
