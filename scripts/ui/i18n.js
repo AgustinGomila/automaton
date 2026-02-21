@@ -177,6 +177,7 @@ class I18n {
                 'app.title.triangle': 'Autómata Celular - ETA R{rule}',
                 'notif.triangle.enabled': 'Modo Triangular: Regla {rule}',
                 'notif.triangle.error': 'Error cargando motor Triangular',
+                "triangle.destroboscope": "Destroboscopía",
 
                 // Estadísticas
                 'stats.generation': 'Generación',
@@ -387,6 +388,7 @@ class I18n {
                 'app.title.triangle': 'Cellular Automaton - ETA R{rule}',
                 'notif.triangle.enabled': 'Triangular Mode: Rule {rule}',
                 'notif.triangle.error': 'Error loading Triangular engine',
+                "triangle.destroboscope": "Destroboscopy",
 
                 // Estadísticas
                 'stats.generation': 'Generation',
