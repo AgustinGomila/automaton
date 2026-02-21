@@ -30,8 +30,8 @@ class CanvasController {
         this.dragOffset = null;
 
         // Estado de teclado (escrito por UIController)
-        this.ctrlPressed = false;
         this.shiftPressed = false;
+        this._ctrlPressed = false;
 
         // Estado visual
         this.showInfluenceArea = false;
@@ -43,6 +43,15 @@ class CanvasController {
 
         this._bindEvents();
         this._setupSelectionDelegation();
+    }
+
+    get ctrlPressed() {
+        return this._ctrlPressed;
+    }
+
+    set ctrlPressed(val) {
+        this._ctrlPressed = val;
+        this._updateCursor();
     }
 
     // =========================================
@@ -648,6 +657,14 @@ class CanvasController {
         } else {
             coords.textContent = t('header.coords', {x, y});
         }
+    }
+
+    _updateCursor() {
+        const canvas = document.getElementById('canvas');
+        if (!canvas) return;
+        canvas.style.cursor = this._ctrlPressed
+            ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\'><circle cx=\'8\' cy=\'8\' r=\'6\' fill=\'%23ef4444\' opacity=\'0.8\'/></svg>") 8 8, crosshair'
+            : 'crosshair';
     }
 
     _throttle(func, limit) {
