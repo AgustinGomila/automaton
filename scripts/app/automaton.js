@@ -531,7 +531,9 @@ class CellularAutomaton {
 
             // Actualizar población desde el grid triangular
             const population = this.triangleEngine.gridManager?.countPopulation() ?? 0;
-            this.updateStats(population);
+            const totalCells = this.triangleEngine.gridManager.width * this.triangleEngine.gridManager.height;
+            const density = (population / totalCells * 100).toFixed(1);
+            eventBus.emit('stats:updated', {generation: this.generation, population, density});
 
             // Actualizar activity ages en el renderer triangular
             const changedCells = this.triangleEngine.getChangedCells();

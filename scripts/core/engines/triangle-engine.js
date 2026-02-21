@@ -16,6 +16,9 @@ class TriangleEngine {
         this.ruleNumber = 50;
         this.wrapEdges = true;
 
+        this.destroboscope = false;
+        this._twinRuleTable = new Uint8Array(8);
+
         this._ruleTable = new Uint8Array(8);
         this._changedCells = [];
         this._newGrid = null;
@@ -51,6 +54,7 @@ class TriangleEngine {
         }
 
         this._buildRuleTable();
+        this._buildTwinRuleTable();
         this.generation = 0;
 
         // Worker init solo si es necesario
@@ -69,6 +73,22 @@ class TriangleEngine {
         for (let i = 0; i < 8; i++) {
             this._ruleTable[i] = binary[7 - i] === '1' ? 1 : 0;
         }
+    }
+
+    _buildTwinRuleTable() {
+        // 1. Invertir bits del número de regla
+        const inverted = (~this.ruleNumber) & 0xFF;
+        // 2. Invertir orden de bits (reversa de 8 bits)
+        let reversed = 0;
+        for (let i = 0; i < 8; i++) {
+            reversed = (reversed << 1) | ((inverted >> i) & 1);
+        }
+        // 3. Construir tabla del twin
+        const binary = (reversed & 0xFF).toString(2).padStart(8, '0');
+        for (let i = 0; i < 8; i++) {
+            this._twinRuleTable[i] = binary[7 - i] === '1' ? 1 : 0;
+        }
+        this._twinRuleNumber = reversed & 0xFF;
     }
 
     /**
@@ -267,7 +287,15 @@ class TriangleEngine {
         if (this.automaton) {
             this.automaton.renderer.updateActivityAges(this._changedCells);
             this.automaton.render();
-            this.automaton.updateStats(this.gridManager.countPopulation());
+
+            const population = this.gridManager?.countPopulation() ?? 0;
+            const totalCells = this.gridManager.width * this.gridManager.height;
+            const density = (population / totalCells * 100).toFixed(1);
+            eventBus.emit('stats:updated', {
+                generation: this.generation,
+                population,
+                density
+            });
         }
 
         if (this._pendingStep) {
@@ -315,7 +343,11 @@ class TriangleEngine {
         const height = this.gridManager.height;
         const currentGrid = this.gridManager.grid;
         const newGrid = this._newGrid;
-        const ruleTable = this._ruleTable;
+
+        // Elegir tabla según destroboscopia y paridad
+        const ruleTable = (this.destroboscope && (this.generation & 1) === 1)
+            ? this._twinRuleTable
+            : this._ruleTable;
 
         // Cache bounds
         const w = width, h = height;
@@ -534,6 +566,7 @@ class TriangleEngine {
             active: this.isActive,
             generation: this.generation,
             rule: this.ruleNumber,
+            destroboscope: this.destroboscope,
             population: this.gridManager?.countPopulation() ?? 0,
             useWorker: this.useWorker,
             workerReady: this._workerReady

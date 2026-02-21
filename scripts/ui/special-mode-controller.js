@@ -67,6 +67,16 @@ class SpecialModeController {
             });
         }
 
+        const destroboscopeToggle = document.getElementById('destroboscopeToggle');
+        if (destroboscopeToggle) {
+            this._addEventListener(destroboscopeToggle, 'change', () => {
+                if (this.automaton.triangleEngine?.isActive) {
+                    this.automaton.triangleEngine.destroboscope = destroboscopeToggle.checked;
+                    this._updateTwinRuleInfo();
+                }
+            });
+        }
+
         // Reset semilla Wolfram
         const resetSeedBtn = document.getElementById('resetWolframSeed');
         if (resetSeedBtn) {
@@ -145,6 +155,7 @@ class SpecialModeController {
                 if (this.automaton.triangleEngine?.isActive) {
                     this._stopIfRunning();
                     this.automaton.triangleEngine.activate({rule, wrap: this.automaton.triangleEngine.wrapEdges});
+                    this._updateTwinRuleInfo()
                     this._onUpdateHeader();
                     this._onSyncPlayButton();
                 }
@@ -327,6 +338,12 @@ class SpecialModeController {
             this.automaton.renderer.markAllDirty();
             this.automaton.render();
 
+            const destroboscopeToggle = document.getElementById('destroboscopeToggle');
+            if (destroboscopeToggle) {
+                this.automaton.triangleEngine.destroboscope = destroboscopeToggle.checked;
+            }
+            this._updateTwinRuleInfo();
+
             this._onUpdateHeader();
             this._updateModeIndicator('triangle');
             this._onShowNotification(t('notif.triangle.enabled', {rule}), 'info', 2000);
@@ -420,6 +437,17 @@ class SpecialModeController {
         el.classList.toggle('active', show);
         el.style.opacity = show ? '1' : '0.5';
         el.style.pointerEvents = show ? 'all' : 'none';
+    }
+
+    _updateTwinRuleInfo() {
+        const info = document.getElementById('twinRuleInfo');
+        if (!info || !this.automaton.triangleEngine?.isActive) return;
+        const engine = this.automaton.triangleEngine;
+        if (engine.destroboscope) {
+            info.textContent = `↔ Twin: regla ${engine._twinRuleNumber}`;
+        } else {
+            info.textContent = '';
+        }
     }
 
     // =========================================
