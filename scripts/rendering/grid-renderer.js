@@ -340,16 +340,19 @@ class GridRenderer {
     }
 
     _drawSubtleGrid() {
+        const cellSize = this.config.cellSize;
+        if (cellSize < 2) return;
+
         const size = this.config.gridSize;
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
 
         for (let x = 0; x < size; x++) {
             for (let y = 0; y < size; y++) {
                 if (!this._getCell(x, y)) {
-                    const xPos = x * 2;
-                    const yPos = y * 2;
-                    this.ctx.fillRect(xPos + 1, yPos, 1, 2);
-                    this.ctx.fillRect(xPos, yPos + 1, 2, 1);
+                    const xPos = x * cellSize;
+                    const yPos = y * cellSize;
+                    this.ctx.fillRect(xPos + 1, yPos, 1, cellSize);
+                    this.ctx.fillRect(xPos, yPos + 1, cellSize, 1);
                 }
             }
         }
