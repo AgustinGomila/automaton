@@ -1,5 +1,7 @@
 # Autómata Celular Interactivo
 
+![🇪🇳](https://flagcdn.com/w20/gb.png) [🇪🇳](README.en.md)
+
 Una implementación interactiva de autómata celular con soporte para **múltiples reglas**, **autómatas de Wolfram 1D**,
 **Distinción Recursiva 2D** y **Autómatas triangulares elementales (ETA's)**.
 
@@ -74,5 +76,6 @@ Una implementación interactiva de autómata celular con soporte para **múltipl
 - **Conway's Game of Life**: [Wikipedia](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life)
 - **Reglas de autómatas**: [LifeWiki](https://conwaylife.com/wiki/)
 - **Autómatas de Wolfram**: [Wikipedia](https://en.wikipedia.org/wiki/Elementary_cellular_automaton)
+- **Autómata triangular**: [Autómata triangula](https://triangular-automata.net)
 - **Louis Kauffman**: [Mathematics Genealogy](https://www.mathgenealogy.org/id.php?id=4492)
 - **Ruliología**: [Ruliología](https://www.wolframcloud.com/obj/international-essays/Published/WhatIsRuliology_ES.nb)
