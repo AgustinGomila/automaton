@@ -1883,6 +1883,34 @@ h1 i.fa-border-style {
     margin-bottom: 0;
 }
 
+/* Sub-acordeón para cada motor especial */
+.accordion-group--engine {
+    margin-bottom: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.accordion-group--engine:last-child {
+    margin-bottom: 0;
+}
+
+.accordion-group--engine .accordion-header {
+    padding: 9px 12px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.accordion-group--engine .accordion-header:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.accordion-group--engine .accordion-content {
+    padding: 10px 12px;
+}
+
 /* ============================================
    PANEL LATERAL MÓVIL
    ============================================ */
