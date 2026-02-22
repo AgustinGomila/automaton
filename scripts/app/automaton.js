@@ -466,12 +466,35 @@ class CellularAutomaton {
     // GENERACIÓN
     // =========================================
 
+    _nextGenerationCore() {
+        const stats = this.core.step();
+
+        if (stats.births + stats.deaths > this.gridSize * this.gridSize * 0.1) {
+            this.renderer.markAllDirty();
+        }
+
+        this.checkLimits();
+
+        const changedIndices = [];
+        this.renderer._dirtyCells.forEach(index => {
+            changedIndices.push(index);
+        });
+        this.renderer.updateActivityAges(changedIndices);
+
+        return stats.births + stats.deaths;
+    }
+
     _nextGenerationWorker() {
         return this._workerManager.requestNextGeneration(this.generation) ? 0 : 0;
     }
 
     nextGeneration() {
         if (this.checkLimits()) return 0;
+
+        // === TIMING DEBUG ===
+        const t0 = performance.now();
+
+        let result;
 
         if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
             const continued = this.rd2dEngine.step();
@@ -487,7 +510,11 @@ class CellularAutomaton {
             // Usar array pre-calculado del engine, sin crear nuevos objetos
             this.renderer.updateActivityAges(this.rd2dEngine.getChangedCells());
 
+            const tStep = performance.now();
             this.render();
+            const tRender = performance.now();
+
+            this._debugTiming('RD-2D', t0, tStep, tRender);
             return 1;
         }
 
@@ -506,47 +533,72 @@ class CellularAutomaton {
             this.renderer._dirtyCells.forEach(index => changedIndices.push(index));
             this.renderer.updateActivityAges(changedIndices);
 
+            const tStep = performance.now();
             this.render();
+            const tRender = performance.now();
+
+            this._debugTiming('Wolfram', t0, tStep, tRender);
             return 1;
         }
 
-        // === MODO TRIANGULAR ===
         if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
-            // Verificar que tenemos gridManager
-            if (!this.triangleEngine.gridManager) {
-                console.error('❌ TriangleEngine sin gridManager');
-                return 0;
-            }
+            if (!this.triangleEngine.gridManager) return 0;
 
             const continued = this.triangleEngine.step();
-
             if (!continued) {
                 this.stop();
                 this.isRunning = false;
                 eventBus.emit('automaton:runningChanged', {isRunning: false});
-                console.debug('Triangle: Sin cambios');
             }
 
             this.generation = this.triangleEngine.generation;
 
-            // Actualizar población desde el grid triangular
             const population = this.triangleEngine.gridManager?.countPopulation() ?? 0;
-            const totalCells = this.triangleEngine.gridManager.width * this.triangleEngine.gridManager.height;
-            const density = (population / totalCells * 100).toFixed(1);
-            eventBus.emit('stats:updated', {generation: this.generation, population, density});
-
-            // Actualizar activity ages en el renderer triangular
+            this.updateStats(population);
             const changedCells = this.triangleEngine.getChangedCells();
             this.renderer.updateActivityAges(changedCells);
 
+            // Alimentar dirty cells al renderer
+            for (let i = 0; i < changedCells.length; i++) {
+                const packed = changedCells[i];
+                this.renderer.markDirty(packed >>> 16, packed & 0xFFFF);
+            }
+
+            const tStep = performance.now();
             this.render();
+            const tRender = performance.now();
+
+            this._debugTiming('Triangle', t0, tStep, tRender);
             return 1;
         }
 
         this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
 
+        const tStep = performance.now();
+
         if (this.worker && this.gridSize >= this.workerThreshold) {
-            return this._nextGenerationWorker();
+            result = this._nextGenerationWorker();
+        } else {
+            result = this._nextGenerationCore();
+        }
+
+        const tRender = performance.now();
+        this._debugTiming('Standard', t0, tStep, tRender);
+        return result;
+    }
+
+    _debugTiming(mode, t0, tStep, tRender) {
+        // Throttle: solo loguear cada 2 segundos
+        const now = tRender;
+        if (!this._lastDebugLog || now - this._lastDebugLog >= 2000) {
+            this._lastDebugLog = now;
+            const stepMs = (tStep - t0).toFixed(2);
+            const renderMs = (tRender - tStep).toFixed(2);
+            const totalMs = (tRender - t0).toFixed(2);
+            console.debug(
+                `⏱ [${mode}] Gen ${this.generation} | ` +
+                `step: ${stepMs}ms | render: ${renderMs}ms | total: ${totalMs}ms`
+            );
         }
     }
 
