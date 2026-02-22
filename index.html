@@ -413,6 +413,19 @@
                                        style="font-size: 0.75rem; color: var(--gray-text); margin-top: 4px;"></p>
                                 </div>
                             </div>
+
+                            <h4 style="margin: 15px 0 8px; font-size: 0.95rem; color: var(--gray-text); border-top: 1px solid var(--border-color); padding-top: 10px;">
+                                <i class="fas fa-snowflake"></i> <span data-i18n="uw.title">Ulam-Warburton</span>
+                            </h4>
+                            <div class="toggle-switch" style="margin-bottom: 6px;">
+                                <input type="checkbox" id="uwToggle" class="toggle-checkbox">
+                                <label for="uwToggle" class="toggle-label">
+                                    <span data-i18n="uw.enable">Autómata Ulam-Warburton</span>
+                                    <span class="toggle-switch-slider"></span>
+                                </label>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--gray-text); margin: 0;"
+                               data-i18n="uw.description">Nace con exactamente 1 vecino ortogonal</p>
                         </div>
                     </div>
 
@@ -662,6 +675,7 @@
 <script src="scripts/core/engines/rd2d-engine.js"></script>
 <script src="scripts/core/engines/wolfram-engine.js"></script>
 <script src="scripts/core/engines/triangle-engine.js"></script>
+<script src="scripts/core/engines/ulam-warburton-engine.js"></script>
 
 <!-- Renderer -->
 <script src="scripts/core/triangle-grid-manager.js"></script>

@@ -67,6 +67,19 @@ class SpecialModeController {
             });
         }
 
+        // Toggle Ulam-Warburton
+        const uwToggle = document.getElementById('uwToggle');
+        if (uwToggle) {
+            this._addEventListener(uwToggle, 'change', () => {
+                if (uwToggle.checked) {
+                    this._deactivateOtherModes('ulam-warburton');
+                    this.activateUWMode();
+                } else {
+                    this.deactivateUWMode();
+                }
+            });
+        }
+
         const destroboscopeToggle = document.getElementById('destroboscopeToggle');
         if (destroboscopeToggle) {
             this._addEventListener(destroboscopeToggle, 'change', () => {
@@ -398,6 +411,52 @@ class SpecialModeController {
     // CONTROLES VISUALES DE MODO
     // =========================================
 
+    async activateUWMode() {
+        try {
+            this._stopIfRunning();
+            await this.automaton._initSpecialEngine('ulam-warburton');
+
+            document.getElementById('ruleSelector').disabled = true;
+            const neighborhoodSelect = document.getElementById('neighborhoodType');
+            if (neighborhoodSelect) {
+                neighborhoodSelect.value = 'neumann';
+                neighborhoodSelect.disabled = true;
+            }
+
+            this.automaton.uwEngine.activate();
+            this.automaton.render();
+
+            this._onUpdateHeader();
+            this._updateModeIndicator('ulam-warburton');
+            this._onShowNotification(t('notif.uw.enabled'), 'info', 2000);
+            this._onSyncPlayButton();
+        } catch (error) {
+            console.error('Error cargando UlamWarburtonEngine:', error);
+            this._onShowNotification(t('notif.uw.error'), 'warning', 3000);
+        }
+    }
+
+    deactivateUWMode() {
+        this._stopIfRunning();
+
+        document.getElementById('ruleSelector').disabled = false;
+        const neighborhoodSelect = document.getElementById('neighborhoodType');
+        if (neighborhoodSelect) {
+            neighborhoodSelect.disabled = false;
+            neighborhoodSelect.value = 'moore';
+        }
+
+        this.automaton.uwEngine?.deactivate();
+        this.automaton.specialMode = null;
+        this.automaton.renderer.markAllDirty();
+        this.automaton.render();
+
+        this._updateModeIndicator('standard');
+        this._onUpdateHeader();
+        this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
+        this._onSyncPlayButton();
+    }
+
     _updateModeIndicator(mode) {
         const indicator = document.getElementById('modeIndicator');
         if (!indicator) return;
@@ -410,6 +469,9 @@ class SpecialModeController {
             const info = this.automaton.wolframEngine.getInfo();
             indicator.className = 'mode-indicator wolfram-mode';
             indicator.innerHTML = `<i class="fas fa-arrows-alt-v"></i> Wolfram R${info.rule} ${info.direction === 'vertical' ? '↓' : '→'}`;
+        } else if (mode === 'ulam-warburton') {
+            indicator.className = 'mode-indicator uw-mode';
+            indicator.innerHTML = `<i class="fas fa-snowflake"></i> Ulam-Warburton`;
         } else {
             indicator.className = 'mode-indicator standard-mode';
             indicator.innerHTML = `<i class="fas fa-th"></i> 2D Cellular`;
@@ -477,6 +539,13 @@ class SpecialModeController {
                 toggle.checked = false;
                 this._toggleTriangleControls(false);
                 this.automaton.triangleEngine?.deactivate();
+            }
+        }
+        if (activeMode !== 'ulam-warburton') {
+            const toggle = document.getElementById('uwToggle');
+            if (toggle?.checked) {
+                toggle.checked = false;
+                this.automaton.uwEngine?.deactivate();
             }
         }
     }

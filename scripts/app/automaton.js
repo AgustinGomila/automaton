@@ -244,6 +244,14 @@ class CellularAutomaton {
         this._engineManager.triangleEngine = v;
     }
 
+    get uwEngine() {
+        return this._engineManager.uwEngine;
+    }
+
+    set uwEngine(v) {
+        this._engineManager.uwEngine = v;
+    }
+
     get _originalRenderer() {
         return this._engineManager._originalRenderer;
     }
@@ -358,6 +366,10 @@ class CellularAutomaton {
         if (this.rd2dEngine) {
             this.rd2dEngine.deactivate?.();
             this.rd2dEngine = null;
+        }
+        if (this.uwEngine) {
+            this.uwEngine.deactivate?.();
+            this.uwEngine = null;
         }
 
         this._loop?.destroy();
@@ -529,6 +541,16 @@ class CellularAutomaton {
                 getPopulation: () => this.triangleEngine.gridManager?.countPopulation() ?? 0,
                 getChangedCells: () => this.triangleEngine.getChangedCells(),
                 markDirtyFromCells: true
+            });
+        }
+
+        if (this.specialMode === 'ulam-warburton' && this.uwEngine?.isActive) {
+            return this._stepSpecialEngine({
+                engine: this.uwEngine,
+                label: 'Ulam-Warburton',
+                t0,
+                stopMessage: 'Ulam-Warburton: patrón estable',
+                getChangedCells: () => this.uwEngine.getChangedCells()
             });
         }
 
@@ -968,6 +990,20 @@ class CellularAutomaton {
             return;
         }
 
+        if (this.specialMode === 'ulam-warburton' && this.uwEngine?.isActive) {
+            this.uwEngine.randomize(density);
+            this.generation = 0;
+            this.isLimitReached = false;
+            this.renderer.resetActivity();
+            this.updateStats();
+            this.render();
+
+            if (wasRunning) {
+                setTimeout(() => this.start(), 0);
+            }
+            return;
+        }
+
         const stats = this.stateManager.randomize({
             density,
             saveToHistory: true,
@@ -980,6 +1016,7 @@ class CellularAutomaton {
 
         this.wolframEngine?.reset();
         this.rd2dEngine?.reset();
+        this.uwEngine?.reset();
 
         this.renderer.markAllDirty();
         this.updateStats(stats.population);

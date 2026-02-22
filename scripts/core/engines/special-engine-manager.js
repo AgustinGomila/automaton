@@ -31,6 +31,7 @@ class SpecialEngineManager {
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
+        this.uwEngine = null;
 
         this._originalRenderer = null;
         this._originalCore = null;
@@ -48,6 +49,7 @@ class SpecialEngineManager {
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
+        this.uwEngine?.deactivate?.();
         this._restoreOriginals();
 
         if (engineName === 'rd2d') {
@@ -63,6 +65,13 @@ class SpecialEngineManager {
             }
             this.wolframEngine = new WolframEngine(this._getAutomaton());
             this.specialMode = 'wolfram';
+
+        } else if (engineName === 'ulam-warburton') {
+            if (typeof UlamWarburtonEngine === 'undefined') {
+                await this._loadScript('scripts/core/engines/ulam-warburton-engine.js');
+            }
+            this.uwEngine = new UlamWarburtonEngine(this._getAutomaton());
+            this.specialMode = 'ulam-warburton';
 
         } else if (engineName === 'triangle') {
             if (typeof TriangleGridManager === 'undefined') {
@@ -125,9 +134,11 @@ class SpecialEngineManager {
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
+        this.uwEngine?.deactivate?.();
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
+        this.uwEngine = null;
         this._originalRenderer = null;
         this._originalCore = null;
         this._getRenderer = null;
