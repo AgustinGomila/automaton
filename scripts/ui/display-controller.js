@@ -72,6 +72,20 @@ class DisplayController {
             return;
         }
 
+        // === MODO ULAM-WARBURTON ===
+        if (this.automaton.specialMode === 'ulam-warburton' && this.automaton.uwEngine?.isActive) {
+            const wrap = this.automaton.wrapEdges ? '∞' : '■';
+            this._setTitle(t('app.title.uw'));
+            this._setH1('fas fa-snowflake', t('header.title', {ruleName: 'Ulam-Warburton'}));
+            this._setRulesSpecific(`
+                <p><span class="birth"><i class="fas fa-seedling"></i> ${t('header.rules.birth')}</span> 1 ${t('header.rules.neighbors')}</p>
+                <p><span class="survival"><i class="fas fa-heart"></i> ${t('header.rules.survival')}</span> 1-4 ${t('header.rules.neighbors')}</p>
+            `);
+            this._setNeighborhoodText(t('uw.neighborhood', {wrap}));
+            this.updateNeighborhoodInfo();
+            return;
+        }
+
         // === MODO 2D ESTÁNDAR ===
         const selector = document.getElementById('ruleSelector');
         if (!selector) return;
@@ -114,6 +128,8 @@ class DisplayController {
             el.innerHTML = `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood', {wrap})}`;
         } else if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
             el.innerHTML = `<i class="fa-solid fa-play"></i> ${t('triangle.neighborhood', {wrap})}`;
+        } else if (this.automaton.specialMode === 'ulam-warburton' && this.automaton.uwEngine?.isActive) {
+            el.innerHTML = `<i class="fas fa-snowflake"></i> ${t('uw.neighborhood', {wrap})}`;
         } else {
             const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
             const radius = this.automaton.neighborhoodRadius;
