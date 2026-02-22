@@ -7,11 +7,12 @@
 class AnimationLoop {
     /**
      * @param {Object} options
-     * @param {Function} options.onStep - Llamado cuando corresponde avanzar un paso.
+     * @param {Function} options.onStep - Llamado con (stepsPerFrame) cuando corresponde avanzar.
      */
     constructor({onStep}) {
         this._onStep = onStep;
         this.updateInterval = 100;
+        this.stepsPerFrame = 1;
         this._rafId = null;
         this._lastFrameTime = 0;
         this._running = false;
@@ -38,16 +39,22 @@ class AnimationLoop {
 
     /**
      * @param {number} level - Nivel de velocidad 1-10
-     * @returns {number} Intervalo en ms resultante
+     * @returns {{interval: number, stepsPerFrame: number}}
      */
     setSpeed(level) {
-        const speedMap = [500, 250, 125, 60, 30, 16, 16, 16, 16, 16];
-        this.updateInterval = speedMap[Math.min(level - 1, 9)] || 16;
+        //                     1    2    3   4   5   6  7  8  9  10
+        const intervalMap = [500, 250, 125, 60, 30, 16, 16, 16, 16, 16];
+        const stepsMap = [1, 1, 1, 1, 1, 1, 2, 4, 8, 16];
+
+        const idx = Math.min(Math.max(level - 1, 0), 9);
+        this.updateInterval = intervalMap[idx];
+        this.stepsPerFrame = stepsMap[idx];
+
         if (this._running) {
             this.stop();
             this.start();
         }
-        return this.updateInterval;
+        return {interval: this.updateInterval, stepsPerFrame: this.stepsPerFrame};
     }
 
     _tick(currentTime) {
@@ -55,7 +62,7 @@ class AnimationLoop {
         const deltaTime = currentTime - this._lastFrameTime;
         if (deltaTime >= this.updateInterval) {
             this._lastFrameTime = currentTime - (deltaTime % this.updateInterval);
-            this._onStep();
+            this._onStep(this.stepsPerFrame);
         }
         if (this._running) {
             this._rafId = requestAnimationFrame(t => this._tick(t));

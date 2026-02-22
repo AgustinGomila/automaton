@@ -1167,25 +1167,39 @@ class CellularAutomaton {
         this._loop.stop();
     }
 
-    _step() {
-        if (this.specialMode === 'triangle') {
-            const changed = this.nextGeneration();
-            if (changed || this.generation % 5 === 0) {
-                this.render();
-            }
-            if (this.generation % 10 === 0) {
-                this.updateStats();
-            }
-        } else {
+    _step(stepsPerFrame = 1) {
+        // Los motores especiales gestionan su propio render internamente
+        // y tienen estado incremental — siempre 1 paso por frame.
+        if (this.specialMode) {
             this.nextGeneration();
-            this.render();
+            if (this.specialMode === 'triangle') {
+                if (this.generation % 5 === 0) this.updateStats();
+            }
+            return;
         }
+
+        // Worker ocupado: esperar a que termine; no acumular pasos.
+        if (this._workerManager.isProcessing) return;
+
+        // Worker disponible: delegar 1 paso y salir (resultado llega async).
+        if (this._workerManager.isAvailable) {
+            this.nextGeneration();
+            return;
+        }
+
+        // Modo estándar sin worker: múltiples pasos, un solo render al final.
+        for (let i = 0; i < stepsPerFrame; i++) {
+            if (!this.isRunning) break;
+            const changed = this.nextGeneration();
+            if (changed === 0) break;   // límite alcanzado o patrón estable
+        }
+        this.render();
     }
 
     setSpeed(level) {
-        const interval = this._loop.setSpeed(level);
-        eventBus.emit('automaton:speedChanged', {speed: interval});
-        return interval;
+        const result = this._loop.setSpeed(level);
+        eventBus.emit('automaton:speedChanged', {speed: result.interval, stepsPerFrame: result.stepsPerFrame});
+        return result.interval;
     }
 
     toggleGrid() {
