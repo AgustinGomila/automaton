@@ -39,7 +39,7 @@ class CellularAutomaton {
 
         this.core.on({
             onGeneration: (stats) => this._handleCoreGeneration(stats),
-            onCellChange: (cells) => this._handleCoreCellChange(cells),
+            onCellChange: (indices, count) => this._handleCoreCellChange(indices, count),
             onStateChange: (event) => this._handleCoreStateChange(event)
         });
 
@@ -410,9 +410,9 @@ class CellularAutomaton {
     // WORKERS
     // =========================================
 
-    _handleCoreCellChange(cells) {
-        for (const cell of cells) {
-            this.renderer.markDirty(cell.x, cell.y);
+    _handleCoreCellChange(indices, count) {
+        for (let i = 0; i < count; i++) {
+            this.renderer.markDirtyIndex(indices[i]);
         }
     }
 
