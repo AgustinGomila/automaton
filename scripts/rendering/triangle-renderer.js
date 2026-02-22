@@ -88,7 +88,11 @@ class TriangleRenderer {
     render(options = {}) {
         if (!this.gridManager) return;
 
-        const fullRender = options.force || this._isFirstRender || this._dirtyCells.size === 0;
+        const totalCells = this.gridManager.width * this.gridManager.height;
+        const fullRender = options.force
+            || this._isFirstRender
+            || this._dirtyCells.size === 0
+            || this._dirtyCells.size > totalCells * 0.3;
 
         if (fullRender) {
             this._renderFull();
