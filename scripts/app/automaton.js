@@ -497,79 +497,39 @@ class CellularAutomaton {
         let result;
 
         if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
-            const continued = this.rd2dEngine.step();
-            if (!continued) {
-                this.stop();
-                this.isRunning = false;
-                eventBus.emit('automaton:runningChanged', {isRunning: false});
-                console.debug('RD-2D: Simulación detenida (estable)');
-            }
-            this.generation = this.rd2dEngine.generation;
-            this.updateStats();
-
-            // Usar array pre-calculado del engine, sin crear nuevos objetos
-            this.renderer.updateActivityAges(this.rd2dEngine.getChangedCells());
-
-            const tStep = performance.now();
-            this.render();
-            const tRender = performance.now();
-
-            this._debugTiming('RD-2D', t0, tStep, tRender);
-            return 1;
+            return this._stepSpecialEngine({
+                engine: this.rd2dEngine,
+                label: 'RD-2D',
+                t0,
+                stopMessage: 'RD-2D: Simulación detenida (estable)',
+                getChangedCells: () => this.rd2dEngine.getChangedCells()
+            });
         }
 
         if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
-            const continued = this.wolframEngine.step();
-            if (!continued) {
-                this.stop();
-                this.isRunning = false;
-                eventBus.emit('automaton:runningChanged', {isRunning: false});
-                console.debug('Wolfram: Límite alcanzado');
-            }
-            this.generation = this.wolframEngine.generation;
-            this.updateStats();
-
-            const changedIndices = [];
-            this.renderer._dirtyCells.forEach(index => changedIndices.push(index));
-            this.renderer.updateActivityAges(changedIndices);
-
-            const tStep = performance.now();
-            this.render();
-            const tRender = performance.now();
-
-            this._debugTiming('Wolfram', t0, tStep, tRender);
-            return 1;
+            return this._stepSpecialEngine({
+                engine: this.wolframEngine,
+                label: 'Wolfram',
+                t0,
+                stopMessage: 'Wolfram: Límite alcanzado',
+                getChangedCells: () => {
+                    const arr = [];
+                    this.renderer._dirtyCells.forEach(i => arr.push(i));
+                    return arr;
+                }
+            });
         }
 
         if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
             if (!this.triangleEngine.gridManager) return 0;
-
-            const continued = this.triangleEngine.step();
-            if (!continued) {
-                this.stop();
-                this.isRunning = false;
-                eventBus.emit('automaton:runningChanged', {isRunning: false});
-            }
-
-            this.generation = this.triangleEngine.generation;
-
-            const population = this.triangleEngine.gridManager?.countPopulation() ?? 0;
-            this.updateStats(population);
-            const changedCells = this.triangleEngine.getChangedCells();
-            this.renderer.updateActivityAges(changedCells);
-
-            // Alimentar dirty cells al renderer
-            for (let i = 0; i < changedCells.length; i++) {
-                const packed = changedCells[i];
-                this.renderer.markDirty(packed >>> 16, packed & 0xFFFF);
-            }
-
-            const tStep = performance.now();
-            this.render();
-            const tRender = performance.now();
-
-            this._debugTiming('Triangle', t0, tStep, tRender);
-            return 1;
+            return this._stepSpecialEngine({
+                engine: this.triangleEngine,
+                label: 'Triangle',
+                t0,
+                getPopulation: () => this.triangleEngine.gridManager?.countPopulation() ?? 0,
+                getChangedCells: () => this.triangleEngine.getChangedCells(),
+                markDirtyFromCells: true
+            });
         }
 
         this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
@@ -600,6 +560,56 @@ class CellularAutomaton {
                 `step: ${stepMs}ms | render: ${renderMs}ms | total: ${totalMs}ms`
             );
         }
+    }
+
+    /**
+     * Patrón común para avanzar un motor especial (RD-2D, Wolfram, Triangle).
+     *
+     * @param {Object}      options
+     * @param {Object}      options.engine            - Motor con .step() y .generation
+     * @param {string}      options.label             - Etiqueta para _debugTiming
+     * @param {number}      options.t0                - Timestamp de inicio del frame
+     * @param {string|null} [options.stopMessage]     - Mensaje si el motor se detiene
+     * @param {Function|null} [options.getPopulation] - () => number para updateStats
+     * @param {Function}    options.getChangedCells   - () => Array con celdas cambiadas
+     * @param {boolean}     [options.markDirtyFromCells] - Si true, desempaqueta cada celda
+     *   como coord packed (x<<16|y) y llama markDirty
+     * @returns {number} 1
+     */
+    _stepSpecialEngine({
+                           engine,
+                           label,
+                           t0,
+                           stopMessage = null,
+                           getPopulation = null,
+                           getChangedCells,
+                           markDirtyFromCells = false
+                       }) {
+        const continued = engine.step();
+        if (!continued) {
+            this.stop();
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            if (stopMessage) console.debug(stopMessage);
+        }
+
+        this.generation = engine.generation;
+        this.updateStats(getPopulation ? getPopulation() : null);
+
+        const changedCells = getChangedCells();
+        this.renderer.updateActivityAges(changedCells);
+
+        if (markDirtyFromCells) {
+            for (let i = 0; i < changedCells.length; i++) {
+                const packed = changedCells[i];
+                this.renderer.markDirty(packed >>> 16, packed & 0xFFFF);
+            }
+        }
+
+        const tStep = performance.now();
+        this.render();
+        const tRender = performance.now();
+        this._debugTiming(label, t0, tStep, tRender);
+        return 1;
     }
 
     // =========================================
