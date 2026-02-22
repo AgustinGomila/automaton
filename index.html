@@ -291,141 +291,163 @@
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content">
-                            <h4 style="margin: 10px 0 8px; font-size: 0.95rem; color: var(--gray-text);">
-                                <i class="fas fa-dice"></i> <span data-i18n="wolfram.title">Wolfram 1D</span>
-                            </h4>
-                            <div class="toggle-switch" style="margin-bottom: 10px;">
-                                <input type="checkbox" id="wolframToggle" class="toggle-checkbox">
-                                <label for="wolframToggle" class="toggle-label">
-                                    <span data-i18n="wolfram.enable">Activar Modo 1D</span>
-                                    <span class="toggle-switch-slider"></span>
-                                </label>
-                            </div>
 
-                            <div class="wolfram-controls" id="wolframControls"
-                                 style="opacity: 0.5; pointer-events: none;">
-                                <div class="config-group">
-                                    <label><span data-i18n="wolfram.rule">Regla (0-255):</span> <span
-                                            id="wolframRuleDisplay" class="value-display">30</span></label>
-                                    <input type="range" id="wolframRule" min="0" max="255" value="30">
-                                    <div class="range-ticks">
-                                        <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
-                                    </div>
-                                </div>
-
-                                <div class="config-group">
-                                    <label data-i18n="wolfram.direction">Dirección de evolución</label>
-                                    <select id="wolframDirection">
-                                        <option value="vertical" data-i18n="wolfram.vertical">↓ Vertical (top-down)
-                                        </option>
-                                        <option value="horizontal" data-i18n="wolfram.horizontal">→ Horizontal
-                                            (left-right)
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="wolfram-presets">
-                                    <button class="btn-preset" data-rule="30" data-i18n="wolfram.preset.30"
-                                            data-i18n-attr="title" title="30 (Caos)">30
-                                    </button>
-                                    <button class="btn-preset" data-rule="90" data-i18n="wolfram.preset.90"
-                                            data-i18n-attr="title" title="90 (Sierpiński)">90
-                                    </button>
-                                    <button class="btn-preset" data-rule="110" data-i18n="wolfram.preset.110"
-                                            data-i18n-attr="title" title="110 (Universal)">110
-                                    </button>
-                                    <button class="btn-preset" data-rule="184" data-i18n="wolfram.preset.184"
-                                            data-i18n-attr="title" title="184 (Tráfico)">184
-                                    </button>
-                                </div>
-                            </div>
-
-                            <h4 style="margin: 15px 0 8px; font-size: 0.95rem; color: var(--gray-text); border-top: 1px solid var(--border-color); padding-top: 10px;">
-                                <i class="fas fa-border-style"></i> <span data-i18n="rd2d.title">RD-2D</span>
-                            </h4>
-                            <div class="toggle-switch">
-                                <input type="checkbox" id="rd2dToggle" class="toggle-checkbox">
-                                <label for="rd2dToggle" class="toggle-label">
-                                    <span data-i18n="rd2d.enable">Distinción Recursiva 2D</span>
-                                    <span class="toggle-switch-slider"></span>
-                                </label>
-                            </div>
-
-                            <div class="rd2d-info"
-                                 style="margin-top: 10px; font-size: 0.8rem; color: var(--gray-text);">
-                                <p data-i18n="rd2d.states">16 estados: [N,S,E,W]</p>
-                                <p data-i18n="rd2d.rule">Regla: XOR de vecinos</p>
-                            </div>
-
-                            <h4 style="margin: 15px 0 8px; font-size: 0.95rem; color: var(--gray-text); border-top: 1px solid var(--border-color); padding-top: 10px;">
-                                <i class="fa-solid fa-play"></i> <span
-                                    data-i18n="triangle.title">Triangular (ETA)</span>
-                            </h4>
-                            <div class="toggle-switch" style="margin-bottom: 10px;">
-                                <input type="checkbox" id="triangleToggle" class="toggle-checkbox">
-                                <label for="triangleToggle" class="toggle-label">
-                                    <span data-i18n="triangle.enable">Autómata Triangular</span>
-                                    <span class="toggle-switch-slider"></span>
-                                </label>
-                            </div>
-
-                            <div class="triangle-controls" id="triangleControls"
-                                 style="opacity: 0.5; pointer-events: none;">
-                                <div class="config-group">
-                                    <label><span data-i18n="triangle.rule">Regla (0-255):</span> <span
-                                            id="triangleRuleDisplay" class="value-display">50</span></label>
-                                    <input type="range" id="triangleRule" min="0" max="255" value="50">
-                                    <div class="range-ticks">
-                                        <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
-                                    </div>
-                                </div>
-
-                                <div class="triangle-presets">
-                                    <button class="btn-preset" data-triangle-rule="50" data-i18n="triangle.preset.50"
-                                            title="50">50
-                                    </button>
-                                    <button class="btn-preset" data-triangle-rule="97" data-i18n="triangle.preset.97"
-                                            title="97">97
-                                    </button>
-                                    <button class="btn-preset" data-triangle-rule="106" data-i18n="triangle.preset.106"
-                                            title="106">106
-                                    </button>
-                                    <button class="btn-preset" data-triangle-rule="122" data-i18n="triangle.preset.122"
-                                            title="122">122
-                                    </button>
-                                    <button class="btn-preset" data-triangle-rule="210" data-i18n="triangle.preset.210"
-                                            title="210">210
-                                    </button>
-                                    <button class="btn-preset" data-triangle-rule="214" data-i18n="triangle.preset.214"
-                                            title="214">214
-                                    </button>
-                                </div>
-
-                                <div class="config-group" style="margin-top: 10px;">
-                                    <div class="toggle-switch">
-                                        <input type="checkbox" id="destroboscopeToggle" class="toggle-checkbox">
-                                        <label for="destroboscopeToggle" class="toggle-label">
-                                            <span data-i18n="triangle.destroboscope">Destroboscopía</span>
+                            <!-- Sub-acordeón: Wolfram -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="wolfram">
+                                    <i class="fas fa-dice"></i>
+                                    <span data-i18n="wolfram.title">Wolfram 1D</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 10px;">
+                                        <input type="checkbox" id="wolframToggle" class="toggle-checkbox">
+                                        <label for="wolframToggle" class="toggle-label">
+                                            <span data-i18n="wolfram.enable">Activar Modo 1D</span>
                                             <span class="toggle-switch-slider"></span>
                                         </label>
                                     </div>
-                                    <p id="twinRuleInfo"
-                                       style="font-size: 0.75rem; color: var(--gray-text); margin-top: 4px;"></p>
+                                    <div class="wolfram-controls" id="wolframControls"
+                                         style="opacity: 0.5; pointer-events: none;">
+                                        <div class="config-group">
+                                            <label><span data-i18n="wolfram.rule">Regla (0-255):</span> <span
+                                                    id="wolframRuleDisplay" class="value-display">30</span></label>
+                                            <input type="range" id="wolframRule" min="0" max="255" value="30">
+                                            <div class="range-ticks">
+                                                <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
+                                            </div>
+                                        </div>
+                                        <div class="config-group">
+                                            <label data-i18n="wolfram.direction">Dirección de evolución</label>
+                                            <select id="wolframDirection">
+                                                <option value="vertical" data-i18n="wolfram.vertical">↓ Vertical
+                                                    (top-down)
+                                                </option>
+                                                <option value="horizontal" data-i18n="wolfram.horizontal">→ Horizontal
+                                                    (left-right)
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div class="wolfram-presets">
+                                            <button class="btn-preset" data-rule="30" data-i18n="wolfram.preset.30"
+                                                    data-i18n-attr="title" title="30 (Caos)">30
+                                            </button>
+                                            <button class="btn-preset" data-rule="90" data-i18n="wolfram.preset.90"
+                                                    data-i18n-attr="title" title="90 (Sierpiński)">90
+                                            </button>
+                                            <button class="btn-preset" data-rule="110" data-i18n="wolfram.preset.110"
+                                                    data-i18n-attr="title" title="110 (Universal)">110
+                                            </button>
+                                            <button class="btn-preset" data-rule="184" data-i18n="wolfram.preset.184"
+                                                    data-i18n-attr="title" title="184 (Tráfico)">184
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <h4 style="margin: 15px 0 8px; font-size: 0.95rem; color: var(--gray-text); border-top: 1px solid var(--border-color); padding-top: 10px;">
-                                <i class="fas fa-snowflake"></i> <span data-i18n="uw.title">Ulam-Warburton</span>
-                            </h4>
-                            <div class="toggle-switch" style="margin-bottom: 6px;">
-                                <input type="checkbox" id="uwToggle" class="toggle-checkbox">
-                                <label for="uwToggle" class="toggle-label">
-                                    <span data-i18n="uw.enable">Autómata Ulam-Warburton</span>
-                                    <span class="toggle-switch-slider"></span>
-                                </label>
+                            <!-- Sub-acordeón: RD-2D -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="rd2d">
+                                    <i class="fas fa-border-style"></i>
+                                    <span data-i18n="rd2d.title">RD-2D</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 10px;">
+                                        <input type="checkbox" id="rd2dToggle" class="toggle-checkbox">
+                                        <label for="rd2dToggle" class="toggle-label">
+                                            <span data-i18n="rd2d.enable">Distinción Recursiva 2D</span>
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="rd2d-info"
+                                         style="font-size: 0.8rem; color: var(--gray-text);">
+                                        <p data-i18n="rd2d.states">16 estados: [N,S,E,W]</p>
+                                        <p data-i18n="rd2d.rule">Regla: XOR de vecinos</p>
+                                    </div>
+                                </div>
                             </div>
-                            <p style="font-size: 0.8rem; color: var(--gray-text); margin: 0;"
-                               data-i18n="uw.description">Nace con exactamente 1 vecino ortogonal</p>
+
+                            <!-- Sub-acordeón: Triangular -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="triangle">
+                                    <i class="fa-solid fa-play"></i>
+                                    <span data-i18n="triangle.title">Triangular (ETA)</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 10px;">
+                                        <input type="checkbox" id="triangleToggle" class="toggle-checkbox">
+                                        <label for="triangleToggle" class="toggle-label">
+                                            <span data-i18n="triangle.enable">Autómata Triangular</span>
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="triangle-controls" id="triangleControls"
+                                         style="opacity: 0.5; pointer-events: none;">
+                                        <div class="config-group">
+                                            <label><span data-i18n="triangle.rule">Regla (0-255):</span> <span
+                                                    id="triangleRuleDisplay" class="value-display">50</span></label>
+                                            <input type="range" id="triangleRule" min="0" max="255" value="50">
+                                            <div class="range-ticks">
+                                                <span>0</span><span>64</span><span>128</span><span>192</span><span>255</span>
+                                            </div>
+                                        </div>
+                                        <div class="triangle-presets">
+                                            <button class="btn-preset" data-triangle-rule="50"
+                                                    data-i18n="triangle.preset.50" title="50">50
+                                            </button>
+                                            <button class="btn-preset" data-triangle-rule="97"
+                                                    data-i18n="triangle.preset.97" title="97">97
+                                            </button>
+                                            <button class="btn-preset" data-triangle-rule="106"
+                                                    data-i18n="triangle.preset.106" title="106">106
+                                            </button>
+                                            <button class="btn-preset" data-triangle-rule="122"
+                                                    data-i18n="triangle.preset.122" title="122">122
+                                            </button>
+                                            <button class="btn-preset" data-triangle-rule="210"
+                                                    data-i18n="triangle.preset.210" title="210">210
+                                            </button>
+                                            <button class="btn-preset" data-triangle-rule="214"
+                                                    data-i18n="triangle.preset.214" title="214">214
+                                            </button>
+                                        </div>
+                                        <div class="config-group" style="margin-top: 10px;">
+                                            <div class="toggle-switch">
+                                                <input type="checkbox" id="destroboscopeToggle" class="toggle-checkbox">
+                                                <label for="destroboscopeToggle" class="toggle-label">
+                                                    <span data-i18n="triangle.destroboscope">Destroboscopía</span>
+                                                    <span class="toggle-switch-slider"></span>
+                                                </label>
+                                            </div>
+                                            <p id="twinRuleInfo"
+                                               style="font-size: 0.75rem; color: var(--gray-text); margin-top: 4px;"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sub-acordeón: Ulam-Warburton -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="uw">
+                                    <i class="fas fa-snowflake"></i>
+                                    <span data-i18n="uw.title">Ulam-Warburton</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 6px;">
+                                        <input type="checkbox" id="uwToggle" class="toggle-checkbox">
+                                        <label for="uwToggle" class="toggle-label">
+                                            <span data-i18n="uw.enable">Autómata Ulam-Warburton</span>
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </div>
+                                    <p style="font-size: 0.8rem; color: var(--gray-text); margin: 0;"
+                                       data-i18n="uw.description">Nace con exactamente 1 vecino ortogonal</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -491,11 +513,13 @@
                     </button>
 
                     <div class="speed-buttons">
-                        <button class="btn-speed" id="speedDown" data-i18n="tooltip.speed.slower" data-i18n-attr="title"
+                        <button class="btn-speed" id="speedDown" data-i18n="tooltip.speed.slower"
+                                data-i18n-attr="title"
                                 title="Más lento">
                             <i class="fas fa-minus"></i>
                         </button>
-                        <button class="btn-speed" id="speedUp" data-i18n="tooltip.speed.faster" data-i18n-attr="title"
+                        <button class="btn-speed" id="speedUp" data-i18n="tooltip.speed.faster"
+                                data-i18n-attr="title"
                                 title="Más rápido">
                             <i class="fas fa-plus"></i>
                         </button>
