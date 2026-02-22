@@ -7,6 +7,25 @@ class GridManager {
     constructor(size) {
         this.size = size;
         this.grid = this._createEmptyGrid(size);
+        this._backGrid = this._createEmptyGrid(size);
+    }
+
+    /**
+     * Devuelve el buffer trasero para que RuleEngine escriba en él.
+     * @returns {Uint8Array[]}
+     */
+    getBackGrid() {
+        return this._backGrid;
+    }
+
+    /**
+     * Intercambia front y back buffer tras una generación calculada.
+     * El resultado de RuleEngine pasa a ser el grid activo sin copiar datos.
+     */
+    swapBuffers() {
+        const tmp = this.grid;
+        this.grid = this._backGrid;
+        this._backGrid = tmp;
     }
 
     /**
@@ -28,7 +47,7 @@ class GridManager {
         const oldSize = this.size;
         const oldGrid = this.grid;
 
-        // Crear nuevo grid
+        // Crear nuevos grids (front + back)
         const newGrid = this._createEmptyGrid(newSize);
 
         // Copiar datos existentes (intersección de tamaños)
@@ -41,6 +60,7 @@ class GridManager {
 
         this.size = newSize;
         this.grid = newGrid;
+        this._backGrid = this._createEmptyGrid(newSize);
 
         return {
             grid: newGrid,

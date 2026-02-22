@@ -105,38 +105,50 @@ class RuleEngine {
     }
 
     /**
-     * Procesa una generación completa del grid
-     * @param {Uint8Array[]} currentGrid - Grid actual
-     * @param {Function} countNeighbors - Función (x, y) => count
-     * @returns {Object} {newGrid, changedCells: [{x, y}, ...]}
+     * Procesa una generación completa del grid.
+     * @param {Uint8Array[]} currentGrid  - Grid actual (front buffer)
+     * @param {Function}     countNeighbors - Función (x, y) => count
+     * @param {Uint8Array[]|null} outGrid  - Buffer de escritura (back buffer).
+     *   Si es null se asigna uno nuevo (compatibilidad hacia atrás).
+     * @returns {Object} { newGrid, changedCells: Uint32Array, changedCount, generationStats }
+     *   changedCells contiene índices planos (x*size + y); solo los primeros
+     *   changedCount elementos son válidos.
      */
-    nextGeneration(currentGrid, countNeighbors) {
+    nextGeneration(currentGrid, countNeighbors, outGrid = null) {
         const size = currentGrid.length;
-        const newGrid = Array.from({length: size}, () => new Uint8Array(size));
-        const changedCells = [];
+
+        // Usar outGrid proporcionado o crear uno nuevo (compatibilidad)
+        const newGrid = outGrid || Array.from({length: size}, () => new Uint8Array(size));
+
+        // Reutilizar buffer de índices; crecer solo si el grid es más grande
+        const maxChanges = size * size;
+        if (!this._changedBuf || this._changedBuf.length < maxChanges) {
+            this._changedBuf = new Uint32Array(maxChanges);
+        }
+
+        let changedCount = 0;
+        let births = 0;
+        let deaths = 0;
 
         for (let x = 0; x < size; x++) {
             for (let y = 0; y < size; y++) {
                 const currentState = currentGrid[x][y];
-                const neighborCount = countNeighbors(x, y);
-                const nextState = this.computeNextState(currentState, neighborCount);
+                const nextState = this.computeNextState(currentState, countNeighbors(x, y));
 
                 newGrid[x][y] = nextState;
 
                 if (nextState !== currentState) {
-                    changedCells.push({x, y, from: currentState, to: nextState});
+                    this._changedBuf[changedCount++] = x * size + y;
+                    if (currentState === 0) births++; else deaths++;
                 }
             }
         }
 
         return {
             newGrid,
-            changedCells,
-            generationStats: {
-                births: changedCells.filter(c => c.from === 0).length,
-                deaths: changedCells.filter(c => c.from === 1).length,
-                totalChanges: changedCells.length
-            }
+            changedCells: this._changedBuf,
+            changedCount,
+            generationStats: {births, deaths, totalChanges: changedCount}
         };
     }
 

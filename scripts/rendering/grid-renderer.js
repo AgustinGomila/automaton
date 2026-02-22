@@ -97,6 +97,15 @@ class GridRenderer {
         this._dirtyCells.add(index);
     }
 
+    /**
+     * Marca una celda sucia por índice plano (x*size + y).
+     * Evita la codificación/decodificación en el hot path.
+     * @param {number} index
+     */
+    markDirtyIndex(index) {
+        this._dirtyCells.add(index);
+    }
+
     markAllDirty() {
         this._dirtyCells.clear();
         const size = this.config.gridSize;

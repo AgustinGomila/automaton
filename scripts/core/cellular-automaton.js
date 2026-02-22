@@ -56,20 +56,19 @@ class CellularAutomatonCore {
      */
     step() {
         const getCell = (x, y) => this.gridManager.getCell(x, y);
-
-        // Usar countNeighbors del calculator
         const countNeighbors = (x, y) => this.neighborhood.countNeighbors(x, y, getCell);
 
-        // Calcular siguiente generación
-        const result = this.ruleEngine.nextGeneration(this.gridManager.grid, countNeighbors);
+        // Escribir en el back buffer; sin asignación de grid nueva
+        const outGrid = this.gridManager.getBackGrid();
+        const result = this.ruleEngine.nextGeneration(this.gridManager.grid, countNeighbors, outGrid);
 
-        // Actualizar grid
-        this.gridManager.grid = result.newGrid;
+        // Swap O(1): el back buffer pasa a ser el grid activo
+        this.gridManager.swapBuffers();
         this.generation++;
 
-        // Notificar cambios de celdas si hay callback
-        if (this._callbacks.onCellChange && result.changedCells.length > 0) {
-            this._callbacks.onCellChange(result.changedCells);
+        // Notificar cambios: índices planos (Uint32Array) + cantidad válida
+        if (this._callbacks.onCellChange && result.changedCount > 0) {
+            this._callbacks.onCellChange(result.changedCells, result.changedCount);
         }
 
         // Notificar nueva generación
