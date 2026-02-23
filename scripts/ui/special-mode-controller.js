@@ -383,6 +383,11 @@ class SpecialModeController {
         if (this.automaton._originalRenderer) {
             this.automaton.renderer = this.automaton._originalRenderer;
             this.automaton._originalRenderer = null;
+            // Recalcular el canvas al tamaño correcto del grid estándar
+            this.automaton.renderer.resize(
+                this.automaton.gridSize,
+                this.automaton.cellSize
+            );
         }
         if (this.automaton._originalCore) {
             this.automaton.core = this.automaton._originalCore;

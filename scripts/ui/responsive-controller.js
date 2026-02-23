@@ -60,7 +60,7 @@ class ResponsiveController {
             return;
         }
 
-        const defaultGridSize = 200;
+        const defaultGridSize = 400;
         const defaultCellSize = 2;
 
         const gridSizeInput = document.getElementById('gridSize');

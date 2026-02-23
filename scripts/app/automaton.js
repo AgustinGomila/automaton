@@ -11,8 +11,8 @@
  */
 
 class CellularAutomaton {
-    constructor(gridSize = 200, cellSize = 4) {
-        this.gridSize = Math.min(Math.max(gridSize, 20), 400);
+    constructor(gridSize = 400, cellSize = 2) {
+        this.gridSize = Math.min(Math.max(gridSize, 20), 1000);
         this.cellSize = Math.min(Math.max(cellSize, 1), 20);
 
         // === CORE MATEMÁTICO ===
@@ -689,7 +689,7 @@ class CellularAutomaton {
     }
 
     resizeGrid(newSize) {
-        const size = Math.min(Math.max(newSize, 20), 400);
+        const size = Math.min(Math.max(newSize, 20), 1000);
 
         if (this.isRunning) this.stop();
 
@@ -1059,6 +1059,9 @@ class CellularAutomaton {
         this.renderer.markAllDirty();
         this.render();
         this.updateStats(0);
+
+        // Reiniciar worker para que esté disponible en la próxima ejecución
+        this._initWorker();
 
         console.debug('🧹 Clear completado - Modo:', this.specialMode || 'estándar');
     }

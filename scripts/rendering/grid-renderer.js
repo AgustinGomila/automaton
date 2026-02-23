@@ -74,16 +74,14 @@ class GridRenderer {
     }
 
     render(options = {}) {
-        const generation = options.generation || 0;
-
-        if (this._dirtyCells.size === 0 && generation > 0) {
+        if (this._dirtyCells.size === 0) {
             return;
         }
 
         const totalCells = this.config.gridSize * this.config.gridSize;
         const fullRenderNeeded = this._dirtyCells.size > (totalCells * 0.1);
 
-        if (fullRenderNeeded || generation === 0) {
+        if (fullRenderNeeded) {
             this._forceFullRender();
         } else {
             this._renderDirtyCells();
@@ -147,7 +145,7 @@ class GridRenderer {
     }
 
     resize(gridSize, cellSize) {
-        this.config.gridSize = Math.max(20, Math.min(gridSize, 400));
+        this.config.gridSize = Math.max(20, Math.min(gridSize, 1000));
         this.config.cellSize = Math.max(1, Math.min(cellSize, 20));
 
         const totalCells = this.config.gridSize * this.config.gridSize;
