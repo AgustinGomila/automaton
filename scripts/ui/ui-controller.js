@@ -6,7 +6,7 @@ class UIController {
 
         this.automaton = automatonInstance;
 
-        this.showInfluenceArea = false;
+        this.showInfluenceArea = true;
         this.patternsTwoRows = true;
         this.patternsCompactView = true;
         this.patternsSortByCount = false;

@@ -34,7 +34,7 @@ class CanvasController {
         this._ctrlPressed = false;
 
         // Estado visual
-        this.showInfluenceArea = false;
+        this.showInfluenceArea = true;
 
         // Internos
         this._cleanups = [];
@@ -278,7 +278,7 @@ class CanvasController {
         if (this.isDragging) this.endDrag();
 
         hidePatternPreview();
-        if (!this.showInfluenceArea) hideInfluenceArea();
+        if (this.showInfluenceArea) hideInfluenceArea();
 
         this.lastCell = null;
     }
