@@ -236,6 +236,8 @@ class SpecialModeController {
             document.getElementById('neighborhoodType').disabled = true;
 
             this.automaton.wolframEngine.activate(rule, direction);
+            this.automaton.renderer.resizeCanvas();
+            this.automaton.renderer.reGrid();
             this.automaton.render();
 
             this._onUpdateHeader();
@@ -257,6 +259,7 @@ class SpecialModeController {
 
         this.automaton.wolframEngine?.deactivate();
         this.automaton.specialMode = null;
+        this.automaton.renderer.reGrid();
         this.automaton.render();
 
         this._updateModeIndicator('standard');
@@ -282,6 +285,8 @@ class SpecialModeController {
             }
 
             this.automaton.rd2dEngine.activate();
+            this.automaton.renderer.resizeCanvas();
+            this.automaton.renderer.reGrid();
             this.automaton.render();
 
             this._onUpdateHeader();
@@ -307,6 +312,7 @@ class SpecialModeController {
 
         this.automaton.rd2dEngine?.deactivate();
         this.automaton.specialMode = null;
+        this.automaton.renderer.reGrid();
         this.automaton.render();
 
         this._updateModeIndicator('standard');
@@ -381,8 +387,11 @@ class SpecialModeController {
         }
 
         if (this.automaton._originalRenderer) {
+            const oldRenderer = this.automaton.renderer;   // renderer triangular activo
             this.automaton.renderer = this.automaton._originalRenderer;
             this.automaton._originalRenderer = null;
+            // Destruir el renderer triangular: elimina el overlay canvas del DOM
+            oldRenderer?.destroy?.();
             // Recalcular el canvas al tamaño correcto del grid estándar
             this.automaton.renderer.resize(
                 this.automaton.gridSize,
@@ -429,6 +438,8 @@ class SpecialModeController {
             }
 
             this.automaton.uwEngine.activate();
+            this.automaton.renderer.resizeCanvas();
+            this.automaton.renderer.reGrid();
             this.automaton.render();
 
             this._onUpdateHeader();
@@ -453,7 +464,7 @@ class SpecialModeController {
 
         this.automaton.uwEngine?.deactivate();
         this.automaton.specialMode = null;
-        this.automaton.renderer.markAllDirty();
+        this.automaton.renderer.reGrid();
         this.automaton.render();
 
         this._updateModeIndicator('standard');
@@ -544,6 +555,25 @@ class SpecialModeController {
                 toggle.checked = false;
                 this._toggleTriangleControls(false);
                 this.automaton.triangleEngine?.deactivate();
+                this.automaton.triangleEngine = null;
+
+                // Restaurar renderer estándar (sin esto el canvas triangular persiste)
+                if (this.automaton._originalRenderer) {
+                    const oldRenderer = this.automaton.renderer;
+                    this.automaton.renderer = this.automaton._originalRenderer;
+                    this.automaton._originalRenderer = null;
+                    oldRenderer?.destroy?.();
+                }
+                if (this.automaton._originalCore) {
+                    this.automaton.core = this.automaton._originalCore;
+                    this.automaton._originalCore = null;
+                }
+                this.automaton.specialMode = null;
+
+                this.automaton.renderer.resize(
+                    this.automaton.gridSize,
+                    this.automaton.cellSize
+                );
             }
         }
         if (activeMode !== 'ulam-warburton') {

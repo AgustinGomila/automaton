@@ -417,6 +417,8 @@ class TriangleWebGL2Renderer {
         this.canvas.style.width = canvasWidth + 'px';
         this.canvas.style.height = canvasHeight + 'px';
 
+        this._syncOverlayToCanvas();
+
         if (this.container) {
             this.container.style.width = (canvasWidth + 20) + 'px';
             this.container.style.height = (canvasHeight + 20) + 'px';
@@ -503,31 +505,32 @@ class TriangleWebGL2Renderer {
         const gl = this.gl;
         this._updateInstanceBuffer();
 
-        if (this._aliveCellCount === 0) {
-            gl.clearColor(0.059, 0.09, 0.165, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            return;
-        }
-
         gl.clearColor(0.059, 0.09, 0.165, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-        gl.useProgram(this.program);
-        gl.bindVertexArray(this.vao);
 
-        gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
-        gl.uniform1f(this.uCellSize, this.cellSize);
-        gl.uniform2f(this.uGridSize, this.gridManager.width, this.gridManager.height);
-        gl.uniform1f(this.uShowGrid, this.showGrid ? 1.0 : 0.0);
+        if (this._aliveCellCount > 0) {
+            gl.useProgram(this.program);
+            gl.bindVertexArray(this.vao);
 
-        const alive = this._hexToRGB(this.colorAlive);
-        const dead = this._hexToRGB(this.colorDead);
-        const grid = this._hexToRGB(this.colorGrid);
-        gl.uniform3f(this.uColorAlive, alive[0], alive[1], alive[2]);
-        gl.uniform3f(this.uColorDead, dead[0], dead[1], dead[2]);
-        gl.uniform3f(this.uColorGrid, grid[0], grid[1], grid[2]);
+            gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
+            gl.uniform1f(this.uCellSize, this.cellSize);
+            gl.uniform2f(this.uGridSize, this.gridManager.width, this.gridManager.height);
+            gl.uniform1f(this.uShowGrid, this.showGrid ? 1.0 : 0.0);
 
-        gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, this._aliveCellCount);
-        gl.bindVertexArray(null);
+            const alive = this._hexToRGB(this.colorAlive);
+            const dead = this._hexToRGB(this.colorDead);
+            const grid = this._hexToRGB(this.colorGrid);
+            gl.uniform3f(this.uColorAlive, alive[0], alive[1], alive[2]);
+            gl.uniform3f(this.uColorDead, dead[0], dead[1], dead[2]);
+            gl.uniform3f(this.uColorGrid, grid[0], grid[1], grid[2]);
+
+            gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, this._aliveCellCount);
+            gl.bindVertexArray(null);
+        }
+
+        // Overlay siempre actualizado (con o sin celdas vivas)
+        this._ensureGridOverlay();
+        this._drawGridOverlay();
     }
 
     // =========================================
@@ -550,6 +553,12 @@ class TriangleWebGL2Renderer {
         this.showGrid = !this.showGrid;
         this._isFirstRender = true;
         this.markAllDirty();
+        // Propagar al fallback si está activo
+        if (this._fallbackRenderer) {
+            this._fallbackRenderer.setConfig('showGrid', this.showGrid);
+        } else {
+            this._drawGridOverlay();
+        }
         return this.showGrid;
     }
 
@@ -585,10 +594,120 @@ class TriangleWebGL2Renderer {
             this.showGrid = value;
             this._isFirstRender = true;
             this.markAllDirty();
+            if (this._fallbackRenderer) {
+                this._fallbackRenderer.setConfig('showGrid', value);
+            }
         }
     }
 
+    // =========================================
+    // OVERLAY GRID (canvas 2D transparente sobre WebGL)
+    // =========================================
+
+    _ensureGridOverlay() {
+        if (this._overlayCanvas) return;
+
+        this._overlayCanvas = document.createElement('canvas');
+        this._overlayCanvas.style.position = 'absolute';
+        this._overlayCanvas.style.pointerEvents = 'none';
+        this._overlayCtx = this._overlayCanvas.getContext('2d', {alpha: true});
+
+        // Insertar inmediatamente después del canvas WebGL
+        this.canvas.insertAdjacentElement('afterend', this._overlayCanvas);
+        this._syncOverlayToCanvas();
+    }
+
+    _syncOverlayToCanvas() {
+        if (!this._overlayCanvas) return;
+
+        this._overlayCanvas.width = this.canvas.width;
+        this._overlayCanvas.height = this.canvas.height;
+        this._overlayCanvas.style.width = this.canvas.style.width || this.canvas.width + 'px';
+        this._overlayCanvas.style.height = this.canvas.style.height || this.canvas.height + 'px';
+        this._overlayCanvas.style.left = this.canvas.offsetLeft + 'px';
+        this._overlayCanvas.style.top = this.canvas.offsetTop + 'px';
+    }
+
+    /**
+     * Dibuja el fondo de rejilla triangular sobre el overlay 2D.
+     * Replica la lógica de TriangleRenderer._drawBackgroundGrid().
+     */
+    _drawGridOverlay() {
+        if (!this._overlayCanvas || !this._overlayCtx || !this.gridManager) return;
+
+        const ctx = this._overlayCtx;
+        const cw = this._overlayCanvas.width;
+        const ch = this._overlayCanvas.height;
+
+        ctx.clearRect(0, 0, cw, ch);
+        if (!this.showGrid) return;
+
+        const size = this.cellSize;
+        const h = size * Math.sqrt(3) / 2;
+        const w = size / 2;
+        const gm = this.gridManager;
+        const step = 5; // gridStep
+
+        ctx.strokeStyle = this.colorGrid;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+
+        // Líneas horizontales
+        for (let r = 0; r <= gm.height; r += step) {
+            const y = r * h;
+            if (y > ch) break;
+            ctx.moveTo(0, y);
+            ctx.lineTo(cw, y);
+        }
+
+        const xOff = w;
+
+        // Diagonales ↘ (\)
+        for (let k = -Math.ceil(ch / h); k <= Math.ceil(cw / w) + 1; k += step) {
+            const xBase = xOff + k * 2 * w;
+            const pts = [];
+            const yL = Math.sqrt(3) * xBase;
+            if (yL >= 0 && yL <= ch) pts.push({x: 0, y: yL});
+            const yR = -Math.sqrt(3) * (cw - xBase);
+            if (yR >= 0 && yR <= ch) pts.push({x: cw, y: yR});
+            if (xBase >= 0 && xBase <= cw) pts.push({x: xBase, y: 0});
+            const xB = xBase - ch / Math.sqrt(3);
+            if (xB >= 0 && xB <= cw) pts.push({x: xB, y: ch});
+            if (pts.length >= 2) {
+                pts.sort((a, b) => a.x - b.x);
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
+            }
+        }
+
+        // Diagonales ↗ (/)
+        for (let k = -Math.ceil(ch / h); k <= Math.ceil(cw / w) + 1; k += step) {
+            const xBase = xOff + k * 2 * w;
+            const pts = [];
+            const yL = -Math.sqrt(3) * xBase;
+            if (yL >= 0 && yL <= ch) pts.push({x: 0, y: yL});
+            const yR = Math.sqrt(3) * (cw - xBase);
+            if (yR >= 0 && yR <= ch) pts.push({x: cw, y: yR});
+            if (xBase >= 0 && xBase <= cw) pts.push({x: xBase, y: 0});
+            const xB = xBase + ch / Math.sqrt(3);
+            if (xB >= 0 && xB <= cw) pts.push({x: xB, y: ch});
+            if (pts.length >= 2) {
+                pts.sort((a, b) => a.x - b.x);
+                ctx.moveTo(pts[0].x, pts[0].y);
+                ctx.lineTo(pts[1].x, pts[1].y);
+            }
+        }
+
+        ctx.stroke();
+    }
+
     destroy() {
+        if (this._overlayCanvas) {
+            this._overlayCanvas.remove();
+            this._overlayCanvas = null;
+            this._overlayCtx = null;
+        }
+
         if (this._fallbackRenderer) {
             this._fallbackRenderer.destroy();
             this._fallbackRenderer = null;

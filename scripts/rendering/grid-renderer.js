@@ -140,8 +140,26 @@ class GridRenderer {
 
     toggleGrid() {
         this.config.showGrid = !this.config.showGrid;
+        return this.reGrid();
+    }
+
+    /**
+     * Marca todo el grid como sucio y retorna el estado actual de showGrid.
+     * Útil al volver de modos especiales: garantiza que el próximo render()
+     * pinte el grid cuadrado desde cero.
+     */
+    reGrid() {
         this.markAllDirty();
         return this.config.showGrid;
+    }
+
+    /**
+     * Wrapper público de _resizeCanvas().
+     * Permite que special-mode-controller ajuste el canvas al tamaño
+     * cuadrado estándar sin necesidad de pasar nuevos parámetros.
+     */
+    resizeCanvas() {
+        this._resizeCanvas();
     }
 
     resize(gridSize, cellSize) {
@@ -457,6 +475,7 @@ class GridRenderer {
         if (!this.canvas) return;
 
         const width = this.config.gridSize * this.config.cellSize;
+        // noinspection JSSuspiciousNameCombination
         const height = width;
 
         this.canvas.width = width;

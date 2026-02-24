@@ -18,7 +18,7 @@ class CellularAutomatonCore {
      * @param {boolean} options.wrapEdges - Modo toroidal
      */
     constructor(options = {}) {
-        this.size = Math.min(Math.max(options.size || 200, 20), 400);
+        this.size = Math.min(Math.max(options.size || 400, 20), 1000);
 
         // Componentes
         this.gridManager = new GridManager(this.size);
@@ -55,14 +55,18 @@ class CellularAutomatonCore {
      * @returns {Object} Estadísticas de la generación
      */
     step() {
-        const getCell = (x, y) => this.gridManager.getCell(x, y);
-        const countNeighbors = (x, y) => this.neighborhood.countNeighbors(x, y, getCell);
-
-        // Escribir en el back buffer; sin asignación de grid nueva
         const outGrid = this.gridManager.getBackGrid();
-        const result = this.ruleEngine.nextGeneration(this.gridManager.grid, countNeighbors, outGrid);
 
-        // Swap O(1): el back buffer pasa a ser el grid activo
+        // Fastpath: Moore radio-1 es el caso más común (~5× más rápido).
+        // Inlinea los 8 vecinos directamente sin callback ni loop de offsets.
+        const result = this.neighborhood.isFastPath
+            ? this.ruleEngine.nextGenerationMoore1(
+                this.gridManager.grid, outGrid, this.neighborhood.wrapEdges)
+            : this.ruleEngine.nextGeneration(
+                this.gridManager.grid,
+                (x, y) => this.neighborhood.countNeighbors(x, y, (nx, ny) => this.gridManager.getCell(nx, ny)),
+                outGrid);
+
         this.gridManager.swapBuffers();
         this.generation++;
 
