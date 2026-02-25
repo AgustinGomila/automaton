@@ -2,9 +2,16 @@
  * SpecialEngineManager - Gestiona los motores especiales de simulación.
  *
  * Responsabilidad: ciclo de vida (activación, desactivación, swap de renderer)
- * de WolframEngine, RD2DEngine y TriangleEngine.
+ * de WolframEngine, RD2DEngine, TriangleEngine y UlamWarburtonEngine.
  *
- * No conoce el bucle de animación ni la lógica de límites.
+ * Cada engine recibe un EngineContext mínimo en lugar del automaton completo,
+ * aplicando DI fina: el engine solo puede acceder a las dependencias que necesita.
+ *
+ * Superficies de cada engine:
+ *   WolframEngine   → grid, gridSize, generation (set), renderer.markDirty, _markAllDirty, setCell
+ *   RD2DEngine      → grid, gridSize, renderer.markDirty
+ *   TriangleEngine  → grid, gridSize, cellSize, render(), renderer.*
+ *   UWEngine        → grid, gridSize, renderer.markDirty, _markAllDirty
  */
 class SpecialEngineManager {
     /**
@@ -15,6 +22,7 @@ class SpecialEngineManager {
      * @param {Function} options.setCore      - (c) => asigna core al automaton (restauración)
      * @param {Function} options.getGridSize  - () => gridSize actual
      * @param {Function} options.getCellSize  - () => cellSize actual
+     * @param {Function} options.getAutomaton - () => instancia completa (solo para TriangleEngine que llama render())
      */
     constructor({getRenderer, setRenderer, getCore, setCore, getGridSize, getCellSize, getAutomaton}) {
         this._getRenderer = getRenderer;
@@ -56,21 +64,21 @@ class SpecialEngineManager {
             if (typeof RD2DEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/rd2d-engine.js');
             }
-            this.rd2dEngine = new RD2DEngine(this._getAutomaton());
+            this.rd2dEngine = new RD2DEngine(this._buildRD2DContext());
             this.specialMode = 'rd2d';
 
         } else if (engineName === 'wolfram') {
             if (typeof WolframEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/wolfram-engine.js');
             }
-            this.wolframEngine = new WolframEngine(this._getAutomaton());
+            this.wolframEngine = new WolframEngine(this._buildWolframContext());
             this.specialMode = 'wolfram';
 
         } else if (engineName === 'ulam-warburton') {
             if (typeof UlamWarburtonEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/ulam-warburton-engine.js');
             }
-            this.uwEngine = new UlamWarburtonEngine(this._getAutomaton());
+            this.uwEngine = new UlamWarburtonEngine(this._buildUWContext());
             this.specialMode = 'ulam-warburton';
 
         } else if (engineName === 'triangle') {
@@ -90,7 +98,7 @@ class SpecialEngineManager {
             this._originalRenderer = this._getRenderer();
             this._originalCore = this._getCore();
 
-            this.triangleEngine = new TriangleEngine(this._getAutomaton());
+            this.triangleEngine = new TriangleEngine(this._buildTriangleContext());
 
             const canvas = document.getElementById('canvas');
             const container = document.getElementById('canvas-container');
@@ -148,6 +156,111 @@ class SpecialEngineManager {
     }
 
     // ─── Privados ───────────────────────────────────────────────
+
+    /**
+     * Contexto mínimo para WolframEngine.
+     * Expone: grid, gridSize (live), generation (set), renderer.markDirty,
+     *         _markAllDirty, setCell.
+     */
+    _buildWolframContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get generation() {
+                return automaton.generation;
+            },
+            set generation(v) {
+                automaton.generation = v;
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            _markAllDirty() {
+                automaton._markAllDirty();
+            },
+            setCell(x, y, state, markDirty) {
+                return automaton.setCell(x, y, state, markDirty);
+            }
+        };
+    }
+
+    /**
+     * Contexto mínimo para RD2DEngine.
+     * Expone: grid, gridSize (live), renderer.markDirty.
+     */
+    _buildRD2DContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            }
+        };
+    }
+
+    /**
+     * Contexto mínimo para TriangleEngine.
+     * TriangleEngine llama automaton.render() directamente, por lo que necesita
+     * la referencia completa; sin embargo la envolvemos para poder interceptar
+     * o sustituir en el futuro sin tocar el engine.
+     * Expone: grid, gridSize, cellSize, render(), renderer.*.
+     */
+    _buildTriangleContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get cellSize() {
+                return self._getCellSize();
+            },
+            render() {
+                return automaton.render();
+            },
+            get renderer() {
+                return self._getRenderer();
+            }
+        };
+    }
+
+    /**
+     * Contexto mínimo para UlamWarburtonEngine.
+     * Expone: grid, gridSize (live), renderer.markDirty, _markAllDirty.
+     */
+    _buildUWContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            _markAllDirty() {
+                automaton._markAllDirty();
+            }
+        };
+    }
 
     _restoreOriginals() {
         if (this._originalRenderer) {
