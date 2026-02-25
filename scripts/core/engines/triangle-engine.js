@@ -25,13 +25,11 @@ class TriangleEngine {
 
         this.initialized = false;
 
-        // Worker support
-        this.worker = null;
+        // Worker: gestionado por TriangleWorkerManager (composición)
+        this._workerManager = null;
         this.useWorker = false;
         this.workerThreshold = 100;
-        this.isWorkerProcessing = false;
         this._pendingStep = false;
-        this._workerReady = false;
     }
 
     activate(options = {}) {
@@ -57,12 +55,30 @@ class TriangleEngine {
         this._buildTwinRuleTable();
         this.generation = 0;
 
-        // Worker init solo si es necesario
-        if (!this.worker && this.useWorker) {
-            this._initWorker();
-        }
-        if (this.worker && !this._workerReady) {
-            this._syncToWorker();
+        // Crear/sincronizar el worker manager si corresponde
+        const shouldUseWorker = this.useWorker &&
+            (this.gridManager.width * this.gridManager.height >= this.workerThreshold * this.workerThreshold);
+
+        if (shouldUseWorker) {
+            if (!this._workerManager) {
+                this._workerManager = new TriangleWorkerManager({
+                    workerPath: 'scripts/infrastructure/workers/triangle-worker.js',
+                    onResult: (raw) => this._onWorkerResult(raw),
+                    onReady: () => console.debug('🔺 TriangleWorkerManager: listo'),
+                    onError: () => {
+                        console.warn('🔺 TriangleWorkerManager: error — usando modo síncrono');
+                        this.useWorker = false;
+                        this._workerManager?.destroy();
+                        this._workerManager = null;
+                    }
+                });
+                this._workerManager.init();
+            }
+            this._workerManager.sync(this.gridManager, this.ruleNumber, this.wrapEdges);
+        } else if (this._workerManager) {
+            // Ya no supera el umbral: liberar worker
+            this._workerManager.destroy();
+            this._workerManager = null;
         }
 
         return this;
@@ -135,149 +151,50 @@ class TriangleEngine {
             this.automaton.renderer.resize(newSize, this.automaton.cellSize);
         }
 
-        // Sincronizar worker
-        if (this.useWorker && this.worker && this._workerReady) {
-            this._syncToWorker();
+        // Sincronizar worker con nuevas dimensiones
+        if (this._workerManager?.isReady) {
+            this._workerManager.sync(this.gridManager, this.ruleNumber, this.wrapEdges);
         }
 
         // Sincronizar con grid principal
         this._syncToAutomaton();
     }
 
-    // ========== WORKER SUPPORT METHODS ==========
+    // ========== WORKER RESULT HANDLER ==========
 
-    _initWorker() {
-        if (this.worker) {
-            this.worker.terminate();
-        }
-
-        this._workerReady = false;
-
-        try {
-            this.worker = new Worker('scripts/infrastructure/workers/triangle-worker.js');
-
-            this.worker.onmessage = (e) => {
-                const {type, result, gridBuffer, changedCells, isInitialized} = e.data;
-
-                if (type === 'ready') {
-                    console.debug('🔺 Worker: ready received');
-                    return;
-                }
-
-                if (type === 'pong') {
-                    this._workerReady = isInitialized || false;
-                    return;
-                }
-
-                if (type === 'init') {
-                    this._workerReady = true;
-                    console.debug('🔺 Worker: initialized');
-                    return;
-                }
-
-                if (type === 'step') {
-                    this._handleWorkerStep(result, gridBuffer, changedCells);
-                } else if (type === 'error') {
-                    console.error('Triangle Worker error:', e.data.error);
-                    this.useWorker = false;
-                    this.isWorkerProcessing = false;
-                }
-            };
-
-            this.worker.onerror = (err) => {
-                console.error('Worker error:', err);
-                this.useWorker = false;
-                this.isWorkerProcessing = false;
-                this._workerReady = false;
-            };
-
-        } catch (err) {
-            console.warn('Failed to init triangle worker:', err);
-            this.useWorker = false;
-            this._workerReady = false;
-        }
-    }
-
-    // Warm-up del worker
-    async _warmupWorker() {
-        if (!this.worker || !this.useWorker) return false;
-
-        return new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-                console.warn('🔺 Worker warm-up timeout');
-                resolve(false);
-            }, 5000); // 5 segundos máximo
-
-            const checkReady = () => {
-                if (this._workerReady) {
-                    clearTimeout(timeout);
-                    resolve(true);
-                    return;
-                }
-
-                // Enviar ping para verificar estado
-                if (this.worker) {
-                    this.worker.postMessage({type: 'ping'});
-                }
-
-                setTimeout(checkReady, 50);
-            };
-
-            checkReady();
-        });
-    }
-
-    _syncToWorker() {
-        if (!this.worker || !this.useWorker) return;
-
-        const width = this.gridManager.width;
-        const height = this.gridManager.height;
-        const flatSize = width * height;
-        const gridBuffer = new ArrayBuffer(flatSize);
-        const flatGrid = new Uint8Array(gridBuffer);
-
-        for (let q = 0; q < width; q++) {
-            for (let r = 0; r < height; r++) {
-                flatGrid[q * height + r] = this.gridManager.grid[q][r];
-            }
-        }
-
-        this.worker.postMessage({
-            type: 'init',
-            data: {
-                width,
-                height,
-                ruleNumber: this.ruleNumber,
-                wrapEdges: this.wrapEdges,
-                gridBuffer
-            }
-        }, [gridBuffer]);
-    }
-
-    _handleWorkerStep(result, gridBuffer, changedCellsBuffer) {
-        this.isWorkerProcessing = false;
+    /**
+     * Callback invocado por TriangleWorkerManager cuando el worker completa un paso.
+     * Deserializa los buffers, sincroniza el grid y dispara el render.
+     *
+     * @param {Object} raw
+     * @param {Object}      raw.result               - {generation, hasChanges, changedCount}
+     * @param {ArrayBuffer} raw.gridBuffer            - Grid plano serializado (Transferable)
+     * @param {ArrayBuffer} raw.changedCellsBuffer    - Pares [q,r] de celdas modificadas
+     */
+    _onWorkerResult({result, gridBuffer, changedCellsBuffer}) {
         if (!this.isActive) return;
 
+        // Deserializar grid
         if (gridBuffer) {
             const flatGrid = new Uint8Array(gridBuffer);
             const width = this.gridManager.width;
             const height = this.gridManager.height;
 
             for (let q = 0; q < width; q++) {
+                const col = this.gridManager.grid[q];
+                const offset = q * height;
                 for (let r = 0; r < height; r++) {
-                    this.gridManager.grid[q][r] = flatGrid[q * height + r];
+                    col[r] = flatGrid[offset + r];
                 }
             }
         }
 
+        // Deserializar celdas modificadas
         this._changedCells.length = 0;
         if (changedCellsBuffer && result.changedCount > 0) {
-            const changedArray = new Int32Array(changedCellsBuffer);
+            const arr = new Int32Array(changedCellsBuffer);
             for (let i = 0; i < result.changedCount; i++) {
-                this._changedCells.push({
-                    x: changedArray[i * 2],
-                    y: changedArray[i * 2 + 1]
-                });
+                this._changedCells.push({x: arr[i * 2], y: arr[i * 2 + 1]});
             }
         }
 
@@ -291,13 +208,10 @@ class TriangleEngine {
             const population = this.gridManager?.countPopulation() ?? 0;
             const totalCells = this.gridManager.width * this.gridManager.height;
             const density = (population / totalCells * 100).toFixed(1);
-            eventBus.emit('stats:updated', {
-                generation: this.generation,
-                population,
-                density
-            });
+            eventBus.emit('stats:updated', {generation: this.generation, population, density});
         }
 
+        // Si hubo un paso pendiente mientras el worker estaba ocupado, ejecutarlo ahora
         if (this._pendingStep) {
             this._pendingStep = false;
             this.step();
@@ -307,7 +221,8 @@ class TriangleEngine {
     async step() {
         if (!this.isActive || !this.gridManager) return false;
 
-        if (this.useWorker && this.isWorkerProcessing) {
+        // Si el worker está procesando, encolar un paso pendiente
+        if (this._workerManager?.isProcessing) {
             this._pendingStep = true;
             return true;
         }
@@ -316,12 +231,13 @@ class TriangleEngine {
             this._initializeFromAutomaton();
             this.initialized = true;
 
-            // Warm-up del worker antes de usarlo
-            if (this.useWorker) {
-                this._syncToWorker();
-                const warmedUp = await this._warmupWorker();
+            // Warm-up del worker antes del primer paso offloaded
+            if (this._workerManager) {
+                const warmedUp = await this._workerManager.warmup();
                 if (!warmedUp) {
-                    console.warn('🔺 Worker warm-up failed, falling back to sync');
+                    console.warn('🔺 TriangleWorkerManager: warm-up fallido — modo síncrono');
+                    this._workerManager.destroy();
+                    this._workerManager = null;
                     this.useWorker = false;
                 }
             }
@@ -329,12 +245,12 @@ class TriangleEngine {
             return true;
         }
 
-        if (this.useWorker && this.worker && this._workerReady) {
-            this.isWorkerProcessing = true;
-            this.worker.postMessage({type: 'step'});
+        // Intentar offload al worker
+        if (this._workerManager?.step()) {
             return true;
         }
 
+        // Fallback: cálculo síncrono en el hilo principal
         return this._stepSync();
     }
 
@@ -569,7 +485,7 @@ class TriangleEngine {
             destroboscope: this.destroboscope,
             population: this.gridManager?.countPopulation() ?? 0,
             useWorker: this.useWorker,
-            workerReady: this._workerReady
+            workerReady: this._workerManager?.isReady ?? false
         };
     }
 
@@ -585,8 +501,8 @@ class TriangleEngine {
             this.gridManager.clear();
         }
 
-        if (this.useWorker && this.worker && this._workerReady) {
-            this._syncToWorker();
+        if (this._workerManager?.isReady) {
+            this._workerManager.sync(this.gridManager, this.ruleNumber, this.wrapEdges);
         }
 
         console.debug('🔺 Triangle Engine reset');
@@ -605,21 +521,17 @@ class TriangleEngine {
         this._changedCells = [];
         this.initialized = false;
 
-        if (this.useWorker && this.worker && this._workerReady) {
-            this._syncToWorker();
+        if (this._workerManager?.isReady) {
+            this._workerManager.sync(this.gridManager, this.ruleNumber, this.wrapEdges);
         }
 
         console.debug('🔺 TriangleEngine: Grid limpiado');
     }
 
     deactivate() {
-        if (this.worker) {
-            this.worker.terminate();
-            this.worker = null;
-        }
-        this.isWorkerProcessing = false;
+        this._workerManager?.destroy();
+        this._workerManager = null;
         this._pendingStep = false;
-        this._workerReady = false;
 
         this.isActive = false;
         this.gridManager = null;

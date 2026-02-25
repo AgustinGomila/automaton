@@ -83,7 +83,10 @@ class SpecialEngineManager {
 
         } else if (engineName === 'triangle') {
             if (typeof TriangleGridManager === 'undefined') {
-                await this._loadScript('scripts/core/engines/triangle-grid-manager.js');
+                await this._loadScript('scripts/core/triangle-grid-manager.js');
+            }
+            if (typeof TriangleWorkerManager === 'undefined') {
+                await this._loadScript('scripts/infrastructure/workers/triangle-worker-manager.js');
             }
             if (typeof TriangleEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/triangle-engine.js');
