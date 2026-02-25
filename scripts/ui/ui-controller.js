@@ -375,6 +375,12 @@ class UIController {
                 this.deselectPattern();
                 this._canvasController.clearSelection();
                 window.selectedPatternRotation = 0;
+                // Desactivar bote de pintura si estaba activo
+                if (this._canvasController.bucketToolActive) {
+                    this._canvasController.bucketToolActive = false;
+                    document.getElementById('bucketToolBtn')?.classList.remove('active');
+                    this._canvasController._updateCursor();
+                }
                 break;
             case ' ':
                 e.preventDefault();
@@ -396,9 +402,14 @@ class UIController {
                     });
                 }
                 break;
-            case 'a':
-                this.randomize();
+            case 'b': {
+                const cc = this._canvasController;
+                cc.bucketToolActive = !cc.bucketToolActive;
+                document.getElementById('bucketToolBtn')?.classList.toggle('active', cc.bucketToolActive);
+                if (cc.bucketToolActive) this.deselectPattern();
+                cc._updateCursor();
                 break;
+            }
             case 'c':
                 this.clear();
                 break;
@@ -838,7 +849,32 @@ class UIController {
         const toggleRowsBtn = document.getElementById('patternsToggleRows');
         const toggleCompactBtn = document.getElementById('patternsToggleCompact');
         const toggleSortBtn = document.getElementById('patternsToggleSort');
+        const bucketBtn = document.getElementById('bucketToolBtn');
         const container = document.getElementById('patternsContainer');
+
+        if (bucketBtn) {
+            this._addEventListener(bucketBtn, 'click', () => {
+                const cc = this._canvasController;
+                if (!cc) return;
+                cc.bucketToolActive = !cc.bucketToolActive;
+                bucketBtn.classList.toggle('active', cc.bucketToolActive);
+                // Deseleccionar patrón activo al activar el bote
+                if (cc.bucketToolActive) this.deselectPattern();
+                cc._updateCursor();
+            });
+        }
+
+        // Deseleccionar bote cuando se elige un patrón
+        this._cleanups.push(
+            eventBus.on('pattern:selected', () => {
+                if (this._canvasController?.bucketToolActive) {
+                    this._canvasController.bucketToolActive = false;
+                    document.getElementById('bucketToolBtn')?.classList.remove('active');
+                    this._canvasController._updateCursor();
+                }
+                this._displayController.updateDrawModeIndicator();
+            })
+        );
 
         if (toggleRowsBtn && container) {
             this._addEventListener(toggleRowsBtn, 'click', () => {

@@ -920,6 +920,27 @@ h1 i.fa-border-style {
 .patterns-controls {
     display: flex;
     gap: 8px;
+    align-items: center;
+}
+
+.patterns-controls-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--border-color);
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+#bucketToolBtn:not(.active) {
+    border-color: var(--border-color);
+    box-shadow: none;
+    color: var(--light-text);
+}
+
+#bucketToolBtn.active {
+    color: var(--warning);
+    border-color: var(--warning);
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
 }
 
 .patterns-grid-container {

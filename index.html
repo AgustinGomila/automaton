@@ -39,7 +39,7 @@
                         <i class="fas fa-border-all"></i>
                     </button>
                     <button id="quickInfluenceToggle" class="btn-toggle active" data-i18n="tooltip.influence"
-                            data-i18n-attr="title" title="Área de Influencia">
+                            data-i18n-attr="title" title="Área de Influencia" style="color: var(--secondary);">
                         <i class="fas fa-bullseye"></i>
                     </button>
                     <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
@@ -210,7 +210,7 @@
                         <div class="accordion-content">
                             <div class="config-group">
                                 <div class="toggle-switch">
-                                    <input checked class="toggle-checkbox" id="influenceToggle" type="checkbox">
+                                    <input class="toggle-checkbox" id="influenceToggle" type="checkbox" checked>
                                     <label class="toggle-label" for="influenceToggle">
                                         <i class="fas fa-bullseye"></i> <span data-i18n="config.influence">Mostrar área de influencia</span>
                                         <span class="toggle-switch-slider"></span>
@@ -567,6 +567,11 @@
                 </div>
             </div>
             <div class="patterns-controls">
+                <button class="btn-toggle" id="bucketToolBtn" data-i18n="tooltip.bucket"
+                        data-i18n-attr="title" title="Bote de pintura (Ctrl: limpiar)">
+                    <i class="fas fa-fill-drip"></i>
+                </button>
+                <div class="patterns-controls-divider"></div>
                 <button class="btn-toggle" id="patternsToggleSort" data-i18n="tooltip.patterns.order"
                         data-i18n-attr="title" title="Células/Alfabético">
                     <i class="fas fa-sort-alpha-down"></i>
@@ -668,6 +673,7 @@
                         <li><strong>S</strong> - <span data-i18n="instructions.shortcut.s">Siguiente paso</span></li>
                         <li><strong>R</strong> - <span data-i18n="instructions.shortcut.r">Rotar patrón</span></li>
                         <li><strong>A</strong> - <span data-i18n="instructions.shortcut.a">Aleatorio</span></li>
+                        <li><strong>B</strong> - <span data-i18n="instructions.shortcut.b">Bote de pintura</span></li>
                         <li><strong>C</strong> - <span data-i18n="instructions.shortcut.c">Limpiar</span></li>
                         <li><strong>G</strong> - <span data-i18n="instructions.shortcut.h">Mostrar/Ocultar grilla</span>
                         </li>

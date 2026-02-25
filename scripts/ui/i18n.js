@@ -90,6 +90,7 @@ class I18n {
                 'tooltip.patterns.rows': 'Alternar 1/2 filas',
                 'tooltip.patterns.order': 'Ordenar por células/alfabético',
                 'tooltip.patterns.compact': 'Vista compacta',
+                'tooltip.bucket': 'Bote de pintura',
 
                 // Configuración
                 'config.title': 'Configuración',
@@ -216,6 +217,7 @@ class I18n {
                 'instructions.shortcut.s': 'Siguiente paso',
                 'instructions.shortcut.r': 'Rotar patrón',
                 'instructions.shortcut.a': 'Aleatorio',
+                'instructions.shortcut.b': 'Bote de pintura',
                 'instructions.shortcut.c': 'Limpiar',
                 'instructions.shortcut.h': 'Mostrar/Ocultar grilla',
                 'instructions.shortcut.esc': 'Cancelar/Clear',
@@ -308,6 +310,7 @@ class I18n {
                 'tooltip.patterns.rows': 'Toggle 1/2 rows',
                 'tooltip.patterns.order': 'Order by cellular amount/alphabetic',
                 'tooltip.patterns.compact': 'Compact view',
+                'tooltip.bucket': 'Paint bucket',
 
                 // Configuración
                 'config.title': 'Configuration',
@@ -434,6 +437,7 @@ class I18n {
                 'instructions.shortcut.s': 'Next step',
                 'instructions.shortcut.r': 'Rotate pattern',
                 'instructions.shortcut.a': 'Random',
+                'instructions.shortcut.b': 'Bucket fill tool',
                 'instructions.shortcut.c': 'Clear',
                 'instructions.shortcut.h': 'Toggle grid',
                 'instructions.shortcut.esc': 'Cancel/Clear',

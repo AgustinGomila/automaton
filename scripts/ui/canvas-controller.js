@@ -33,6 +33,9 @@ class CanvasController {
         this.shiftPressed = false;
         this._ctrlPressed = false;
 
+        // Herramienta bote de pintura
+        this.bucketToolActive = false;
+
         // Estado visual
         this.showInfluenceArea = true;
 
@@ -187,6 +190,12 @@ class CanvasController {
 
         const {x, y} = this.automaton.getCellFromMouse(e);
         this.lastCell = {x, y};
+
+        // Bote de pintura: flood fill en el área cerrada
+        if (this.bucketToolActive) {
+            this._floodFill(x, y, !this.ctrlPressed ? 1 : 0);
+            return;
+        }
 
         if (this.shiftPressed && !this.ctrlPressed && !this.selection) {
             this.startSelection(x, y);
@@ -633,7 +642,7 @@ class CanvasController {
 
         infoDiv.innerHTML = `
             <div class="selection-info-content">
-                <span><i class="fas fa-vector-square"></i> ${width}×${height}</span>
+                <span><i class="fa-regular fa-object-group"></i> ${width}×${height}</span>
                 <button id="deleteSelectionBtn" class="btn-small"><i class="fas fa-trash"></i></button>
                 <button id="clearSelectionBtn" class="btn-small"><i class="fas fa-times"></i></button>
             </div>
@@ -659,12 +668,80 @@ class CanvasController {
         }
     }
 
+    // =========================================
+    // FLOOD FILL (bote de pintura)
+    // =========================================
+
+    /**
+     * BFS iterativo desde (startX, startY).
+     * Rellena todas las celdas contiguas con el mismo estado que la celda origen
+     * cambiándolas a `fillState`. Respeta los bordes del grid (no toroidal).
+     *
+     * @param {number} startX
+     * @param {number} startY
+     * @param {number} fillState - 0 (limpiar) o 1 (llenar)
+     */
+    _floodFill(startX, startY, fillState) {
+        const size = this.automaton.gridSize;
+        const grid = this.automaton.grid;
+        const targetState = grid[startX]?.[startY] ?? 0;
+
+        // Si la celda origen ya tiene el estado destino, nada que hacer
+        if (targetState === fillState) return;
+
+        const visited = new Uint8Array(size * size);
+        const queue = [startX * size + startY];
+        visited[startX * size + startY] = 1;
+
+        const changed = [];
+
+        while (queue.length > 0) {
+            const idx = queue.shift();
+            const x = (idx / size) | 0;
+            const y = idx % size;
+
+            grid[x][y] = fillState;
+            changed.push(idx);
+            this.automaton.renderer.markDirtyIndex(idx);
+
+            // 4 vecinos (Von Neumann) — no cruzar paredes diagonales
+            const neighbors = [
+                x > 0 ? (x - 1) * size + y : -1,
+                x < size - 1 ? (x + 1) * size + y : -1,
+                y > 0 ? x * size + (y - 1) : -1,
+                y < size - 1 ? x * size + (y + 1) : -1,
+            ];
+
+            for (const nIdx of neighbors) {
+                if (nIdx < 0 || visited[nIdx]) continue;
+                const nx = (nIdx / size) | 0;
+                const ny = nIdx % size;
+                if (grid[nx][ny] === targetState) {
+                    visited[nIdx] = 1;
+                    queue.push(nIdx);
+                }
+            }
+        }
+
+        if (changed.length > 0) {
+            this.automaton.updateStats();
+            this.automaton.render();
+        }
+    }
+
     _updateCursor() {
         const canvas = document.getElementById('canvas');
         if (!canvas) return;
-        canvas.style.cursor = this._ctrlPressed
-            ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\'><circle cx=\'8\' cy=\'8\' r=\'6\' fill=\'%23ef4444\' opacity=\'0.8\'/></svg>") 8 8, crosshair'
-            : 'crosshair';
+
+        if (this.bucketToolActive) {
+            canvas.style.cursor = this.ctrlPressed
+                ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell'
+                : 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell';
+        } else {
+            canvas.style.cursor = this._ctrlPressed
+                ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\'><circle cx=\'8\' cy=\'8\' r=\'6\' fill=\'%23ef4444\' opacity=\'0.8\'/></svg>") 8 8, crosshair'
+                : 'crosshair';
+        }
     }
 
     _throttle(func, limit) {
