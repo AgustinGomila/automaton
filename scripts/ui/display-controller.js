@@ -10,9 +10,11 @@
 class DisplayController {
     /**
      * @param {CellularAutomaton} automaton
+     * @param {{ pattern, key, rotation }} patternState - referencia compartida con UIController/PatternManager
      */
-    constructor(automaton) {
+    constructor(automaton, patternState) {
         this.automaton = automaton;
+        this._patternState = patternState || {pattern: null, key: null, rotation: 0};
     }
 
     // =========================================
@@ -171,9 +173,9 @@ class DisplayController {
         const indicator = document.getElementById('drawModeIndicator');
         if (!indicator) return;
 
-        if (window.selectedPattern) {
+        if (this._patternState.pattern) {
             indicator.className = 'pattern-mode-indicator pattern-selected';
-            indicator.textContent = t('mode.pattern', {name: window.selectedPattern.name});
+            indicator.textContent = t('mode.pattern', {name: this._patternState.pattern.name});
         } else {
             indicator.className = 'pattern-mode-indicator free-draw';
             indicator.textContent = t('mode.freeDraw');

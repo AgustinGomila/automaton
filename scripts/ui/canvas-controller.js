@@ -137,8 +137,8 @@ class CanvasController {
             const touch = e.touches[0];
             const {x, y} = this.automaton.getCellFromMouse(touch);
 
-            if (window.selectedPattern) {
-                this.automaton.importPattern(window.selectedPattern, x, y);
+            if (this._patternState.pattern) {
+                this.automaton.importPattern(this._patternState.pattern, x, y);
             } else {
                 isTouchDrawing = true;
                 this.automaton.setCell(x, y, !this.automaton.grid[x][y]);
@@ -251,12 +251,12 @@ class CanvasController {
         const {x, y} = this.automaton.getCellFromMouse(e);
         this._updateMouseCoords(x, y);
 
-        if (window.selectedPattern) {
-            showPatternPreview(x, y);
-            if (this.showInfluenceArea) showInfluenceArea(x, y);
+        if (this._patternState.pattern) {
+            window.patternManager?.showPatternPreview(x, y);
+            if (this.showInfluenceArea) window.patternManager?.showInfluenceArea(x, y);
         } else {
-            hidePatternPreview();
-            if (this.showInfluenceArea && !this.selection) showInfluenceArea(x, y);
+            window.patternManager?.hidePatternPreview();
+            if (this.showInfluenceArea && !this.selection) window.patternManager?.showInfluenceArea(x, y);
         }
 
         if (this.isMouseDown) {
@@ -264,7 +264,7 @@ class CanvasController {
                 this.updateSelection(x, y);
             } else if (this.isDragging) {
                 this.updateDrag(x, y);
-            } else if (!window.selectedPattern) {
+            } else if (!this._patternState.pattern) {
                 this.handleContinuousDrawing(x, y);
             }
         }
@@ -286,8 +286,8 @@ class CanvasController {
         if (this.isSelecting) this.endSelection();
         if (this.isDragging) this.endDrag();
 
-        hidePatternPreview();
-        if (this.showInfluenceArea) hideInfluenceArea();
+        window.patternManager?.hidePatternPreview();
+        if (this.showInfluenceArea) window.patternManager?.hideInfluenceArea();
 
         this.lastCell = null;
     }
@@ -308,8 +308,8 @@ class CanvasController {
             });
 
             const {x, y} = this.automaton.getCellFromMouse(e);
-            showPatternPreview(x, y);
-            if (this.showInfluenceArea) showInfluenceArea(x, y);
+            window.patternManager?.showPatternPreview(x, y);
+            if (this.showInfluenceArea) window.patternManager?.showInfluenceArea(x, y);
         }
 
         return false;

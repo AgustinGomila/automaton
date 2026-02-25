@@ -35,6 +35,9 @@ class Application {
             // 6. Crear UI Controller (esto actualizará los textos dinámicos)
             this.uiController = new UIController(this.automaton);
 
+            // Compartir _patternState con PatternManager para eliminar window.selectedPattern*
+            this.patternManager.setPatternState(this.uiController._patternState);
+
             // 7. Cleanup global
             this._setupGlobalCleanup();
 
@@ -87,46 +90,5 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             window.responsiveController.init();
         }, 50);
-    });
-});
-
-// =========================================
-// BRIDGE TEMPORAL PARA COMPATIBILIDAD RETROACTIVA
-// Eliminar tras migrar completamente el código a eventos
-// =========================================
-
-// Solo crear el bridge después de que la app esté lista
-eventBus.on('app:ready', () => {
-    // Getter/Setter para selectedPattern
-    Object.defineProperty(window, 'selectedPattern', {
-        get: () => window.app?.uiController?._patternState?.pattern || null,
-        set: (val) => {
-            if (window.app?.uiController) {
-                window.app.uiController._patternState.pattern = val;
-            }
-        },
-        configurable: true
-    });
-
-    // Getter/Setter para selectedPatternKey
-    Object.defineProperty(window, 'selectedPatternKey', {
-        get: () => window.app?.uiController?._patternState?.key || null,
-        set: (val) => {
-            if (window.app?.uiController) {
-                window.app.uiController._patternState.key = val;
-            }
-        },
-        configurable: true
-    });
-
-    // Getter/Setter para selectedPatternRotation
-    Object.defineProperty(window, 'selectedPatternRotation', {
-        get: () => window.app?.uiController?._patternState?.rotation || 0,
-        set: (val) => {
-            if (window.app?.uiController) {
-                window.app.uiController._patternState.rotation = val;
-            }
-        },
-        configurable: true
     });
 });

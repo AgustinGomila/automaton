@@ -41,7 +41,7 @@ class UIController {
         this._subscribeToAutomatonEvents();
         this._waitForRulesAndInit().then();
 
-        this._displayController = new DisplayController(this.automaton);
+        this._displayController = new DisplayController(this.automaton, this._patternState);
 
         this._cleanups.push(
             i18n.onLocaleChange(() => this._onLocaleChanged())
@@ -114,9 +114,9 @@ class UIController {
         });
         this._cleanups = [];
 
-        if (window.selectedPattern === this._patternState?.pattern) window.selectedPattern = null;
-        if (window.selectedPatternKey === this._patternState?.key) window.selectedPatternKey = null;
-        if (window.selectedPatternRotation === this._patternState?.rotation) window.selectedPatternRotation = 0;
+        if (this._patternState?.pattern) this._patternState.pattern = null;
+        if (this._patternState?.key) this._patternState.key = null;
+        if (this._patternState?.rotation) this._patternState.rotation = 0;
 
         this.automaton = null;
         this._patternState = null;
@@ -232,7 +232,6 @@ class UIController {
         this._addEventListener(document.getElementById('clearBtn'), 'click', () => this.clear());
         this._addEventListener(document.getElementById('cancelPatternBtn'), 'click', () => {
             this.deselectPattern();
-            window.selectedPatternRotation = 0;
         });
 
         const randomBtn = document.getElementById('randomBtn');
@@ -374,7 +373,6 @@ class UIController {
             case 'escape':
                 this.deselectPattern();
                 this._canvasController.clearSelection();
-                window.selectedPatternRotation = 0;
                 // Desactivar bote de pintura si estaba activo
                 if (this._canvasController.bucketToolActive) {
                     this._canvasController.bucketToolActive = false;
@@ -940,9 +938,9 @@ class UIController {
     }
 
     deselectPattern() {
-        window.selectedPattern = null;
-        window.selectedPatternKey = null;
-        window.selectedPatternRotation = 0;
+        this._patternState.pattern = null;
+        this._patternState.key = null;
+        this._patternState.rotation = 0;
 
         document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
             btn.classList.remove('active');
@@ -951,8 +949,8 @@ class UIController {
         const miniEl = document.getElementById('patternNameMini');
         if (miniEl) miniEl.textContent = t('patterns.select');
 
-        hidePatternPreview();
-        hideInfluenceArea();
+        window.patternManager?.hidePatternPreview();
+        window.patternManager?.hideInfluenceArea();
         this._displayController.updateDrawModeIndicator();
     }
 }

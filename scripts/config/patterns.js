@@ -5,7 +5,20 @@ class PatternManager {
         this.isInfluenceVisible = false;
         this._cleanups = [];
 
+        // Estado del patrón seleccionado — puede ser reemplazado por una
+        // referencia compartida con UIController via setPatternState().
+        this._patternState = {pattern: null, key: null, rotation: 0};
+
         this._init();
+    }
+
+    /**
+     * Recibe la referencia compartida de _patternState desde UIController,
+     * eliminando la necesidad de window.selectedPattern* como fuente de verdad.
+     * @param {{ pattern, key, rotation }} sharedState
+     */
+    setPatternState(sharedState) {
+        this._patternState = sharedState;
     }
 
     destroy() {
@@ -117,9 +130,9 @@ class PatternManager {
                 document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => btn.classList.remove('active'));
                 patternBtn.classList.add('active');
 
-                window.selectedPatternRotation = 0;
-                window.selectedPatternKey = key;
-                window.selectedPattern = getPatternWithRotation(key, 0);
+                this._patternState.rotation = 0;
+                this._patternState.key = key;
+                this._patternState.pattern = getPatternWithRotation(key, 0);
 
                 this._updatePatternInfo(); // Actualizar UI inmediatamente
 
@@ -132,21 +145,21 @@ class PatternManager {
                 e.stopPropagation();
 
                 if (patternBtn.classList.contains('active') && pattern.pattern !== 'random') {
-                    window.selectedPatternRotation = (window.selectedPatternRotation + 90) % 360;
-                    window.selectedPattern = getPatternWithRotation(key, window.selectedPatternRotation);
+                    this._patternState.rotation = (this._patternState.rotation + 90) % 360;
+                    this._patternState.pattern = getPatternWithRotation(key, this._patternState.rotation);
 
                     const canvas = thumbnail.querySelector('canvas');
                     if (canvas) {
                         const ctx = canvas.getContext('2d');
                         ctx.clearRect(0, 0, 40, 40);
-                        const rotatedPattern = getPatternWithRotation(key, window.selectedPatternRotation);
+                        const rotatedPattern = getPatternWithRotation(key, this._patternState.rotation);
                         this._renderPatternToCanvas(ctx, rotatedPattern.pattern, pattern.color);
                     }
 
                     this._updatePatternInfo(); // OK: actualiza UI
 
                     // EMITE EVENTO DE NOTIFICACIÓN (otros componentes pueden escuchar)
-                    eventBus.emit('pattern:updated', {pattern: window.selectedPattern});
+                    eventBus.emit('pattern:updated', {pattern: this._patternState.pattern});
                 }
 
                 return false;
@@ -155,9 +168,9 @@ class PatternManager {
             container.appendChild(patternBtn);
         });
 
-        window.selectedPatternKey = null;
-        window.selectedPattern = null;
-        window.selectedPatternRotation = 0;
+        this._patternState.key = null;
+        this._patternState.pattern = null;
+        this._patternState.rotation = 0;
         this._updatePatternInfo();
     }
 
@@ -190,18 +203,18 @@ class PatternManager {
         const detailsEl = document.getElementById('patternDetailsMini');
         const descEl = document.getElementById('patternDescriptionMini');
 
-        if (!window.selectedPatternKey) {
+        if (!this._patternState.key) {
             if (nameEl) nameEl.textContent = t('patterns.select');
             if (detailsEl) detailsEl.textContent = t('patterns.details');
             if (descEl) descEl.textContent = '';
             return;
         }
 
-        const pattern = getPatternWithRotation(window.selectedPatternKey, window.selectedPatternRotation);
+        const pattern = getPatternWithRotation(this._patternState.key, this._patternState.rotation);
 
         if (nameEl && detailsEl && pattern) {
-            const originalPattern = PATTERNS[window.selectedPatternKey];
-            const rotationText = window.selectedPatternRotation > 0 ? ` (${window.selectedPatternRotation}°)` : '';
+            const originalPattern = PATTERNS[this._patternState.key];
+            const rotationText = this._patternState.rotation > 0 ? ` (${this._patternState.rotation}°)` : '';
             nameEl.textContent = `${pattern.name}${rotationText}`;
 
             const categoryText = originalPattern.category ? t('patterns.category', {category: originalPattern.category}) : '';
@@ -213,7 +226,7 @@ class PatternManager {
             }
         }
 
-        window.selectedPattern = pattern;
+        this._patternState.pattern = pattern;
     }
 
     // =========================================
@@ -222,7 +235,7 @@ class PatternManager {
 
     showPatternPreview(x, y) {
         const preview = document.getElementById('patternPreview');
-        const pattern = window.selectedPattern;
+        const pattern = this._patternState.pattern;
 
         if (!pattern?.pattern || pattern.pattern === 'random') {
             this.hidePatternPreview();
@@ -344,7 +357,7 @@ class PatternManager {
             return neighbors;
         };
 
-        const pattern = window.selectedPattern?.pattern;
+        const pattern = this._patternState.pattern?.pattern;
         let cellsToHighlight;
 
         if (!pattern || pattern === 'random') {
@@ -410,36 +423,9 @@ class PatternManager {
     }
 }
 
-// Funciones globales para compatibilidad retroactiva
-function showPatternPreview(x, y) {
-    if (window.patternManager) {
-        window.patternManager.showPatternPreview(x, y);
-    }
-}
-
-function hidePatternPreview() {
-    if (window.patternManager) {
-        window.patternManager.hidePatternPreview();
-    }
-}
-
-function showInfluenceArea(x, y) {
-    if (window.patternManager) {
-        window.patternManager.showInfluenceArea(x, y);
-    }
-}
-
-function hideInfluenceArea() {
-    if (window.patternManager) {
-        window.patternManager.hideInfluenceArea();
-    }
-}
-
 // =========================================
 // EXPORTAR FUNCIONES GLOBALES NECESARIAS
 // =========================================
-
-// Función que necesitan los botones de patrón
 function rotateMatrix(matrix) {
     if (!matrix || matrix === 'random') return matrix;
 
@@ -489,18 +475,6 @@ function getPatternWithRotation(patternKey, rotation = 0) {
     };
 }
 
-// =========================================
-// COMPATIBILIDAD CON UI-CONTROLLER
-// =========================================
-
-// Función bridge temporal para mantener compatibilidad con código legacy
-// Esta función simplemente reenvía al manejador interno
-function updatePatternInfo() {
-    if (window.patternManager) {
-        window.patternManager._updatePatternInfo();
-    }
-}
-
 const defaultPatterns = {
     // === PATRONES PEQUEÑOS ===
     single: {
@@ -534,6 +508,5 @@ const defaultPatterns = {
 };
 
 // Exportar al scope global
-window.updatePatternInfo = updatePatternInfo;
 window.getPatternWithRotation = getPatternWithRotation;
 window.rotateMatrix = rotateMatrix;
