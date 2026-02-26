@@ -871,12 +871,7 @@ class CellularAutomaton {
         if (result) {
             this.generation = result.generation;
 
-            if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
-                this.wolframEngine.reset();
-            }
-            if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
-                this.rd2dEngine.reset();
-            }
+            this._engineManager.resetActiveEngine();
 
             this.renderer.markAllDirty();
             this.updateStats();
@@ -892,12 +887,7 @@ class CellularAutomaton {
         if (result) {
             this.generation = result.generation;
 
-            if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
-                this.wolframEngine.reset();
-            }
-            if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
-                this.rd2dEngine.reset();
-            }
+            this._engineManager.resetActiveEngine();
 
             this.renderer.markAllDirty();
             this.updateStats();

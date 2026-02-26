@@ -265,6 +265,24 @@ class SpecialEngineManager {
         };
     }
 
+    /**
+     * Resetea el motor especial activo al estado inicial de su grid.
+     * Se usa al deshacer/rehacer, cuando el grid base fue restaurado
+     * y el motor especial debe sincronizarse con él.
+     * Solo aplica a Wolfram y RD-2D; Triangle y Ulam-Warburton
+     * no tienen estado derivado que deba resetearse en undo/redo.
+     */
+    resetActiveEngine() {
+        switch (this.specialMode) {
+            case 'wolfram':
+                this.wolframEngine?.reset?.();
+                break;
+            case 'rd2d':
+                this.rd2dEngine?.reset?.();
+                break;
+        }
+    }
+
     _restoreOriginals() {
         if (this._originalRenderer) {
             this._setRenderer(this._originalRenderer);
