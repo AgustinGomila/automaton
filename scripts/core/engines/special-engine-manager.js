@@ -266,6 +266,81 @@ class SpecialEngineManager {
     }
 
     /**
+     * Limpia el motor especial activo.
+     * Retorna true si un motor especial fue limpiado, false si el modo es
+     * estándar (sin motor especial). En ese caso, el coordinador es
+     * responsable de limpiar el stateManager.
+     * @returns {boolean}
+     */
+    clearActiveEngine() {
+        switch (this.specialMode) {
+            case 'wolfram':
+                this.wolframEngine?.reset();
+                this.wolframEngine?._initializeSeed?.();
+                return true;
+
+            case 'rd2d':
+                this.rd2dEngine?.reset();
+                return true;
+
+            case 'triangle':
+                if (this.triangleEngine?.gridManager) {
+                    for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
+                        this.triangleEngine.gridManager.grid[q].fill(0);
+                    }
+                }
+                this.triangleEngine?.reset?.();
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Aleatoriza el grid del motor especial activo.
+     * Retorna { handled: true, population, resetLimit } si un motor especial
+     * lo gestionó, o { handled: false } si el modo estándar debe encargarse.
+     * - population: número de celdas vivas tras randomizar, o null para recalcular
+     * - resetLimit: true si el motor requiere limpiar isLimitReached
+     * @param {number} density
+     * @returns {{ handled: boolean, population?: number|null, resetLimit?: boolean }}
+     */
+    randomizeActiveEngine(density) {
+        if (this.specialMode === 'triangle' && this.triangleEngine?.gridManager) {
+            const {width, height} = this.triangleEngine.gridManager;
+            for (let q = 0; q < width; q++) {
+                for (let r = 0; r < height; r++) {
+                    this.triangleEngine.gridManager.setCell(q, r, Math.random() < density ? 1 : 0);
+                }
+            }
+            return {
+                handled: true,
+                population: this.triangleEngine.gridManager.countPopulation(),
+                resetLimit: false
+            };
+        }
+
+        if (this.specialMode === 'ulam-warburton' && this.uwEngine?.isActive) {
+            this.uwEngine.randomize(density);
+            return {handled: true, population: null, resetLimit: true};
+        }
+
+        return {handled: false};
+    }
+
+    /**
+     * Resetea todos los motores especiales.
+     * Se usa cuando el grid base es randomizado/limpiado en modo estándar,
+     * para sincronizar cualquier motor que estuviera activo.
+     */
+    resetAllEngines() {
+        this.wolframEngine?.reset?.();
+        this.rd2dEngine?.reset?.();
+        this.uwEngine?.reset?.();
+    }
+
+    /**
      * Resetea el motor especial activo al estado inicial de su grid.
      * Se usa al deshacer/rehacer, cuando el grid base fue restaurado
      * y el motor especial debe sincronizarse con él.

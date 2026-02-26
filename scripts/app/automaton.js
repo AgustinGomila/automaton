@@ -945,21 +945,13 @@ class CellularAutomaton {
 
         this._cleanupWorker();
 
-        if (this.specialMode === 'triangle' && this.triangleEngine?.gridManager) {
-            const width = this.triangleEngine.gridManager.width;
-            const height = this.triangleEngine.gridManager.height;
+        const result = this._engineManager.randomizeActiveEngine(density);
 
-            for (let q = 0; q < width; q++) {
-                for (let r = 0; r < height; r++) {
-                    const state = Math.random() < density ? 1 : 0;
-                    this.triangleEngine.gridManager.setCell(q, r, state);
-                }
-            }
-
+        if (result.handled) {
             this.generation = 0;
-            this.renderer.markAllDirty();
-            this.renderer.resetActivity();
-            this.updateStats(this.triangleEngine.gridManager.countPopulation());
+            if (result.resetLimit) this.isLimitReached = false;
+            this.renderer.resetActivity();  // incluye markAllDirty internamente
+            this.updateStats(result.population);
             this.render();
 
             if (wasRunning) {
@@ -968,20 +960,7 @@ class CellularAutomaton {
             return;
         }
 
-        if (this.specialMode === 'ulam-warburton' && this.uwEngine?.isActive) {
-            this.uwEngine.randomize(density);
-            this.generation = 0;
-            this.isLimitReached = false;
-            this.renderer.resetActivity();
-            this.updateStats();
-            this.render();
-
-            if (wasRunning) {
-                setTimeout(() => this.start(), 0);
-            }
-            return;
-        }
-
+        // Modo estándar
         const stats = this.stateManager.randomize({
             density,
             saveToHistory: true,
@@ -992,9 +971,7 @@ class CellularAutomaton {
         this.generation = 0;
         this.isLimitReached = false;
 
-        this.wolframEngine?.reset();
-        this.rd2dEngine?.reset();
-        this.uwEngine?.reset();
+        this._engineManager.resetAllEngines();
 
         this.renderer.markAllDirty();
         this.updateStats(stats.population);
@@ -1057,38 +1034,18 @@ class CellularAutomaton {
     }
 
     /**
-     * Limpia el motor especial activo según el modo
+     * Limpia el motor especial activo según el modo.
+     * Delega en SpecialEngineManager; si no hay motor especial activo,
+     * limpia el stateManager (modo estándar).
      * @private
      */
     _clearSpecialEngine() {
-        switch (this.specialMode) {
-            case 'wolfram':
-                this.wolframEngine?.reset();
-                this.wolframEngine?._initializeSeed?.();
-                break;
-
-            case 'rd2d':
-                this.rd2dEngine?.reset();
-                break;
-
-            case 'triangle':
-                // Limpiar grid triangular
-                if (this.triangleEngine?.gridManager) {
-                    for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
-                        this.triangleEngine.gridManager.grid[q].fill(0);
-                    }
-                }
-                // Resetear estado del motor triangular
-                this.triangleEngine?.reset?.();
-                break;
-
-            default:
-                // Modo estándar: limpiar stateManager
-                this.stateManager?.clear({
-                    saveToHistory: true,
-                    generation: this.generation
-                });
-                break;
+        const handled = this._engineManager.clearActiveEngine();
+        if (!handled) {
+            this.stateManager?.clear({
+                saveToHistory: true,
+                generation: this.generation
+            });
         }
     }
 
@@ -1105,9 +1062,7 @@ class CellularAutomaton {
         this.renderer?.resetActivity();
 
         // Resetear todos los motores especiales por si acaso
-        this.wolframEngine?.reset?.();
-        this.rd2dEngine?.reset?.();
-        this.triangleEngine?.reset?.();
+        this._engineManager.resetAllEngines();
     }
 
     // =========================================
