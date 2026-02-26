@@ -408,6 +408,9 @@ class UIController {
                 cc._updateCursor();
                 break;
             }
+            case 'a':
+                this.randomize();
+                break;
             case 'c':
                 this.clear();
                 break;
