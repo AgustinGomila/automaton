@@ -762,19 +762,7 @@ class CellularAutomaton {
     }
 
     getCellFromMouse(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const actualWidth = this.canvas.offsetWidth;
-        const actualHeight = this.canvas.offsetHeight;
-        const scaleX = this.canvas.width / actualWidth;
-        const scaleY = this.canvas.height / actualHeight;
-
-        const canvasX = (e.clientX - rect.left) * scaleX;
-        const canvasY = (e.clientY - rect.top) * scaleY;
-
-        const x = Math.max(0, Math.min(Math.floor(canvasX / this.cellSize), this.gridSize - 1));
-        const y = Math.max(0, Math.min(Math.floor(canvasY / this.cellSize), this.gridSize - 1));
-
-        return {x, y};
+        return this.renderer.getCellFromMouse(e);
     }
 
     // =========================================

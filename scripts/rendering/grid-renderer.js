@@ -206,6 +206,29 @@ class GridRenderer {
         this.markAllDirty();
     }
 
+    /**
+     * Convierte un evento de ratón a coordenadas de celda del grid,
+     * compensando el escalado CSS del canvas.
+     * @param {MouseEvent} e
+     * @returns {{x: number, y: number}}
+     */
+    getCellFromMouse(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / this.canvas.offsetWidth;
+        const scaleY = this.canvas.height / this.canvas.offsetHeight;
+
+        const canvasX = (e.clientX - rect.left) * scaleX;
+        const canvasY = (e.clientY - rect.top) * scaleY;
+
+        const cellSize = this.config.cellSize;
+        const gridSize = this.config.gridSize;
+
+        return {
+            x: Math.max(0, Math.min(Math.floor(canvasX / cellSize), gridSize - 1)),
+            y: Math.max(0, Math.min(Math.floor(canvasY / cellSize), gridSize - 1))
+        };
+    }
+
     destroy() {
         this._dirtyCells.clear();
         this._renderFlags = null;
