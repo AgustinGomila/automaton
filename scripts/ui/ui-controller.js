@@ -674,7 +674,15 @@ class UIController {
     }
 
     exportPattern() {
-        const pattern = this.automaton.exportPattern();
+        const sel = this._canvasController?.selection;
+        const bounds = sel ? {
+            minX: Math.min(sel.startX, sel.endX),
+            minY: Math.min(sel.startY, sel.endY),
+            maxX: Math.max(sel.startX, sel.endX),
+            maxY: Math.max(sel.startY, sel.endY)
+        } : null;
+
+        const pattern = this.automaton.exportPattern(bounds);
         if (pattern) {
             const blob = new Blob([JSON.stringify(pattern, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);

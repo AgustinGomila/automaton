@@ -435,22 +435,36 @@ class StateManager {
     // =========================================
 
     /**
-     * Exporta el patrón actual como objeto JSON
-     * @returns {Object|null} {pattern, name, description} o null si está vacío
+     * Exporta el patrón actual como objeto JSON.
+     * @param {Object} [bounds] - Región a exportar {minX, minY, maxX, maxY}.
+     *   Si se omite, se exporta el grid completo recortado al bounding box de celdas vivas.
+     * @returns {Object|null} {pattern, name, description, bounds} o null si el área está vacía
      */
-    exportPattern() {
+    exportPattern(bounds = null) {
         const size = this.gridManager.size;
-        let minX = size, minY = size;
-        let maxX = 0, maxY = 0;
+        let minX, minY, maxX, maxY;
 
-        // Encontrar bounds del patrón
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
-                if (this.gridManager.getCell(x, y)) {
-                    minX = Math.min(minX, x);
-                    maxX = Math.max(maxX, x);
-                    minY = Math.min(minY, y);
-                    maxY = Math.max(maxY, y);
+        if (bounds) {
+            // Exportar área seleccionada — respetar límites del grid
+            minX = Math.max(0, bounds.minX);
+            minY = Math.max(0, bounds.minY);
+            maxX = Math.min(size - 1, bounds.maxX);
+            maxY = Math.min(size - 1, bounds.maxY);
+        } else {
+            // Auto-bounds: recortar al bounding box de celdas vivas
+            minX = size;
+            minY = size;
+            maxX = 0;
+            maxY = 0;
+
+            for (let x = 0; x < size; x++) {
+                for (let y = 0; y < size; y++) {
+                    if (this.gridManager.getCell(x, y)) {
+                        minX = Math.min(minX, x);
+                        maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y);
+                        maxY = Math.max(maxY, y);
+                    }
                 }
             }
         }
@@ -466,6 +480,9 @@ class StateManager {
             }
             pattern.push(row);
         }
+
+        // Si se exportó una selección y quedó completamente vacía, rechazar
+        if (bounds && pattern.every(row => row.every(v => v === 0))) return null;
 
         return {
             pattern,

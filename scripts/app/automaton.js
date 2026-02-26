@@ -932,8 +932,8 @@ class CellularAutomaton {
         return result;
     }
 
-    exportPattern() {
-        return this.stateManager.exportPattern();
+    exportPattern(bounds = null) {
+        return this.stateManager.exportPattern(bounds);
     }
 
     downloadPattern(filename) {
