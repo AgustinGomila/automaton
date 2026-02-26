@@ -481,16 +481,17 @@ class CellularAutomaton {
     _nextGenerationCore() {
         const stats = this.core.step();
 
+        // Capturar los índices reales (births+deaths) ANTES de markAllDirty.
+        // En este punto _dirtyCells solo contiene lo que marcó _handleCoreCellChange.
+        // Si se llamase markAllDirty() primero, changedIndices contendría las
+        // gridSize² celdas, disparando work innecesario en updateActivityAges.
+        const changedIndices = [...this.renderer._dirtyCells];
+
         if (stats.births + stats.deaths > this.gridSize * this.gridSize * 0.1) {
             this.renderer.markAllDirty();
         }
 
         this.checkLimits();
-
-        const changedIndices = [];
-        this.renderer._dirtyCells.forEach(index => {
-            changedIndices.push(index);
-        });
         this.renderer.updateActivityAges(changedIndices);
 
         return stats.births + stats.deaths;
