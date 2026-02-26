@@ -313,6 +313,9 @@ class TriangleEngine {
         } else {
             // VERSIÓN BOUNDED - Con checks de límites
             for (let r = 0; r < h; r++) {
+                const hasUp = r > 0;
+                const hasDown = r < h - 1;
+
                 for (let q = 0; q < w; q++) {
                     const isUp = ((q + r) & 1) === 0;
                     const col = currentGrid[q];
@@ -324,10 +327,10 @@ class TriangleEngine {
                         // △: [-1,0], [1,0], [0,1]
                         if (q > 0) sum += currentGrid[q - 1][r];
                         if (q < w - 1) sum += currentGrid[q + 1][r];
-                        if (r < h - 1) sum += col[r + 1];
+                        if (hasDown) sum += col[r + 1];
                     } else {
                         // ▽: [0,-1], [-1,0], [1,0]
-                        if (r > 0) sum += col[r - 1];
+                        if (hasUp) sum += col[r - 1];
                         if (q > 0) sum += currentGrid[q - 1][r];
                         if (q < w - 1) sum += currentGrid[q + 1][r];
                     }
