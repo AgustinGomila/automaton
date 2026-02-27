@@ -364,12 +364,14 @@ class StateManager {
                 const gridY = offsetY + y;
                 if (gridY < 0 || gridY >= size) continue;
 
-                const newState = area.grid[x][y] ? 1 : 0;
-                const currentState = this.gridManager.getCell(gridX, gridY);
+                // Las celdas muertas son transparentes: no sobreescriben el destino.
+                // Solo se escriben las celdas vivas, preservando lo que hubiera debajo.
+                if (!area.grid[x][y]) continue;
 
-                if (currentState !== newState) {
-                    this.gridManager.setCell(gridX, gridY, newState);
-                    changedCells.push({x: gridX, y: gridY, from: currentState, to: newState});
+                const currentState = this.gridManager.getCell(gridX, gridY);
+                if (currentState !== 1) {
+                    this.gridManager.setCell(gridX, gridY, 1);
+                    changedCells.push({x: gridX, y: gridY, from: currentState, to: 1});
                 }
             }
         }
@@ -383,6 +385,47 @@ class StateManager {
         });
 
         return {changedCells, stats};
+    }
+
+    /**
+     * Limpia únicamente las celdas vivas de un área copiada (patrón).
+     * A diferencia de clearArea, no toca las celdas del destino que no
+     * pertenecían al patrón original.
+     * @param {Object} area   - {grid, width, height} devuelto por copyArea
+     * @param {number} offsetX
+     * @param {number} offsetY
+     * @param {Object} options
+     */
+    clearPatternCells(area, offsetX, offsetY, options = {}) {
+        const {saveToHistory = true, generation = 0} = options;
+
+        if (!area?.grid) return {changedCells: []};
+
+        if (saveToHistory && this.isTracking) {
+            this.saveState(generation);
+        }
+
+        const size = this.gridManager.size;
+        const changedCells = [];
+
+        for (let x = 0; x < area.width; x++) {
+            const gridX = offsetX + x;
+            if (gridX < 0 || gridX >= size) continue;
+
+            for (let y = 0; y < area.height; y++) {
+                if (!area.grid[x][y]) continue;  // celda muerta en patrón — no tocar
+
+                const gridY = offsetY + y;
+                if (gridY < 0 || gridY >= size) continue;
+
+                if (this.gridManager.getCell(gridX, gridY)) {
+                    this.gridManager.setCell(gridX, gridY, 0);
+                    changedCells.push({x: gridX, y: gridY, from: 1, to: 0});
+                }
+            }
+        }
+
+        return {changedCells};
     }
 
     /**

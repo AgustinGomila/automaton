@@ -372,6 +372,7 @@ class UIController {
         switch (e.key.toLowerCase()) {
             case 'escape':
                 this.deselectPattern();
+                this._canvasController.cancelDrag();
                 this._canvasController.clearSelection();
                 // Desactivar bote de pintura si estaba activo
                 if (this._canvasController.bucketToolActive) {

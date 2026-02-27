@@ -81,6 +81,7 @@ class CanvasController {
             }
         });
         this._cleanups = [];
+        this._detachDocumentSelectionListeners();
 
         this.automaton = null;
         this._patternState = null;
@@ -197,8 +198,12 @@ class CanvasController {
             return;
         }
 
-        if (this.shiftPressed && !this.ctrlPressed && !this.selection) {
-            this.startSelection(x, y);
+        if (this.shiftPressed && !this.ctrlPressed) {
+            if (this.selection && this.isPointInSelection(x, y)) {
+                this.startDrag(x, y, false);
+            } else {
+                this.startSelection(x, y);
+            }
             return;
         }
 
@@ -283,8 +288,9 @@ class CanvasController {
 
     _handleMouseLeave() {
         this.isMouseDown = false;
-        if (this.isSelecting) this.endSelection();
-        if (this.isDragging) this.endDrag();
+        // Si hay selección en curso, NO la terminamos — los listeners de documento
+        // siguen capturando mousemove/mouseup fuera del canvas.
+        if (!this.isSelecting && this.isDragging) this.endDrag();
 
         window.patternManager?.hidePatternPreview();
         if (this.showInfluenceArea) window.patternManager?.hideInfluenceArea();
@@ -388,6 +394,7 @@ class CanvasController {
         this.isSelecting = true;
         this.selection = {startX: x, startY: y, endX: x, endY: y};
         this._updateSelectionVisual();
+        this._attachDocumentSelectionListeners();
     }
 
     updateSelection(x, y) {
@@ -400,6 +407,7 @@ class CanvasController {
     endSelection() {
         if (!this.isSelecting || !this.selection) return;
         this.isSelecting = false;
+        this._detachDocumentSelectionListeners();
 
         const minX = Math.min(this.selection.startX, this.selection.endX);
         const maxX = Math.max(this.selection.startX, this.selection.endX);
@@ -424,6 +432,45 @@ class CanvasController {
         const minY = Math.min(this.selection.startY, this.selection.endY);
         const maxY = Math.max(this.selection.startY, this.selection.endY);
         return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    }
+
+    /**
+     * Adjunta listeners de document para continuar la selección fuera del canvas.
+     * getCellFromMouse ya hace clamp a los bounds del grid, por lo que las
+     * coordenadas se detienen naturalmente en el borde correcto según el eje.
+     */
+    _attachDocumentSelectionListeners() {
+        this._docSelectionMove = (e) => {
+            if (!this.isSelecting) return;
+            const {x, y} = this.automaton.getCellFromMouse(e);
+            this.updateSelection(x, y);
+        };
+        this._docSelectionUp = () => {
+            if (this.isSelecting) this.endSelection();
+            this._detachDocumentSelectionListeners();
+        };
+        document.addEventListener('mousemove', this._docSelectionMove);
+        document.addEventListener('mouseup', this._docSelectionUp);
+    }
+
+    _detachDocumentSelectionListeners() {
+        if (this._docSelectionMove) {
+            document.removeEventListener('mousemove', this._docSelectionMove);
+            this._docSelectionMove = null;
+        }
+        if (this._docSelectionUp) {
+            document.removeEventListener('mouseup', this._docSelectionUp);
+            this._docSelectionUp = null;
+        }
+    }
+
+    cancelDrag() {
+        if (!this.isDragging) return;
+        this.isDragging = false;
+        this.isCopying = false;
+        this.dragOffset = null;
+        this._removeDragPreview();
+        // No tocar el grid — el patrón sigue en su posición original
     }
 
     deleteSelection() {
@@ -477,24 +524,27 @@ class CanvasController {
         const height = maxY - minY + 1;
 
         if (!this.isCopying) {
-            this.automaton.clearArea(minX, minY, maxX, maxY);
+            // Borrar solo las celdas vivas del patrón en la posición actual,
+            // no el rectángulo completo — así no se eliminan celdas ajenas.
+            this.automaton.clearPatternCells(this.selectionContent, minX, minY);
         }
 
         this.automaton.pasteArea(this.selectionContent, targetX, targetY);
 
         if (this.isCopying) {
-            this.selectionContent = this.automaton.copyArea(
-                targetX, targetY, targetX + width - 1, targetY + height - 1
-            );
-        } else {
-            this.selection.startX = targetX;
-            this.selection.startY = targetY;
-            this.selection.endX = targetX + width - 1;
-            this.selection.endY = targetY + height - 1;
+            // En copia: la nueva selección es el contenido recién pegado en destino
             this.selectionContent = this.automaton.copyArea(
                 targetX, targetY, targetX + width - 1, targetY + height - 1
             );
         }
+        // En move: selectionContent se preserva intacto — es el patrón original.
+        // Si el usuario vuelve a arrastrar, moverá exactamente lo mismo, no la
+        // mezcla resultante de haberlo pegado sobre celdas existentes.
+
+        this.selection.startX = targetX;
+        this.selection.startY = targetY;
+        this.selection.endX = targetX + width - 1;
+        this.selection.endY = targetY + height - 1;
 
         this._removeDragPreview();
         this._updateSelectionVisual();
@@ -560,22 +610,28 @@ class CanvasController {
         const canvas = document.createElement('canvas');
         const width = this.selectionContent.width;
         const height = this.selectionContent.height;
-        canvas.width = width * this.automaton.cellSize;
-        canvas.height = height * this.automaton.cellSize;
+        const cellSize = this.automaton.cellSize;
+        canvas.width = width * cellSize;
+        canvas.height = height * cellSize;
 
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
+
+        // Fondo semitransparente sutil para delimitar el área
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.08)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // Celdas vivas en su color real con transparencia para ver el destino debajo
+        ctx.fillStyle = 'rgba(5, 150, 105, 0.65)';
+        const drawSize = cellSize > 2 ? cellSize - 2 : cellSize;
+        const drawOffset = cellSize > 2 ? 1 : 0;
         for (let x = 0; x < width; x++) {
             for (let y = 0; y < height; y++) {
                 if (this.selectionContent.grid[x][y]) {
-                    ctx.fillStyle = '#3b82f6';
                     ctx.fillRect(
-                        x * this.automaton.cellSize + 1,
-                        y * this.automaton.cellSize + 1,
-                        this.automaton.cellSize - 2,
-                        this.automaton.cellSize - 2
+                        x * cellSize + drawOffset,
+                        y * cellSize + drawOffset,
+                        drawSize,
+                        drawSize
                     );
                 }
             }

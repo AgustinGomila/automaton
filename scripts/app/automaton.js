@@ -819,6 +819,40 @@ class CellularAutomaton {
         return result;
     }
 
+    clearPatternCells(area, offsetX, offsetY) {
+        const wasRunning = this.isRunning;
+        if (wasRunning) {
+            this.stop();
+            this.isRunning = false;
+        }
+
+        if (this.isWorkerProcessing) {
+            this._cleanupWorker();
+        }
+
+        const result = this.stateManager.clearPatternCells(area, offsetX, offsetY, {
+            saveToHistory: true,
+            generation: this.generation
+        });
+
+        if (result.changedCells.length > 0) {
+            result.changedCells.forEach(cell => {
+                this.renderer.markDirty(cell.x, cell.y);
+            });
+            this.updateStats();
+            this.render();
+        }
+
+        if (wasRunning) {
+            requestAnimationFrame(() => {
+                this.isRunning = true;
+                this.start();
+            });
+        }
+
+        return result;
+    }
+
     clearArea(minX, minY, maxX, maxY) {
         const wasRunning = this.isRunning;
         if (wasRunning) {
