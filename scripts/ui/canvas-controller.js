@@ -188,6 +188,22 @@ class CanvasController {
 
         this.isMouseDown = true;
 
+        // Pan toroidal: Alt tiene prioridad sobre cualquier modo de dibujo
+        if (this.altPressed) {
+            // Para triangle usamos coordenadas de celda propias; para el resto getCellFromMouse
+            if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+                const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+                this._panLastCell = result ? {x: result.q, y: result.r} : null;
+            } else {
+                const {x, y} = this.automaton.getCellFromMouse(e);
+                this._panLastCell = {x, y};
+                this.lastCell = {x, y};
+            }
+            this._isPanning = true;
+            this._updateCursor();
+            return;
+        }
+
         if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
             const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
             if (result) {
@@ -205,14 +221,6 @@ class CanvasController {
 
         const {x, y} = this.automaton.getCellFromMouse(e);
         this.lastCell = {x, y};
-
-        // Pan toroidal: Alt+drag solo en modo estándar con wrapEdges activo
-        if (this.altPressed && this.automaton.wrapEdges && !this.automaton.specialMode) {
-            this._isPanning = true;
-            this._panLastCell = {x, y};
-            this._updateCursor();
-            return;
-        }
 
         // Bote de pintura: flood fill en el área cerrada
         if (this.bucketToolActive) {
@@ -254,6 +262,32 @@ class CanvasController {
     }
 
     _handleMouseMove(e) {
+        // Pan tiene prioridad sobre cualquier modo de dibujo
+        if (this.isMouseDown && this._isPanning) {
+            if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+                const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+                if (result && this._panLastCell) {
+                    const dx = result.q - this._panLastCell.x;
+                    const dy = result.r - this._panLastCell.y;
+                    if (dx !== 0 || dy !== 0) {
+                        this.automaton.shiftGrid(dx, dy);
+                        this._panLastCell = {x: result.q, y: result.r};
+                    }
+                }
+            } else {
+                const {x, y} = this.automaton.getCellFromMouse(e);
+                if (this._panLastCell) {
+                    const dx = x - this._panLastCell.x;
+                    const dy = y - this._panLastCell.y;
+                    if (dx !== 0 || dy !== 0) {
+                        this.automaton.shiftGrid(dx, dy);
+                        this._panLastCell = {x, y};
+                    }
+                }
+            }
+            return;
+        }
+
         if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
             const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
             if (result) {
@@ -277,18 +311,6 @@ class CanvasController {
 
         const {x, y} = this.automaton.getCellFromMouse(e);
         this._updateMouseCoords(x, y);
-
-        if (this.isMouseDown && this._isPanning) {
-            if (this._panLastCell) {
-                const dx = x - this._panLastCell.x;
-                const dy = y - this._panLastCell.y;
-                if (dx !== 0 || dy !== 0) {
-                    this.automaton.shiftGrid(dx, dy);
-                    this._panLastCell = {x, y};
-                }
-            }
-            return;
-        }
 
         if (this._patternState.pattern) {
             window.patternManager?.showPatternPreview(x, y);
@@ -837,7 +859,7 @@ class CanvasController {
 
         if (this._isPanning) {
             canvas.style.cursor = 'grabbing';
-        } else if (this.altPressed && this.automaton.wrapEdges && !this.automaton.specialMode) {
+        } else if (this.altPressed) {
             canvas.style.cursor = 'grab';
         } else if (this.bucketToolActive) {
             canvas.style.cursor = this.ctrlPressed

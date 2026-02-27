@@ -764,7 +764,18 @@ class CellularAutomaton {
 
     shiftGrid(dx, dy) {
         this.stateManager.saveState(this.generation);
-        this.core.gridManager.shift(dx, dy);
+
+        const gridManager = this.specialMode === 'triangle' && this.triangleEngine?.isActive
+            ? this.triangleEngine.gridManager
+            : this.core.gridManager;
+
+        gridManager.shift(dx, dy);
+
+        // RD2D mantiene su propio stateGrid como fuente de verdad — hay que desplazarlo también
+        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+            this.rd2dEngine.shift(dx, dy);
+        }
+
         this.renderer.markAllDirty();
         this.render();
     }

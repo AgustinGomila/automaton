@@ -114,6 +114,20 @@ class TriangleGridManager {
                 if (this.grid[q][r]) count++;
         return count;
     }
+
+    shift(dx, dy) {
+        const w = this.width, h = this.height;
+        const dst = Array.from({length: w}, () => new Uint8Array(h));
+        for (let q = 0; q < w; q++) {
+            const srcQ = ((q - dx) % w + w) % w;
+            const srcCol = this.grid[srcQ];
+            const dstCol = dst[q];
+            for (let r = 0; r < h; r++) {
+                dstCol[r] = srcCol[((r - dy) % h + h) % h];
+            }
+        }
+        this.grid = dst;
+    }
 }
 
 window.TriangleGridManager = TriangleGridManager;

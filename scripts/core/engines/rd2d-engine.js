@@ -448,6 +448,24 @@ class RD2DEngine {
             console.error(`❌ ${mismatches} desincronizaciones encontradas`);
         }
     }
+
+    /**
+     * Desplaza stateGrid toroidalmente. Llamado desde shiftGrid del coordinador.
+     */
+    shift(dx, dy) {
+        if (!this.stateGrid) return;
+        const size = this.gridSize;
+        const src = this.stateGrid;
+        const dst = new Array(size);
+        for (let x = 0; x < size; x++) {
+            const srcX = ((x - dx) % size + size) % size;
+            dst[x] = new Uint8Array(size);
+            for (let y = 0; y < size; y++) {
+                dst[x][y] = src[srcX][((y - dy) % size + size) % size];
+            }
+        }
+        this.stateGrid = dst;
+    }
 }
 
 // Exportar global
