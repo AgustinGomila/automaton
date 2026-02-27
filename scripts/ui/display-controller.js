@@ -170,15 +170,20 @@ class DisplayController {
     // =========================================
 
     updateDrawModeIndicator() {
-        const indicator = document.getElementById('drawModeIndicator');
-        if (!indicator) return;
+        const indicators = [
+            document.getElementById('drawModeIndicator'),
+            document.getElementById('drawModeIndicatorModal')
+        ];
 
-        if (this._patternState.pattern) {
-            indicator.className = 'pattern-mode-indicator pattern-selected';
-            indicator.textContent = t('mode.pattern', {name: this._patternState.pattern.name});
-        } else {
-            indicator.className = 'pattern-mode-indicator free-draw';
-            indicator.textContent = t('mode.freeDraw');
+        for (const indicator of indicators) {
+            if (!indicator) continue;
+            if (this._patternState.pattern) {
+                indicator.className = 'pattern-mode-indicator pattern-selected';
+                indicator.textContent = t('mode.pattern', {name: this._patternState.pattern.name});
+            } else {
+                indicator.className = 'pattern-mode-indicator free-draw';
+                indicator.textContent = t('mode.freeDraw');
+            }
         }
     }
 
