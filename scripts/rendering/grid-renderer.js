@@ -214,7 +214,7 @@ class GridRenderer {
 
     resetActivity() {
         this._coolingCells.clear();
-        this._activityAges.fill(0);
+        this._activityAges.fill(this._activityCooldown);  // estable: ninguna celda activa
         this.markAllDirty();
     }
 
