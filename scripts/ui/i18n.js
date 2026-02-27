@@ -235,6 +235,7 @@ class I18n {
                 'instructions.rotate.suffix': 'en patrón para rotar',
                 'instructions.cancel.prefix': 'Botón',
                 'instructions.cancel.suffix': 'para volver a dibujo libre',
+                'instructions.pan.suffix': 'para desplazar la cuadrícula',
 
                 // Modos
                 'mode.freeDraw': 'Modo: Dibujo libre',
@@ -455,6 +456,7 @@ class I18n {
                 'instructions.rotate.suffix': 'on pattern to rotate',
                 'instructions.cancel.prefix': 'Button',
                 'instructions.cancel.suffix': 'to return to free draw',
+                'instructions.pan.suffix': 'to pan the grid',
 
                 // Modos
                 'mode.freeDraw': 'Mode: Free draw',
