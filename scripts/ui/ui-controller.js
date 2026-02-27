@@ -662,7 +662,7 @@ class UIController {
             quickToggle.style.color = this._canvasController.showInfluenceArea ? 'var(--secondary)' : '';
         }
 
-        if (!this._canvasController.showInfluenceArea) hideInfluenceArea();
+        if (!this._canvasController.showInfluenceArea) window.patternManager?.hideInfluenceArea();
     }
 
     quickToggleInfluenceArea() {
