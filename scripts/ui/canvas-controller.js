@@ -32,6 +32,11 @@ class CanvasController {
         // Estado de teclado (escrito por UIController)
         this.shiftPressed = false;
         this._ctrlPressed = false;
+        this._altPressed = false;
+
+        // Pan toroidal (Alt+drag)
+        this._isPanning = false;
+        this._panLastCell = null;
 
         // Herramienta bote de pintura
         this.bucketToolActive = false;
@@ -54,6 +59,15 @@ class CanvasController {
 
     set ctrlPressed(val) {
         this._ctrlPressed = val;
+        this._updateCursor();
+    }
+
+    get altPressed() {
+        return this._altPressed;
+    }
+
+    set altPressed(val) {
+        this._altPressed = val;
         this._updateCursor();
     }
 
@@ -192,6 +206,14 @@ class CanvasController {
         const {x, y} = this.automaton.getCellFromMouse(e);
         this.lastCell = {x, y};
 
+        // Pan toroidal: Alt+drag solo en modo estándar con wrapEdges activo
+        if (this.altPressed && this.automaton.wrapEdges && !this.automaton.specialMode) {
+            this._isPanning = true;
+            this._panLastCell = {x, y};
+            this._updateCursor();
+            return;
+        }
+
         // Bote de pintura: flood fill en el área cerrada
         if (this.bucketToolActive) {
             this._floodFill(x, y, !this.ctrlPressed ? 1 : 0);
@@ -256,6 +278,18 @@ class CanvasController {
         const {x, y} = this.automaton.getCellFromMouse(e);
         this._updateMouseCoords(x, y);
 
+        if (this.isMouseDown && this._isPanning) {
+            if (this._panLastCell) {
+                const dx = x - this._panLastCell.x;
+                const dy = y - this._panLastCell.y;
+                if (dx !== 0 || dy !== 0) {
+                    this.automaton.shiftGrid(dx, dy);
+                    this._panLastCell = {x, y};
+                }
+            }
+            return;
+        }
+
         if (this._patternState.pattern) {
             window.patternManager?.showPatternPreview(x, y);
             if (this.showInfluenceArea) window.patternManager?.showInfluenceArea(x, y);
@@ -280,6 +314,13 @@ class CanvasController {
 
         this.isMouseDown = false;
 
+        if (this._isPanning) {
+            this._isPanning = false;
+            this._panLastCell = null;
+            this._updateCursor();
+            return;
+        }
+
         if (this.isSelecting) this.endSelection();
         if (this.isDragging) this.endDrag();
 
@@ -288,6 +329,11 @@ class CanvasController {
 
     _handleMouseLeave() {
         this.isMouseDown = false;
+        if (this._isPanning) {
+            this._isPanning = false;
+            this._panLastCell = null;
+            this._updateCursor();
+        }
         // Si hay selección en curso, NO la terminamos — los listeners de documento
         // siguen capturando mousemove/mouseup fuera del canvas.
         if (!this.isSelecting && this.isDragging) this.endDrag();
@@ -789,7 +835,11 @@ class CanvasController {
         const canvas = document.getElementById('canvas');
         if (!canvas) return;
 
-        if (this.bucketToolActive) {
+        if (this._isPanning) {
+            canvas.style.cursor = 'grabbing';
+        } else if (this.altPressed && this.automaton.wrapEdges && !this.automaton.specialMode) {
+            canvas.style.cursor = 'grab';
+        } else if (this.bucketToolActive) {
             canvas.style.cursor = this.ctrlPressed
                 ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell'
                 : 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell';

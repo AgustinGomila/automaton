@@ -356,6 +356,10 @@ class UIController {
     _handleKeyDown(e) {
         this._canvasController.ctrlPressed = e.key === 'Control' ? true : this._canvasController.ctrlPressed;
         this._canvasController.shiftPressed = e.key === 'Shift' ? true : this._canvasController.shiftPressed;
+        if (e.key === 'Alt') {
+            e.preventDefault();
+            this._canvasController.altPressed = true;
+        }
 
         if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) {
             e.preventDefault();
@@ -434,6 +438,7 @@ class UIController {
     _handleKeyUp(e) {
         if (e.key === 'Control') this._canvasController.ctrlPressed = false;
         if (e.key === 'Shift') this._canvasController.shiftPressed = false;
+        if (e.key === 'Alt') this._canvasController.altPressed = false;
     }
 
     // =========================================

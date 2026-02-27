@@ -29,6 +29,30 @@ class GridManager {
     }
 
     /**
+     * Desplaza el contenido del grid toroidalmente.
+     * @param {number} dx - Celdas a desplazar en X (positivo = derecha)
+     * @param {number} dy - Celdas a desplazar en Y (positivo = abajo)
+     */
+    shift(dx, dy) {
+        const size = this.size;
+        const src = this.grid;
+        const dst = this._backGrid;
+
+        for (let x = 0; x < size; x++) {
+            const srcX = ((x - dx) % size + size) % size;
+            const srcCol = src[srcX];
+            const dstCol = dst[x];
+            for (let y = 0; y < size; y++) {
+                dstCol[y] = srcCol[((y - dy) % size + size) % size];
+            }
+        }
+
+        // Swap: dst pasa a ser el grid activo
+        this.grid = dst;
+        this._backGrid = src;
+    }
+
+    /**
      * Crea un grid vacío de tamaño específico
      * @param {number} size - Tamaño del grid (size × size)
      * @returns {Uint8Array[]} Grid como array de columnas (column-major)

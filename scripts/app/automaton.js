@@ -762,6 +762,13 @@ class CellularAutomaton {
         eventBus.emit('automaton:limitChanged', {type, value});
     }
 
+    shiftGrid(dx, dy) {
+        this.stateManager.saveState(this.generation);
+        this.core.gridManager.shift(dx, dy);
+        this.renderer.markAllDirty();
+        this.render();
+    }
+
     getCellFromMouse(e) {
         return this.renderer.getCellFromMouse(e);
     }
