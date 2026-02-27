@@ -300,6 +300,7 @@ class UIController {
         this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
         this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
         this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
+        this._addEventListener(document.getElementById('importBtn'), 'click', () => this.importPatternFromFile());
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
@@ -691,21 +692,79 @@ class UIController {
             maxY: Math.max(sel.startY, sel.endY)
         } : null;
 
-        const pattern = this.automaton.exportPattern(bounds);
-        if (pattern) {
-            const blob = new Blob([JSON.stringify(pattern, null, 2)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `my-pattern-${Date.now()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            alert(t('notif.pattern.exported'));
-        } else {
+        const patternData = this.automaton.exportPattern(bounds);
+        if (!patternData) {
             alert(t('notif.pattern.empty'));
+            return;
         }
+
+        const codec = new RLECodec();
+        const ruleString = this.automaton.rule
+            ? `B${this.automaton.rule.birth.join('')}/S${this.automaton.rule.survival.join('')}`
+            : 'B3/S23';
+
+        const rleText = codec.encode({
+            pattern: patternData.pattern,
+            name: patternData.name,
+            description: patternData.description,
+            rule: ruleString
+        });
+
+        const blob = new Blob([rleText], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pattern-${Date.now()}.rle`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert(t('notif.pattern.exported'));
+    }
+
+    importPatternFromFile() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.rle,.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const text = ev.target.result;
+                    const format = RLECodec.detectFormat(text);
+                    let patternData;
+
+                    if (format === 'rle') {
+                        const codec = new RLECodec();
+                        const decoded = codec.decode(text);
+                        patternData = {
+                            pattern: decoded.pattern,
+                            name: decoded.name || file.name.replace(/\.rle$/i, ''),
+                            description: decoded.description || '',
+                        };
+                    } else if (format === 'json') {
+                        patternData = JSON.parse(text);
+                    } else {
+                        alert(t('notif.pattern.invalidFormat'));
+                        return;
+                    }
+
+                    const center = Math.floor(this.automaton.gridSize / 2);
+                    this.automaton.importPattern(patternData, center, center);
+                    this.automaton.updateStats();
+                    this.automaton.render();
+                    alert(t('notif.pattern.imported'));
+                } catch (err) {
+                    console.error('Error importando patrón:', err);
+                    alert(t('notif.pattern.importError'));
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     }
 
     updateLimitType() {
