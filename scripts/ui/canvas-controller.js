@@ -615,6 +615,8 @@ class CanvasController {
         this.selection.endY = targetY + height - 1;
 
         this._removeDragPreview();
+        this.automaton.renderer.resetActivity();
+        this.automaton.render();
         this._updateSelectionVisual();
         this._showSelectionInfo();
     }

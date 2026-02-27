@@ -776,7 +776,9 @@ class CellularAutomaton {
             this.rd2dEngine.shift(dx, dy);
         }
 
-        this.renderer.markAllDirty();
+        // Resetear actividad: las celdas cambiaron de posición, el estado amarillo
+        // de actividad quedaría huérfano en las posiciones anteriores.
+        this.renderer.resetActivity();
         this.render();
     }
 
