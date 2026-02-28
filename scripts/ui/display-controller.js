@@ -74,6 +74,25 @@ class DisplayController {
             return;
         }
 
+        // === MODO LANGTON ===
+        if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
+            const info = this.automaton.langtonEngine.getInfo();
+            const wrap = this.automaton.wrapEdges ? '∞' : '■';
+            const antLabel = info.antCount > 0
+                ? `${info.antCount} ${t('langton.preset')}`
+                : `${t('langton.custom')}`;
+            this._setTitle(t('app.title.langton', {rule: info.rule}));
+            this._setH1('fas fa-bug', t('header.title', {ruleName: `Langton "${info.rule}"`}));
+            this._setRulesSpecific(`
+                <p><span class="langton-rule"><i class="fas fa-code"></i> ${t('langton.rule')}</span> ${info.rule}</p>
+                <p><span class="langton-colors"><i class="fas fa-palette"></i> ${t('langton.header.colors')}:</span> ${info.numColors}</p>
+                <p><span class="langton-ants"><i class="fas fa-bug"></i> ${t('langton.antCount')}</span> ${antLabel}</p>
+            `);
+            this._setNeighborhoodText(t('langton.neighborhood', {wrap}));
+            this.updateNeighborhoodInfo();
+            return;
+        }
+
         // === MODO ULAM-WARBURTON ===
         if (this.automaton.specialMode === 'ulam-warburton' && this.automaton.uwEngine?.isActive) {
             const wrap = this.automaton.wrapEdges ? '∞' : '■';

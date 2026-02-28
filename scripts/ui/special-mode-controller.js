@@ -67,6 +67,72 @@ class SpecialModeController {
             });
         }
 
+        // Toggle Langton
+        const langtonToggle = document.getElementById('langtonToggle');
+        if (langtonToggle) {
+            this._addEventListener(langtonToggle, 'change', () => {
+                if (langtonToggle.checked) {
+                    this._deactivateOtherModes('langton');
+                    const rule = document.getElementById('langtonRule')?.value || 'RL';
+                    const antCount = parseInt(document.getElementById('langtonAntCount')?.value) || 0;
+                    this.activateLangtonMode(rule, antCount);
+                } else {
+                    this.deactivateLangtonMode();
+                }
+            });
+        }
+
+        // Regla Langton (input text)
+        const langtonRuleInput = document.getElementById('langtonRule');
+        if (langtonRuleInput) {
+            this._addEventListener(langtonRuleInput, 'change', () => {
+                if (this.automaton.langtonEngine?.isActive) {
+                    this._stopIfRunning();
+                    const rule = langtonRuleInput.value.toUpperCase().replace(/[^LRNU]/g, '') || 'RL';
+                    langtonRuleInput.value = rule;
+                    const antCount = parseInt(document.getElementById('langtonAntCount')?.value) || 0;
+                    this.automaton.langtonEngine.activate({rule, antCount});
+                    this._updateModeIndicator('langton');
+                    this._onUpdateHeader();
+                    this._onSyncPlayButton();
+                }
+            });
+        }
+
+        // Presets Langton
+        document.querySelectorAll('.btn-langton-preset[data-rule]').forEach(btn => {
+            this._addEventListener(btn, 'click', () => {
+                const rule = btn.dataset.rule;
+                const input = document.getElementById('langtonRule');
+                if (input) input.value = rule;
+
+                if (this.automaton.langtonEngine?.isActive) {
+                    this._stopIfRunning();
+                    const antCount = parseInt(document.getElementById('langtonAntCount')?.value) || 0;
+                    this.automaton.langtonEngine.activate({rule, antCount});
+                    this._updateModeIndicator('langton');
+                    this._onUpdateHeader();
+                    this._onSyncPlayButton();
+                }
+            });
+        });
+
+        // Número de hormigas
+        const langtonAntCount = document.getElementById('langtonAntCount');
+        if (langtonAntCount) {
+            this._addEventListener(langtonAntCount, 'change', () => {
+                if (this.automaton.langtonEngine?.isActive) {
+                    this._stopIfRunning();
+                    const rule = document.getElementById('langtonRule')?.value || 'RL';
+                    const antCount = parseInt(langtonAntCount.value) || 0;
+                    this.automaton.langtonEngine.activate({rule, antCount});
+                    this._updateModeIndicator('langton');
+                    this._onUpdateHeader();
+                    this._onSyncPlayButton();
+                }
+            });
+        }
+
         // Toggle Ulam-Warburton
         const uwToggle = document.getElementById('uwToggle');
         if (uwToggle) {
@@ -425,6 +491,48 @@ class SpecialModeController {
     // CONTROLES VISUALES DE MODO
     // =========================================
 
+    async activateLangtonMode(rule = 'RL', antCount = 0) {
+        try {
+            this._stopIfRunning();
+            await this.automaton._initSpecialEngine('langton');
+
+            document.getElementById('ruleSelector').disabled = true;
+
+            this.automaton.langtonEngine.activate({rule, antCount});
+            this.automaton.renderer.resizeCanvas();
+            this.automaton.renderer.reGrid();
+            this.automaton.render();
+
+            this._onUpdateHeader();
+            this._updateModeIndicator('langton');
+            this._toggleLangtonControls(true);
+            this._onShowNotification(t('notif.langton.enabled'), 'info', 2000);
+            eventBus.emit('automaton:modeChanged', {mode: 'langton'});
+            this._onSyncPlayButton();
+        } catch (error) {
+            console.error('Error cargando LangtonEngine:', error);
+            this._onShowNotification(t('notif.langton.error'), 'warning', 3000);
+        }
+    }
+
+    deactivateLangtonMode() {
+        this._stopIfRunning();
+
+        document.getElementById('ruleSelector').disabled = false;
+
+        this.automaton.langtonEngine?.deactivate();
+        this.automaton.specialMode = null;
+        this.automaton.renderer.reGrid();
+        this.automaton.render();
+
+        this._toggleLangtonControls(false);
+        this._updateModeIndicator('standard');
+        this._onUpdateHeader();
+        this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
+        eventBus.emit('automaton:modeChanged', {mode: 'standard'});
+        this._onSyncPlayButton();
+    }
+
     async activateUWMode() {
         try {
             this._stopIfRunning();
@@ -485,6 +593,11 @@ class SpecialModeController {
             const info = this.automaton.wolframEngine.getInfo();
             indicator.className = 'mode-indicator wolfram-mode';
             indicator.innerHTML = `<i class="fas fa-arrows-alt-v"></i> Wolfram R${info.rule} ${info.direction === 'vertical' ? '↓' : '→'}`;
+        } else if (mode === 'langton') {
+            const info = this.automaton.langtonEngine?.getInfo() || {rule: 'RL', antCount: 0};
+            const antLabel = info.antCount > 0 ? `×${info.antCount}` : 'custom';
+            indicator.className = 'mode-indicator langton-mode';
+            indicator.innerHTML = `<i class="fas fa-bug"></i> Langton "${info.rule}" ${antLabel}`;
         } else if (mode === 'ulam-warburton') {
             indicator.className = 'mode-indicator uw-mode';
             indicator.innerHTML = `<i class="fas fa-snowflake"></i> Ulam-Warburton`;
@@ -492,6 +605,14 @@ class SpecialModeController {
             indicator.className = 'mode-indicator standard-mode';
             indicator.innerHTML = `<i class="fas fa-th"></i> 2D Cellular`;
         }
+    }
+
+    _toggleLangtonControls(show) {
+        const el = document.getElementById('langtonControls');
+        if (!el) return;
+        el.classList.toggle('active', show);
+        el.style.opacity = show ? '1' : '0.5';
+        el.style.pointerEvents = show ? 'all' : 'none';
     }
 
     _toggleWolframControls(show) {
@@ -581,6 +702,14 @@ class SpecialModeController {
             if (toggle?.checked) {
                 toggle.checked = false;
                 this.automaton.uwEngine?.deactivate();
+            }
+        }
+        if (activeMode !== 'langton') {
+            const toggle = document.getElementById('langtonToggle');
+            if (toggle?.checked) {
+                toggle.checked = false;
+                this._toggleLangtonControls(false);
+                this.automaton.langtonEngine?.deactivate();
             }
         }
     }

@@ -40,6 +40,7 @@ class SpecialEngineManager {
         this.rd2dEngine = null;
         this.triangleEngine = null;
         this.uwEngine = null;
+        this.langtonEngine = null;
 
         this._originalRenderer = null;
         this._originalCore = null;
@@ -58,6 +59,7 @@ class SpecialEngineManager {
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
         this.uwEngine?.deactivate?.();
+        this.langtonEngine?.deactivate?.();
         this._restoreOriginals();
 
         if (engineName === 'rd2d') {
@@ -80,6 +82,13 @@ class SpecialEngineManager {
             }
             this.uwEngine = new UlamWarburtonEngine(this._buildUWContext());
             this.specialMode = 'ulam-warburton';
+
+        } else if (engineName === 'langton') {
+            if (typeof LangtonEngine === 'undefined') {
+                await this._loadScript('scripts/core/engines/langton-engine.js');
+            }
+            this.langtonEngine = new LangtonEngine(this._buildLangtonContext());
+            this.specialMode = 'langton';
 
         } else if (engineName === 'triangle') {
             if (typeof TriangleGridManager === 'undefined') {
@@ -146,10 +155,12 @@ class SpecialEngineManager {
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
         this.uwEngine?.deactivate?.();
+        this.langtonEngine?.deactivate?.();
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
         this.uwEngine = null;
+        this.langtonEngine = null;
         this._originalRenderer = null;
         this._originalCore = null;
         this._getRenderer = null;
@@ -292,6 +303,10 @@ class SpecialEngineManager {
                 this.triangleEngine?.reset?.();
                 return true;
 
+            case 'langton':
+                this.langtonEngine?.reset();
+                return true;
+
             default:
                 return false;
         }
@@ -326,6 +341,11 @@ class SpecialEngineManager {
             return {handled: true, population: null, resetLimit: true};
         }
 
+        if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+            const population = this.langtonEngine.randomize(density);
+            return {handled: true, population, resetLimit: false};
+        }
+
         return {handled: false};
     }
 
@@ -338,6 +358,7 @@ class SpecialEngineManager {
         this.wolframEngine?.reset?.();
         this.rd2dEngine?.reset?.();
         this.uwEngine?.reset?.();
+        this.langtonEngine?.reset?.();
     }
 
     /**
@@ -356,6 +377,29 @@ class SpecialEngineManager {
                 this.rd2dEngine?.reset?.();
                 break;
         }
+    }
+
+    /**
+     * Contexto mínimo para LangtonEngine.
+     * Expone: grid, gridSize, renderer, wrapEdges.
+     */
+    _buildLangtonContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            get wrapEdges() {
+                return automaton.wrapEdges;
+            }
+        };
     }
 
     _restoreOriginals() {

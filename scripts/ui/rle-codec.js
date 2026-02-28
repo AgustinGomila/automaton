@@ -26,6 +26,20 @@ class RLECodec {
     // =========================================
 
     /**
+     * Detecta si un string es RLE o JSON.
+     * @param {string} text
+     * @returns {'rle'|'json'|'unknown'}
+     */
+    static detectFormat(text) {
+        const trimmed = text.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
+        if (trimmed.startsWith('#') || /^x\s*=/im.test(trimmed)) return 'rle';
+        // Intento heurístico: si contiene 'o' o 'b' y '!' probablemente es RLE
+        if (/[ob$]/.test(trimmed) && trimmed.includes('!')) return 'rle';
+        return 'unknown';
+    }
+
+    /**
      * Codifica un patrón al formato RLE.
      * @param {Object} patternData - {pattern, name, description, rule}
      *   pattern: number[][] — filas de 0/1
@@ -84,6 +98,10 @@ class RLECodec {
         return this._wrapLines(runs.join(''), 70);
     }
 
+    // =========================================
+    // DECODE
+    // =========================================
+
     _wrapLines(body, maxLen) {
         const result = [];
         let i = 0;
@@ -93,10 +111,6 @@ class RLECodec {
         }
         return result.join('\n');
     }
-
-    // =========================================
-    // DECODE
-    // =========================================
 
     /**
      * Decodifica un string RLE al formato interno de patrón.
@@ -152,6 +166,10 @@ class RLECodec {
         return {pattern, name, description, rule, width, height};
     }
 
+    // =========================================
+    // DETECCIÓN DE FORMATO
+    // =========================================
+
     _decodeBody(body, width, height) {
         // Inicializar grid con ceros
         const pattern = Array.from({length: height}, () => new Array(width).fill(0));
@@ -193,24 +211,6 @@ class RLECodec {
         }
 
         return pattern;
-    }
-
-    // =========================================
-    // DETECCIÓN DE FORMATO
-    // =========================================
-
-    /**
-     * Detecta si un string es RLE o JSON.
-     * @param {string} text
-     * @returns {'rle'|'json'|'unknown'}
-     */
-    static detectFormat(text) {
-        const trimmed = text.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
-        if (trimmed.startsWith('#') || /^x\s*=/im.test(trimmed)) return 'rle';
-        // Intento heurístico: si contiene 'o' o 'b' y '!' probablemente es RLE
-        if (/[ob$]/.test(trimmed) && trimmed.includes('!')) return 'rle';
-        return 'unknown';
     }
 }
 

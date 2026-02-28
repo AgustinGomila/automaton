@@ -252,6 +252,14 @@ class CellularAutomaton {
         this._engineManager.uwEngine = v;
     }
 
+    get langtonEngine() {
+        return this._engineManager.langtonEngine;
+    }
+
+    set langtonEngine(v) {
+        this._engineManager.langtonEngine = v;
+    }
+
     get _originalRenderer() {
         return this._engineManager._originalRenderer;
     }
@@ -370,6 +378,10 @@ class CellularAutomaton {
         if (this.uwEngine) {
             this.uwEngine.deactivate?.();
             this.uwEngine = null;
+        }
+        if (this.langtonEngine) {
+            this.langtonEngine.deactivate?.();
+            this.langtonEngine = null;
         }
 
         this._loop?.destroy();
@@ -552,6 +564,15 @@ class CellularAutomaton {
                 t0,
                 stopMessage: 'Ulam-Warburton: patrón estable',
                 getChangedCells: () => this.uwEngine.getChangedCells()
+            });
+        }
+
+        if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+            return this._stepSpecialEngine({
+                engine: this.langtonEngine,
+                label: 'Langton',
+                t0,
+                getChangedCells: () => this.langtonEngine.getChangedCells()
             });
         }
 
@@ -776,6 +797,11 @@ class CellularAutomaton {
             this.rd2dEngine.shift(dx, dy);
         }
 
+        // Langton mantiene stateGrid + posiciones de hormigas
+        if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+            this.langtonEngine.shift(dx, dy);
+        }
+
         // Resetear actividad: las celdas cambiaron de posición, el estado amarillo
         // de actividad quedaría huérfano en las posiciones anteriores.
         this.renderer.resetActivity();
@@ -962,17 +988,28 @@ class CellularAutomaton {
         });
 
         if (result.changedCells.length > 0) {
-            result.changedCells.forEach(cell => {
-                this.renderer.markDirty(cell.x, cell.y);
-            });
-
-            this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-            this.updateStats();
-            this.renderer.markAllDirty();
-            this.render();
-
-            if (this.gridSize >= this.workerThreshold) {
-                this._initWorker();
+            // Langton: las celdas vivas importadas se convierten en hormigas
+            if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+                result.changedCells.forEach(cell => {
+                    if (this.core.getCell(cell.x, cell.y)) {
+                        this.langtonEngine.addAnt(cell.x, cell.y, 0);
+                    }
+                    this.renderer.markDirty(cell.x, cell.y);
+                });
+                this.updateStats();
+                this.render();
+                eventBus.emit('automaton:ruleChanged');
+            } else {
+                result.changedCells.forEach(cell => {
+                    this.renderer.markDirty(cell.x, cell.y);
+                });
+                this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
+                this.updateStats();
+                this.renderer.markAllDirty();
+                this.render();
+                if (this.gridSize >= this.workerThreshold) {
+                    this._initWorker();
+                }
             }
         }
 
@@ -1143,14 +1180,20 @@ class CellularAutomaton {
     start() {
         if (this._loop.isRunning) return;
 
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                if (this.core.getCell(x, y)) {
-                    this.renderer.markDirty(x, y);
+        // Los motores especiales gestionan sus propios dirtyCells por paso —
+        // no necesitan un full render al reanudar. El canvas queda válido
+        // desde la última pausa y el engine retoma incrementalmente.
+        if (!this.specialMode) {
+            for (let x = 0; x < this.gridSize; x++) {
+                for (let y = 0; y < this.gridSize; y++) {
+                    if (this.core.getCell(x, y)) {
+                        this.renderer.markDirty(x, y);
+                    }
                 }
             }
+            this.renderer.markAllDirty();
         }
-        this.renderer.markAllDirty();
+
         this._loop.start();
     }
 

@@ -63,6 +63,7 @@ class GridRenderer {
         this._prevFlags = new Uint8Array(this.config.gridSize * this.config.gridSize);
         this._activityAges = new Uint8Array(this.config.gridSize * this.config.gridSize);
         this._activityCooldown = 3;
+        this._colorProvider = null;      // fn(cellIndex) => cssColor|null — LangtonEngine
 
         this._resizeCanvas();
     }
@@ -219,6 +220,17 @@ class GridRenderer {
     }
 
     /**
+     * Registra un proveedor de color personalizado para celdas vivas.
+     * Usado por LangtonEngine para renderizar múltiples colores.
+     * @param {Function|null} fn - (cellIndex) => cssColor|null
+     *   Si devuelve null o undefined, se usa el color vivo estándar.
+     *   Pasar null para desactivar.
+     */
+    setColorProvider(fn) {
+        this._colorProvider = fn || null;
+    }
+
+    /**
      * Convierte un evento de ratón a coordenadas de celda del grid,
      * compensando el escalado CSS del canvas.
      * @param {MouseEvent} e
@@ -312,9 +324,14 @@ class GridRenderer {
         const yPos = y * cellSize;
 
         if (isAlive) {
+            const customColor = this._colorProvider?.(cellIndex);
             const isRecentlyActive = this._activityAges[cellIndex] < this._activityCooldown;
-            this.ctx.fillStyle = (isRecentlyActive && this.config.showActivityEffect)
-                ? '#b9b610' : '#059669';
+            if (customColor) {
+                this.ctx.fillStyle = customColor;
+            } else {
+                this.ctx.fillStyle = (isRecentlyActive && this.config.showActivityEffect)
+                    ? '#b9b610' : '#059669';
+            }
             this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
         } else {
             this.ctx.fillStyle = '#0f172a';
@@ -348,11 +365,15 @@ class GridRenderer {
         const centerY = y * cellSize + cellSize / 2;
         const cellIndex = x * this.config.gridSize + y;
 
+        const customColor = this._colorProvider?.(cellIndex);
         const isRecentlyActive = this._activityAges[cellIndex] < this._activityCooldown;
         const drawSize = Math.max(1, cellSize - (cellSize > 2 ? 2 : 1));
         const offset = cellSize > 2 ? 1 : 0;
 
-        if (cellSize >= 4) {
+        if (customColor) {
+            // Color personalizado (multi-color Langton): flat, sin gradiente
+            this.ctx.fillStyle = customColor;
+        } else if (cellSize >= 4) {
             const gradient = this.ctx.createRadialGradient(
                 centerX, centerY, 0,
                 centerX, centerY, cellSize / 2
@@ -380,7 +401,7 @@ class GridRenderer {
             drawSize
         );
 
-        if (isRecentlyActive && this.config.showActivityEffect && cellSize >= 4) {
+        if (!customColor && isRecentlyActive && this.config.showActivityEffect && cellSize >= 4) {
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
         }

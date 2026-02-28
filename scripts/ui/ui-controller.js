@@ -237,8 +237,7 @@ class UIController {
         const randomBtn = document.getElementById('randomBtn');
         if (randomBtn) {
             this._addEventListener(randomBtn, 'click', () => {
-                const percentageSlider = document.getElementById('randomPercentage');
-                const percentage = percentageSlider ? parseInt(percentageSlider.value, 10) / 100 : 0.35;
+                const percentage = this._getPercentage();
                 this.automaton.randomize(percentage);
                 this._showNotification(t('notif.randomized', {density: Math.round(percentage * 100)}), 'info', 1500);
                 this._displayController.updateHeaderInfo();
@@ -488,11 +487,16 @@ class UIController {
         this.automaton.render();
     }
 
+    _getPercentage() {
+        const percentageSlider = document.getElementById('randomPercentage');
+        return percentageSlider ? parseInt(percentageSlider.value, 10) / 100 : 0.35;
+    }
+
     randomize() {
         const wasRunning = this.automaton.isRunning;
         if (wasRunning) this.togglePlay(); // Pausar
 
-        this.automaton.randomize();
+        this.automaton.randomize(this._getPercentage());
 
         if (wasRunning) {
             // Reanudar después de renderizar

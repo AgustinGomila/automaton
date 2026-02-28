@@ -453,6 +453,61 @@
                                 </div>
                             </div>
 
+                            <!-- Sub-acordeón: Langton -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="langton">
+                                    <i class="fas fa-bug"></i>
+                                    <span data-i18n="langton.title">Hormiga de Langton</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 10px;">
+                                        <input type="checkbox" id="langtonToggle" class="toggle-checkbox">
+                                        <label for="langtonToggle" class="toggle-label">
+                                            <span data-i18n="langton.enable">Activar Hormiga de Langton</span>
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </div>
+
+                                    <div id="langtonControls" class="accordion-group--engine-controls" style="opacity:0.5; pointer-events:none;">
+                                        <div class="config-group">
+                                            <label for="langtonRule">
+                                                <i class="fas fa-code"></i>
+                                                <span data-i18n="langton.rule">Regla (L/R/N/U):</span>
+                                            </label>
+                                            <input type="text" id="langtonRule" value="RL" maxlength="16"
+                                                   style="width:100%; padding:4px 8px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text); border-radius:4px; font-family:monospace; text-transform:uppercase; letter-spacing:2px;">
+                                        </div>
+
+                                        <div class="config-group">
+                                            <label data-i18n="langton.presets">Presets:</label>
+                                            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px;">
+                                                <button class="btn-preset btn-langton-preset" data-rule="RL" title="Clásica">RL</button>
+                                                <button class="btn-preset btn-langton-preset" data-rule="RLR" title="Expansión caótica">RLR</button>
+                                                <button class="btn-preset btn-langton-preset" data-rule="LLRR" title="Autopista">LLRR</button>
+                                                <button class="btn-preset btn-langton-preset" data-rule="RLLR" title="Simétrica">RLLR</button>
+                                                <button class="btn-preset btn-langton-preset" data-rule="LRRL" title="Variante">LRRL</button>
+                                                <button class="btn-preset btn-langton-preset" data-rule="LLRRLLRR" title="8 colores">LLRRLLRR</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="config-group">
+                                            <label for="langtonAntCount">
+                                                <i class="fas fa-users"></i>
+                                                <span data-i18n="langton.antCount">Hormigas:</span>
+                                                <span id="langtonAntCountDisplay" class="value-display">0</span>
+                                            </label>
+                                            <input type="range" id="langtonAntCount" min="0" max="8" value="0" step="1"
+                                                   oninput="document.getElementById('langtonAntCountDisplay').textContent=this.value">
+                                            <div class="range-ticks"><span>0</span><span>8</span></div>
+                                        </div>
+                                    </div>
+
+                                    <p style="font-size: 0.8rem; color: var(--gray-text); margin: 4px 0 0;"
+                                       data-i18n="langton.description">Agente con reglas de giro por color de celda</p>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 
@@ -717,7 +772,8 @@
 <!-- Motores especiales: cargados bajo demanda por SpecialEngineManager._loadScript()
      rd2d-engine, wolfram-engine, triangle-grid-manager,
      scripts/infrastructure/workers/triangle-worker-manager.js,
-     triangle-engine, triangle-renderer, triangle-webgl2-renderer, ulam-warburton-engine -->
+     triangle-engine, triangle-renderer, triangle-webgl2-renderer,
+     ulam-warburton-engine, langton-engine -->
 <script src="scripts/core/engines/special-engine-manager.js"></script>
 
 <!-- Configuración -->

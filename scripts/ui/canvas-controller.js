@@ -119,6 +119,10 @@ class CanvasController {
         this._addEventListener(canvas, 'mouseleave', () => this._handleMouseLeave());
         this._addEventListener(canvas, 'contextmenu', (e) => this._handleRightClick(e));
 
+        // Actualizar cursor cuando cambia el modo especial (activa/desactiva dibujo)
+        const modeUnsub = eventBus.on('automaton:modeChanged', () => this._updateCursor());
+        this._cleanups.push(modeUnsub);
+
         this._setupTouchEvents();
     }
 
@@ -254,6 +258,19 @@ class CanvasController {
             return;
         }
 
+        // Langton: clic coloca una hormiga / Ctrl+clic borra
+        if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
+            if (this.ctrlPressed) {
+                this.automaton.langtonEngine.eraseAt(x, y);
+            } else {
+                this.automaton.langtonEngine.addAnt(x, y, 0);
+            }
+            this.automaton.renderer.markDirty(x, y);
+            this.automaton.render();
+            eventBus.emit('automaton:ruleChanged');
+            return;
+        }
+
         const changed = this.automaton.setCell(x, y, !this.ctrlPressed);
         if (changed) {
             this.automaton.updateStats();
@@ -325,6 +342,29 @@ class CanvasController {
                 this.updateSelection(x, y);
             } else if (this.isDragging) {
                 this.updateDrag(x, y);
+            } else if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive && !this._patternState.pattern) {
+                // Langton: arrastrar coloca/borra hormigas a lo largo del trazo
+                if (!this.lastCell || (this.lastCell.x === x && this.lastCell.y === y)) {
+                    this.lastCell = {x, y};
+                } else {
+                    const cells = this._getLineCells(this.lastCell.x, this.lastCell.y, x, y);
+                    let changed = false;
+                    for (const cell of cells) {
+                        if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) continue;
+                        if (this.ctrlPressed) {
+                            this.automaton.langtonEngine.eraseAt(cell.x, cell.y);
+                        } else {
+                            this.automaton.langtonEngine.addAnt(cell.x, cell.y, 0);
+                        }
+                        this.automaton.renderer.markDirty(cell.x, cell.y);
+                        changed = true;
+                    }
+                    this.lastCell = {x, y};
+                    if (changed) {
+                        this.automaton.render();
+                        eventBus.emit('automaton:ruleChanged');
+                    }
+                }
             } else if (!this._patternState.pattern) {
                 this.handleContinuousDrawing(x, y);
             }
@@ -616,6 +656,12 @@ class CanvasController {
 
         this._removeDragPreview();
         this.automaton.renderer.resetActivity();
+
+        // Langton: sincronizar ants[] y stateGrid con el grid resultante del move
+        if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
+            this.automaton.langtonEngine.syncFromGrid();
+        }
+
         this.automaton.render();
         this._updateSelectionVisual();
         this._showSelectionInfo();
@@ -867,6 +913,8 @@ class CanvasController {
             canvas.style.cursor = this.ctrlPressed
                 ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell'
                 : 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell';
+        } else if (this.automaton.specialMode === 'langton') {
+            canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🐜</text></svg>") 10 10, crosshair';
         } else {
             canvas.style.cursor = this._ctrlPressed
                 ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\'><circle cx=\'8\' cy=\'8\' r=\'6\' fill=\'%23ef4444\' opacity=\'0.8\'/></svg>") 8 8, crosshair'

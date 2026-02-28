@@ -2491,6 +2491,22 @@ h1 i.fa-border-style {
     font-weight: 600;
 }
 
+/* Estilos para información Langton-Ant en el header */
+.langton-rule {
+    color: #0666d4;
+    font-weight: 600;
+}
+
+.langton-colors {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.langton-ants {
+    color: #b9b610;
+    font-weight: 600;
+}
+
 /* Icono triangular en título */
 h1 i.fa-solid fa-play {
     color: #ec4899;
