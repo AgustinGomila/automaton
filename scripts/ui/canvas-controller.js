@@ -657,9 +657,12 @@ class CanvasController {
         this._removeDragPreview();
         this.automaton.renderer.resetActivity();
 
-        // Langton: sincronizar ants[] y stateGrid con el grid resultante del move
+        // Sincronizar motores especiales tras el move — la fuente de verdad
+        // pasa a ser grid[][] (modificado por clearPatternCells + pasteArea).
         if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
             this.automaton.langtonEngine.syncFromGrid();
+        } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
+            this.automaton.rd2dEngine._syncFromAutomatonGrid();
         }
 
         this.automaton.render();
