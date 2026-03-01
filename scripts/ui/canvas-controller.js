@@ -855,8 +855,17 @@ class CanvasController {
      */
     _floodFill(startX, startY, fillState) {
         const size = this.automaton.gridSize;
-        const grid = this.automaton.grid;
-        const targetState = grid[startX]?.[startY] ?? 0;
+        const langton = this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive;
+        const rd2d = this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive;
+
+        // En RD2D la fuente de verdad visual es stateGrid. grid[][] está sincronizado
+        // con stateGrid para detectar paredes, así que se usa igual que modo normal.
+        // La diferencia es solo en la escritura: hay que actualizar también stateGrid.
+        const rd2dStateGrid = rd2d ? this.automaton.rd2dEngine.stateGrid : null;
+
+        const getState = (gx, gy) => this.automaton.grid[gx]?.[gy] ?? 0;
+
+        const targetState = getState(startX, startY);
 
         // Si la celda origen ya tiene el estado destino, nada que hacer
         if (targetState === fillState) return;
@@ -872,11 +881,32 @@ class CanvasController {
             const x = (idx / size) | 0;
             const y = idx % size;
 
-            grid[x][y] = fillState;
+            if (rd2d) {
+                // RD2D: escribir en stateGrid (fuente de verdad del engine)
+                const newRdState = fillState === 1 ? 15 : 0;
+                rd2dStateGrid[x][y] = newRdState;
+                this.automaton.grid[x][y] = fillState;
+            } else {
+                this.automaton.grid[x][y] = fillState;
+            }
             changed.push(idx);
             this.automaton.renderer.markDirtyIndex(idx);
 
-            // 4 vecinos (Von Neumann) — no cruzar paredes diagonales
+            // En Langton: sincronizar con el engine
+            if (langton) {
+                if (fillState === 1) {
+                    // Nueva hormiga — agregar si no existe ya en esta posición
+                    const engine = this.automaton.langtonEngine;
+                    if (!engine.ants.some(a => a.x === x && a.y === y)) {
+                        engine.ants.push({x, y, dir: 0});
+                    }
+                } else {
+                    // Borrar: quitar hormiga y limpiar stateGrid
+                    this.automaton.langtonEngine.eraseAt(x, y);
+                }
+            }
+
+            // 4 vecinos (Von Neumann)
             const neighbors = [
                 x > 0 ? (x - 1) * size + y : -1,
                 x < size - 1 ? (x + 1) * size + y : -1,
@@ -888,7 +918,7 @@ class CanvasController {
                 if (nIdx < 0 || visited[nIdx]) continue;
                 const nx = (nIdx / size) | 0;
                 const ny = nIdx % size;
-                if (grid[nx][ny] === targetState) {
+                if (getState(nx, ny) === targetState) {
                     visited[nIdx] = 1;
                     queue.push(nIdx);
                 }
