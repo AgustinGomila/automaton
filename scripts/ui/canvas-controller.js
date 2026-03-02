@@ -38,6 +38,9 @@ class CanvasController {
         this._isPanning = false;
         this._panLastCell = null;
 
+        // Estado de dibujo WireWorld (determinado al inicio del drag)
+        this._wwDrawState = null; // null | 0 (borrar) | 3 (conductor)
+
         // Herramienta bote de pintura
         this.bucketToolActive = false;
 
@@ -271,6 +274,21 @@ class CanvasController {
             return;
         }
 
+        // WireWorld: left-click toggle Conductor↔Vacío / drag usa el estado inicial
+        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+            const engine = this.automaton.wireworldEngine;
+            const currentState = engine.stateGrid[x]?.[y] ?? 0;
+            // Conductor → Vacío; cualquier otro estado → Conductor
+            const newState = currentState === 3 ? 0 : 3;
+            this._wwDrawState = newState;
+            const changed = engine.setStateAt(x, y, newState);
+            if (changed) {
+                this.automaton.updateStats();
+                this.automaton.render();
+            }
+            return;
+        }
+
         const changed = this.automaton.setCell(x, y, !this.ctrlPressed);
         if (changed) {
             this.automaton.updateStats();
@@ -365,6 +383,29 @@ class CanvasController {
                         eventBus.emit('automaton:ruleChanged');
                     }
                 }
+            } else if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
+                // WireWorld: arrastrar aplica el estado decidido al inicio del drag
+                if (this._wwDrawState === null) {
+                    this.lastCell = {x, y};
+                    return;
+                }
+                if (!this.lastCell || (this.lastCell.x === x && this.lastCell.y === y)) {
+                    this.lastCell = {x, y};
+                } else {
+                    const cells = this._getLineCells(this.lastCell.x, this.lastCell.y, x, y);
+                    let needsRender = false;
+                    for (const cell of cells) {
+                        if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) continue;
+                        if (this.automaton.wireworldEngine.setStateAt(cell.x, cell.y, this._wwDrawState)) {
+                            needsRender = true;
+                        }
+                    }
+                    this.lastCell = {x, y};
+                    if (needsRender) {
+                        this.automaton.updateStats();
+                        this.automaton.render();
+                    }
+                }
             } else if (!this._patternState.pattern) {
                 this.handleContinuousDrawing(x, y);
             }
@@ -375,6 +416,7 @@ class CanvasController {
         if (e.button !== 0) return;
 
         this.isMouseDown = false;
+        this._wwDrawState = null;
 
         if (this._isPanning) {
             this._isPanning = false;
@@ -408,6 +450,20 @@ class CanvasController {
 
     _handleRightClick(e) {
         e.preventDefault();
+
+        // WireWorld: right-click sobre Head→Tail, sobre Tail→Head, sobre otro→Head
+        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
+            const {x, y} = this.automaton.getCellFromMouse(e);
+            const engine = this.automaton.wireworldEngine;
+            const current = engine.stateGrid[x]?.[y] ?? 0;
+            const newState = current === 1 ? 2 : 1; // HEAD→TAIL, anything else→HEAD
+            const changed = engine.setStateAt(x, y, newState);
+            if (changed) {
+                this.automaton.updateStats();
+                this.automaton.render();
+            }
+            return false;
+        }
 
         if (this._patternState.pattern && this._patternState.pattern.pattern !== 'random') {
             this._patternState.rotation = (this._patternState.rotation + 90) % 360;
@@ -663,6 +719,8 @@ class CanvasController {
             this.automaton.langtonEngine.syncFromGrid();
         } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
             this.automaton.rd2dEngine._syncFromAutomatonGrid();
+        } else if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+            this.automaton.wireworldEngine.syncFromGrid();
         }
 
         this.automaton.render();
@@ -948,6 +1006,8 @@ class CanvasController {
                 : 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell';
         } else if (this.automaton.specialMode === 'langton') {
             canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🐜</text></svg>") 10 10, crosshair';
+        } else if (this.automaton.specialMode === 'wireworld') {
+            canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>⚡</text></svg>") 10 10, crosshair';
         } else {
             canvas.style.cursor = this._ctrlPressed
                 ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\'><circle cx=\'8\' cy=\'8\' r=\'6\' fill=\'%23ef4444\' opacity=\'0.8\'/></svg>") 8 8, crosshair'

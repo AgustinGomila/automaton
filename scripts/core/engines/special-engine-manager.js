@@ -41,6 +41,7 @@ class SpecialEngineManager {
         this.triangleEngine = null;
         this.uwEngine = null;
         this.langtonEngine = null;
+        this.wireworldEngine = null;
 
         this._originalRenderer = null;
         this._originalCore = null;
@@ -60,6 +61,7 @@ class SpecialEngineManager {
         this.triangleEngine?.deactivate?.();
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
+        this.wireworldEngine?.deactivate?.();
         this._restoreOriginals();
 
         if (engineName === 'rd2d') {
@@ -89,6 +91,13 @@ class SpecialEngineManager {
             }
             this.langtonEngine = new LangtonEngine(this._buildLangtonContext());
             this.specialMode = 'langton';
+
+        } else if (engineName === 'wireworld') {
+            if (typeof WireWorldEngine === 'undefined') {
+                await this._loadScript('scripts/core/engines/wireworld-engine.js');
+            }
+            this.wireworldEngine = new WireWorldEngine(this._buildWireworldContext());
+            this.specialMode = 'wireworld';
 
         } else if (engineName === 'triangle') {
             if (typeof TriangleGridManager === 'undefined') {
@@ -156,11 +165,13 @@ class SpecialEngineManager {
         this.triangleEngine?.deactivate?.();
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
+        this.wireworldEngine?.deactivate?.();
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
         this.uwEngine = null;
         this.langtonEngine = null;
+        this.wireworldEngine = null;
         this._originalRenderer = null;
         this._originalCore = null;
         this._getRenderer = null;
@@ -307,6 +318,10 @@ class SpecialEngineManager {
                 this.langtonEngine?.reset();
                 return true;
 
+            case 'wireworld':
+                this.wireworldEngine?.reset();
+                return true;
+
             default:
                 return false;
         }
@@ -346,6 +361,11 @@ class SpecialEngineManager {
             return {handled: true, population, resetLimit: false};
         }
 
+        if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+            this.wireworldEngine.randomize(density);
+            return {handled: true, population: null, resetLimit: false};
+        }
+
         return {handled: false};
     }
 
@@ -359,6 +379,7 @@ class SpecialEngineManager {
         this.rd2dEngine?.reset?.();
         this.uwEngine?.reset?.();
         this.langtonEngine?.reset?.();
+        this.wireworldEngine?.reset?.();
     }
 
     /**
@@ -384,6 +405,29 @@ class SpecialEngineManager {
      * Expone: grid, gridSize, renderer, wrapEdges.
      */
     _buildLangtonContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            get wrapEdges() {
+                return automaton.wrapEdges;
+            }
+        };
+    }
+
+    /**
+     * Contexto mínimo para WireWorldEngine.
+     * Expone: grid, gridSize, renderer, wrapEdges.
+     */
+    _buildWireworldContext() {
         const self = this;
         const automaton = self._getAutomaton();
         return {

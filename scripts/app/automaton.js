@@ -260,6 +260,14 @@ class CellularAutomaton {
         this._engineManager.langtonEngine = v;
     }
 
+    get wireworldEngine() {
+        return this._engineManager.wireworldEngine;
+    }
+
+    set wireworldEngine(v) {
+        this._engineManager.wireworldEngine = v;
+    }
+
     get _originalRenderer() {
         return this._engineManager._originalRenderer;
     }
@@ -576,6 +584,15 @@ class CellularAutomaton {
             });
         }
 
+        if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+            return this._stepSpecialEngine({
+                engine: this.wireworldEngine,
+                label: 'WireWorld',
+                t0,
+                getChangedCells: () => this.wireworldEngine.getChangedCells()
+            });
+        }
+
         this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
 
         const tStep = performance.now();
@@ -800,6 +817,11 @@ class CellularAutomaton {
         // Langton mantiene stateGrid + posiciones de hormigas
         if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
             this.langtonEngine.shift(dx, dy);
+        }
+
+        // WireWorld mantiene su propio stateGrid como fuente de verdad
+        if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+            this.wireworldEngine.shift(dx, dy);
         }
 
         // Resetear actividad: las celdas cambiaron de posición, el estado amarillo

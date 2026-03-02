@@ -465,10 +465,15 @@ class GridRenderer {
             for (let y = 0; y < size; y++) {
                 if (predicate(x, y)) {
                     const cellIndex = x * size + y;
+                    const customColor = this._colorProvider?.(cellIndex);
                     const isRecentlyActive = this._activityAges[cellIndex] < this._activityCooldown;
 
-                    this.ctx.fillStyle = (isRecentlyActive && this.config.showActivityEffect)
-                        ? '#b9b610' : '#059669';
+                    if (customColor) {
+                        this.ctx.fillStyle = customColor;
+                    } else {
+                        this.ctx.fillStyle = (isRecentlyActive && this.config.showActivityEffect)
+                            ? '#b9b610' : '#059669';
+                    }
 
                     if (cellSize <= 2) {
                         this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);

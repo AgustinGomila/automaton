@@ -93,6 +93,21 @@ class DisplayController {
             return;
         }
 
+        // === MODO WIREWORLD ===
+        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+            const wrap = this.automaton.wrapEdges ? '∞' : '■';
+            this._setTitle(t('app.title.wireworld'));
+            this._setH1('fas fa-bolt', t('header.title', {ruleName: 'WireWorld'}));
+            this._setRulesSpecific(`
+                <p><span style="color:#eab308"><i class="fas fa-minus"></i> ${t('wireworld.conductor')}</span> → ${t('wireworld.head_if')}</p>
+                <p><span style="color:#60a5fa"><i class="fas fa-circle"></i> ${t('wireworld.head')}</span> → ${t('wireworld.tail')}</p>
+                <p><span style="color:#f97316"><i class="fas fa-circle"></i> ${t('wireworld.tail')}</span> → ${t('wireworld.conductor')}</p>
+            `);
+            this._setNeighborhoodText(t('wireworld.neighborhood', {wrap}));
+            this.updateNeighborhoodInfo();
+            return;
+        }
+
         // === MODO ULAM-WARBURTON ===
         if (this.automaton.specialMode === 'ulam-warburton' && this.automaton.uwEngine?.isActive) {
             const wrap = this.automaton.wrapEdges ? '∞' : '■';

@@ -824,6 +824,12 @@ h1 i.fa-border-style {
     border-color: var(--primary);
 }
 
+.btn-ww-state.active {
+    background: rgba(234, 179, 8, 0.2);
+    border-color: #eab308;
+    color: #eab308;
+}
+
 .mode-indicator {
     position: fixed;
     bottom: 20px;
@@ -2516,6 +2522,12 @@ h1 i.fa-solid fa-play {
     background: rgba(236, 72, 153, 0.2);
     border: 1px solid #ec4899;
     color: #ec4899;
+}
+
+.mode-indicator.wireworld-mode {
+    background: rgba(234, 179, 8, 0.15);
+    border: 1px solid #eab308;
+    color: #eab308;
 }
 
 /* Selector de modo triangular */

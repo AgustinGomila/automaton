@@ -508,6 +508,30 @@
                                 </div>
                             </div>
 
+                            <!-- Sub-acordeón: WireWorld -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="wireworld">
+                                    <i class="fas fa-bolt"></i>
+                                    <span data-i18n="wireworld.title">WireWorld</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 10px;">
+                                        <input type="checkbox" id="wireworldToggle" class="toggle-checkbox">
+                                        <label for="wireworldToggle" class="toggle-label">
+                                            <span data-i18n="wireworld.enable">Activar WireWorld</span>
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </div>
+
+                                    <div id="wireworldControls" class="accordion-group--engine-controls" style="opacity:0.5; pointer-events:none;">
+                                    </div>
+
+                                    <p style="font-size: 0.8rem; color: var(--gray-text); margin: 4px 0 0;"
+                                       data-i18n="wireworld.description">4 estados: vacío, conductor, cabeza y cola de electrón</p>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
 

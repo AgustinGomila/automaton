@@ -82,6 +82,19 @@ class SpecialModeController {
             });
         }
 
+        // Toggle WireWorld
+        const wireworldToggle = document.getElementById('wireworldToggle');
+        if (wireworldToggle) {
+            this._addEventListener(wireworldToggle, 'change', () => {
+                if (wireworldToggle.checked) {
+                    this._deactivateOtherModes('wireworld');
+                    this.activateWireworldMode();
+                } else {
+                    this.deactivateWireworldMode();
+                }
+            });
+        }
+
         // Regla Langton (input text)
         const langtonRuleInput = document.getElementById('langtonRule');
         if (langtonRuleInput) {
@@ -533,6 +546,48 @@ class SpecialModeController {
         this._onSyncPlayButton();
     }
 
+    async activateWireworldMode() {
+        try {
+            this._stopIfRunning();
+            await this.automaton._initSpecialEngine('wireworld');
+
+            document.getElementById('ruleSelector').disabled = true;
+
+            this.automaton.wireworldEngine.activate();
+            this.automaton.renderer.resizeCanvas();
+            this.automaton.renderer.reGrid();
+            this.automaton.render();
+
+            this._onUpdateHeader();
+            this._updateModeIndicator('wireworld');
+            this._toggleWireworldControls(true);
+            this._onShowNotification(t('notif.wireworld.enabled'), 'info', 2000);
+            eventBus.emit('automaton:modeChanged', {mode: 'wireworld'});
+            this._onSyncPlayButton();
+        } catch (error) {
+            console.error('Error cargando WireWorldEngine:', error);
+            this._onShowNotification(t('notif.wireworld.error'), 'warning', 3000);
+        }
+    }
+
+    deactivateWireworldMode() {
+        this._stopIfRunning();
+
+        document.getElementById('ruleSelector').disabled = false;
+
+        this.automaton.wireworldEngine?.deactivate();
+        this.automaton.specialMode = null;
+        this.automaton.renderer.reGrid();
+        this.automaton.render();
+
+        this._toggleWireworldControls(false);
+        this._updateModeIndicator('standard');
+        this._onUpdateHeader();
+        this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
+        eventBus.emit('automaton:modeChanged', {mode: 'standard'});
+        this._onSyncPlayButton();
+    }
+
     async activateUWMode() {
         try {
             this._stopIfRunning();
@@ -598,6 +653,9 @@ class SpecialModeController {
             const antLabel = info.antCount > 0 ? `×${info.antCount}` : 'custom';
             indicator.className = 'mode-indicator langton-mode';
             indicator.innerHTML = `<i class="fas fa-bug"></i> Langton "${info.rule}" ${antLabel}`;
+        } else if (mode === 'wireworld') {
+            indicator.className = 'mode-indicator wireworld-mode';
+            indicator.innerHTML = `<i class="fas fa-bolt"></i> WireWorld`;
         } else if (mode === 'ulam-warburton') {
             indicator.className = 'mode-indicator uw-mode';
             indicator.innerHTML = `<i class="fas fa-snowflake"></i> Ulam-Warburton`;
@@ -609,6 +667,14 @@ class SpecialModeController {
 
     _toggleLangtonControls(show) {
         const el = document.getElementById('langtonControls');
+        if (!el) return;
+        el.classList.toggle('active', show);
+        el.style.opacity = show ? '1' : '0.5';
+        el.style.pointerEvents = show ? 'all' : 'none';
+    }
+
+    _toggleWireworldControls(show) {
+        const el = document.getElementById('wireworldControls');
         if (!el) return;
         el.classList.toggle('active', show);
         el.style.opacity = show ? '1' : '0.5';
@@ -710,6 +776,14 @@ class SpecialModeController {
                 toggle.checked = false;
                 this._toggleLangtonControls(false);
                 this.automaton.langtonEngine?.deactivate();
+            }
+        }
+        if (activeMode !== 'wireworld') {
+            const toggle = document.getElementById('wireworldToggle');
+            if (toggle?.checked) {
+                toggle.checked = false;
+                this._toggleWireworldControls(false);
+                this.automaton.wireworldEngine?.deactivate();
             }
         }
     }
