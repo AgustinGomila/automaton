@@ -689,6 +689,12 @@ class UIController {
     }
 
     exportPattern() {
+        // WireWorld: exportar en formato MCL (preserva los 4 estados)
+        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+            this._exportMCL();
+            return;
+        }
+
         const sel = this._canvasController?.selection;
         const bounds = sel ? {
             minX: Math.min(sel.startX, sel.endX),
@@ -727,10 +733,36 @@ class UIController {
         alert(t('notif.pattern.exported'));
     }
 
+    _exportMCL() {
+        const state = this.automaton.exportWireworldState();
+        if (!state) {
+            alert(t('notif.pattern.empty'));
+            return;
+        }
+
+        const codec = new MCLCodec();
+        const mclText = codec.encode(state);
+        if (!mclText) {
+            alert(t('notif.pattern.empty'));
+            return;
+        }
+
+        const blob = new Blob([mclText], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `wireworld-${Date.now()}.mcl`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        alert(t('notif.pattern.exported'));
+    }
+
     importPatternFromFile() {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.rle,.json';
+        input.accept = '.rle,.json,.mcl';
         input.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -739,6 +771,12 @@ class UIController {
             reader.onload = (ev) => {
                 try {
                     const text = ev.target.result;
+                    // Detectar formato MCL primero (tiene su propia firma)
+                    if (MCLCodec.isFormat(text)) {
+                        this._importMCL(text, file.name);
+                        return;
+                    }
+
                     const format = RLECodec.detectFormat(text);
                     let patternData;
 
@@ -770,6 +808,44 @@ class UIController {
             reader.readAsText(file);
         };
         input.click();
+    }
+
+    _importMCL(text, filename) {
+        try {
+            const codec = new MCLCodec();
+            const decoded = codec.decode(text);
+
+            // Si WireWorld ya está activo, cargar directamente con estados completos
+            if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+                this.automaton.importWireworldState(decoded.stateGrid, decoded.width, decoded.height);
+                alert(t('notif.pattern.imported'));
+                return;
+            }
+
+            // Si WireWorld no está activo: importar como patrón binario estándar
+            // (conductor=1, resto=0) y avisar al usuario
+            const pattern = [];
+            for (let y = 0; y < decoded.height; y++) {
+                const row = [];
+                for (let x = 0; x < decoded.width; x++) {
+                    row.push((decoded.stateGrid[x]?.[y] ?? 0) > 0 ? 1 : 0);
+                }
+                pattern.push(row);
+            }
+            const patternData = {
+                pattern,
+                name: decoded.name || filename.replace(/\.mcl$/i, ''),
+                description: decoded.description || ''
+            };
+            const center = Math.floor(this.automaton.gridSize / 2);
+            this.automaton.importPattern(patternData, center, center);
+            this.automaton.updateStats();
+            this.automaton.render();
+            alert(t('notif.pattern.importedMCLPartial'));
+        } catch (err) {
+            console.error('Error importando MCL:', err);
+            alert(t('notif.pattern.importError'));
+        }
     }
 
     updateLimitType() {

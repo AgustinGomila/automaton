@@ -92,8 +92,20 @@ class WireWorldEngine {
         if (!this.isActive) return;
         const size = this._ctx.gridSize;
 
+        // Si stateGrid tiene un tamaño distinto al grid actual (puede ocurrir tras
+        // redimensionado del grid), recrearlo en lugar de intentar limpiar columnas
+        // inexistentes, lo que causaría TypeError al llamar .fill() sobre undefined.
+        if (!this.stateGrid || this.stateGrid.length !== size) {
+            this.stateGrid = Array.from({length: size}, () => new Uint8Array(size));
+            this._nextState = Array.from({length: size}, () => new Uint8Array(size));
+        } else {
+            for (let x = 0; x < size; x++) {
+                this.stateGrid[x].fill(0);
+            }
+        }
+
+        // Limpiar grid principal siempre
         for (let x = 0; x < size; x++) {
-            this.stateGrid[x].fill(0);
             this._ctx.grid[x].fill(0);
         }
 

@@ -1058,6 +1058,64 @@ class CellularAutomaton {
         return this.stateManager.exportPattern(bounds);
     }
 
+    /**
+     * Exporta el estado WireWorld completo como objeto { stateGrid, gridSize, name, description }.
+     * stateGrid es columna-mayor: stateGrid[x][y] con estados 0..3.
+     * Devuelve null si WireWorld no está activo.
+     */
+    exportWireworldState(name, description) {
+        if (this.specialMode !== 'wireworld' || !this.wireworldEngine?.isActive) return null;
+        return {
+            stateGrid: this.wireworldEngine.stateGrid,
+            gridSize: this.gridSize,
+            name: name || `WireWorld ${new Date().toLocaleDateString()}`,
+            description: description || 'Exported from cellular automaton',
+            wrap: this.wrapEdges
+        };
+    }
+
+    /**
+     * Importa un stateGrid WireWorld al engine activo.
+     * stateGrid debe ser columna-mayor: stateGrid[x][y] con estados 0..3.
+     * El patrón se centra en el grid.
+     */
+    importWireworldState(stateGrid, patternWidth, patternHeight) {
+        if (this.specialMode !== 'wireworld' || !this.wireworldEngine?.isActive) return false;
+
+        const size = this.gridSize;
+        const offsetX = Math.floor((size - patternWidth) / 2);
+        const offsetY = Math.floor((size - patternHeight) / 2);
+
+        // Recrear stateGrid y _nextState con el tamaño actual del grid.
+        // Evita fallos si stateGrid quedó desajustado respecto a gridSize
+        // (puede ocurrir tras un redimensionado del grid o recreación del engine).
+        this.wireworldEngine.stateGrid = Array.from({length: size}, () => new Uint8Array(size));
+        this.wireworldEngine._nextState = Array.from({length: size}, () => new Uint8Array(size));
+
+        // Limpiar grid principal
+        for (let x = 0; x < size; x++) {
+            this.grid[x].fill(0);
+        }
+
+        // Copiar patrón centrado — solo las celdas dentro del grid
+        for (let px = 0; px < patternWidth; px++) {
+            for (let py = 0; py < patternHeight; py++) {
+                const gx = offsetX + px;
+                const gy = offsetY + py;
+                if (gx < 0 || gx >= size || gy < 0 || gy >= size) continue;
+                const state = stateGrid[px]?.[py] ?? 0;
+                this.wireworldEngine.stateGrid[gx][gy] = state;
+                this.grid[gx][gy] = state > 0 ? 1 : 0;
+            }
+        }
+
+        this.wireworldEngine.generation = 0;
+        this.renderer.markAllDirty();
+        this.updateStats();
+        this.render();
+        return true;
+    }
+
     downloadPattern(filename) {
         return this.stateManager.downloadPattern(filename);
     }
