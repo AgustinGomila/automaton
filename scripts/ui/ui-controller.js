@@ -215,10 +215,6 @@ class UIController {
         if (window.RULES.conway) {
             selector.value = 'conway';
             this._displayController.updateRuleInfo(window.RULES.conway);
-            eventBus.emit('automaton:filterChanged', {
-                mode: 'standard',
-                rule: window.RULES.conway.ruleString
-            });
         }
     }
 

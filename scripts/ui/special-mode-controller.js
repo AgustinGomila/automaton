@@ -510,6 +510,7 @@ class SpecialModeController {
             await this.automaton._initSpecialEngine('langton');
 
             document.getElementById('ruleSelector').disabled = true;
+            document.getElementById('neighborhoodType').disabled = true;
 
             this.automaton.langtonEngine.activate({rule, antCount});
             this.automaton.renderer.resizeCanvas();
@@ -532,6 +533,7 @@ class SpecialModeController {
         this._stopIfRunning();
 
         document.getElementById('ruleSelector').disabled = false;
+        document.getElementById('neighborhoodType').disabled = false;
 
         this.automaton.langtonEngine?.deactivate();
         this.automaton.specialMode = null;
@@ -552,6 +554,11 @@ class SpecialModeController {
             await this.automaton._initSpecialEngine('wireworld');
 
             document.getElementById('ruleSelector').disabled = true;
+            const neighborhoodSelectWW = document.getElementById('neighborhoodType');
+            if (neighborhoodSelectWW) {
+                neighborhoodSelectWW.value = 'moore';
+                neighborhoodSelectWW.disabled = true;
+            }
 
             this.automaton.wireworldEngine.activate();
             this.automaton.renderer.resizeCanvas();
@@ -574,6 +581,11 @@ class SpecialModeController {
         this._stopIfRunning();
 
         document.getElementById('ruleSelector').disabled = false;
+        const neighborhoodSelectWW = document.getElementById('neighborhoodType');
+        if (neighborhoodSelectWW) {
+            neighborhoodSelectWW.disabled = false;
+            neighborhoodSelectWW.value = 'moore';
+        }
 
         this.automaton.wireworldEngine?.deactivate();
         this.automaton.specialMode = null;
@@ -637,7 +649,7 @@ class SpecialModeController {
     }
 
     _updateModeIndicator(mode) {
-        // Notificar cambio de filtro de patrones.
+        // Emitir SIEMPRE, antes del guard del DOM.
         // Modo estándar: rule=null → PatternManager resolverá la regla activa del selector.
         // Modos especiales: rule=null (no aplica filtro B/S).
         eventBus.emit('automaton:filterChanged', {mode, rule: null});
