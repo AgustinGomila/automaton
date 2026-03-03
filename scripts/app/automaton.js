@@ -1021,6 +1021,15 @@ class CellularAutomaton {
                 this.updateStats();
                 this.render();
                 eventBus.emit('automaton:ruleChanged');
+                // WireWorld: las celdas vivas importadas se convierten en Conductores vía syncFromGrid
+            } else if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+                this.wireworldEngine.syncFromGrid();
+                result.changedCells.forEach(cell => {
+                    this.renderer.markDirty(cell.x, cell.y);
+                });
+                this.updateStats();
+                this.renderer.markAllDirty();
+                this.render();
             } else {
                 result.changedCells.forEach(cell => {
                     this.renderer.markDirty(cell.x, cell.y);
