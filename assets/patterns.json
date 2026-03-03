@@ -3,7 +3,8 @@
     "single": {
       "name": "Punto",
       "description": "Celda individual",
-      "category": "básico",
+      "category": "general",
+      "rule": "general",
       "cellCount": 1,
       "color": "#10b981",
       "pattern": [
@@ -13,7 +14,8 @@
     "block": {
       "name": "Bloque",
       "description": "Bloque 2x2 - vida estable",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 4,
       "color": "#3b82f6",
       "pattern": [
@@ -24,7 +26,8 @@
     "beehive": {
       "name": "Colmena",
       "description": "Patrón estable común",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 6,
       "color": "#f59e0b",
       "pattern": [
@@ -36,7 +39,8 @@
     "loaf": {
       "name": "Pan",
       "description": "Patrón estable",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 7,
       "color": "#8b5cf6",
       "pattern": [
@@ -49,7 +53,8 @@
     "boat": {
       "name": "Bote",
       "description": "Patrón estable",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 5,
       "color": "#06b6d4",
       "pattern": [
@@ -61,7 +66,8 @@
     "tub": {
       "name": "Tubo",
       "description": "Patrón estable",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 4,
       "color": "#d406ab",
       "pattern": [
@@ -73,7 +79,8 @@
     "blinker": {
       "name": "Parpadeador",
       "description": "Patrón oscilador periodo 2 (3 células)",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 3,
       "color": "#ef4444",
       "pattern": [
@@ -83,7 +90,8 @@
     "toad": {
       "name": "Sapo",
       "description": "Patrón oscilador periodo 2",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 6,
       "color": "#f50b49",
       "pattern": [
@@ -94,7 +102,8 @@
     "beacon": {
       "name": "Baliza",
       "description": "Patrón oscilador periodo 2",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 8,
       "color": "#10b981",
       "pattern": [
@@ -107,7 +116,8 @@
     "pulsar": {
       "name": "Pulsar",
       "description": "Patrón oscilador periodo 3 (48 células)",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 48,
       "color": "#8b5cf6",
       "pattern": [
@@ -129,7 +139,8 @@
     "pentadecathlon": {
       "name": "Pentadecathlon",
       "description": "Patrón oscilador periodo 15 (22 células)",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 22,
       "color": "#f59e0b",
       "pattern": [
@@ -141,7 +152,8 @@
     "glider": {
       "name": "Planeador",
       "description": "Nave que se mueve diagonalmente",
-      "category": "planeador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 5,
       "color": "#3b82f6",
       "pattern": [
@@ -153,7 +165,8 @@
     "lwss": {
       "name": "Nave Ligera",
       "description": "Lightweight spaceship (nave espacial ligera)",
-      "category": "nave",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 9,
       "color": "#06b6d4",
       "pattern": [
@@ -166,7 +179,8 @@
     "mwss": {
       "name": "Nave Media",
       "description": "Middleweight spaceship (nave espacial media)",
-      "category": "nave",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 11,
       "color": "#8b5cf6",
       "pattern": [
@@ -180,7 +194,8 @@
     "hwss": {
       "name": "Nave Pesada",
       "description": "Heavyweight spaceship (nave espacial pesada)",
-      "category": "nave",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 13,
       "color": "#d406ab",
       "pattern": [
@@ -194,7 +209,8 @@
     "rpentomino": {
       "name": "R-pentominó",
       "description": "Patrón que crece por 1103 generaciones",
-      "category": "metuselah",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 5,
       "color": "#ef4444",
       "pattern": [
@@ -206,7 +222,8 @@
     "diehard": {
       "name": "Diehard",
       "description": "Desaparece después de 130 generaciones",
-      "category": "metuselah",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 8,
       "color": "#f59e0b",
       "pattern": [
@@ -218,7 +235,8 @@
     "acorn": {
       "name": "Bellota",
       "description": "Crece por 5206 generaciones",
-      "category": "metuselah",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 7,
       "color": "#10b981",
       "pattern": [
@@ -230,7 +248,8 @@
     "canoe": {
       "name": "Canoe",
       "description": "---",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 8,
       "color": "#10b981",
       "pattern": [
@@ -244,7 +263,8 @@
     "cloverleaf": {
       "name": "Cloverleaf",
       "description": "---",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 40,
       "color": "#ef4444",
       "pattern": [
@@ -264,7 +284,8 @@
      "hammerhead": {
       "name": "Hammerhead",
       "description": "Una nave espacial de período ortogonal 4 c/2 con muchos extremos traseros posibles diferentes",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 76,
       "color": "#ef4444",
       "pattern": [
@@ -289,7 +310,8 @@
     "gosperglidergun": {
       "name": "Cañón de Planeadores",
       "description": "Genera planeadores indefinidamente (Gosper Glider Gun)",
-      "category": "generador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 36,
       "color": "#8b5cf6",
       "pattern": [
@@ -307,7 +329,8 @@
     "simkinglide": {
       "name": "Simkin Glider Gun",
       "description": "Generador de planeadores compacto",
-      "category": "generador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 21,
       "color": "#f59e0b",
       "pattern": [
@@ -337,7 +360,8 @@
     "gospergliderguneater": {
       "name": "Cañón de Planeadores con Devorador",
       "description": "Genera planeadores indefinidamente (Gosper Glider Gun)",
-      "category": "generador",
+      "category": "standard",
+      "rule": "B3S23",
       "cellCount": 46,
       "color": "#5c8df6",
       "pattern": [
@@ -371,7 +395,8 @@
     "pattern1": {
       "name": "KI",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 8,
       "color": "#0666d4",
       "pattern": [
@@ -382,7 +407,8 @@
     "pattern2": {
       "name": "KII",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 7,
       "color": "#8b5cf6",
       "pattern": [
@@ -394,7 +420,8 @@
     "pattern3": {
       "name": "KIII",
       "description": "Cruz simple de 5 células",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 5,
       "color": "#f5bb0b",
       "pattern": [
@@ -406,7 +433,8 @@
     "pattern4": {
       "name": "KIV",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 8,
       "color": "#f59e0b",
       "pattern": [
@@ -419,7 +447,8 @@
     "pattern5": {
       "name": "KV",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 9,
       "color": "#d45506",
       "pattern": [
@@ -431,7 +460,8 @@
     "pattern6": {
       "name": "KVI",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 10,
       "color": "#06b6d4",
       "pattern": [
@@ -444,7 +474,8 @@
     "pattern7": {
       "name": "KVII",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 14,
       "color": "#3b82f6",
       "pattern": [
@@ -457,7 +488,8 @@
     "pattern8": {
       "name": "KVIII",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 10,
       "color": "#ef4444",
       "pattern": [
@@ -470,7 +502,8 @@
     "pattern9": {
       "name": "KIX",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 11,
       "color": "#f50b49",
       "pattern": [
@@ -483,7 +516,8 @@
     "pattern10": {
       "name": "KX",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 12,
       "color": "#3b82f6",
       "pattern": [
@@ -497,7 +531,8 @@
     "pattern11": {
       "name": "KXI",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 16,
       "color": "#f5bb0b",
       "pattern": [
@@ -511,7 +546,8 @@
     "pattern12": {
       "name": "KXII",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 10,
       "color": "#63d406",
       "pattern": [
@@ -526,7 +562,8 @@
     "pattern13": {
       "name": "KXIII",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 32,
       "color": "#10b981",
       "pattern": [
@@ -542,7 +579,8 @@
     "pattern14": {
       "name": "KXIV",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 26,
       "color": "#d4069a",
       "pattern": [
@@ -558,7 +596,8 @@
     "pattern15": {
       "name": "KXV",
       "description": "Patrón oscilador para reglas de Kauffman",
-      "category": "oscilador",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 36,
       "color": "#d44e06",
       "pattern": [
@@ -575,7 +614,8 @@
     "pattern16": {
       "name": "KXVI",
       "description": "Patrón de vida estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 38,
       "color": "#d4b906",
       "pattern": [
@@ -593,7 +633,8 @@
     "pattern17": {
       "name": "KXVII",
       "description": "Patrón de vida estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 44,
       "color": "#0636d4",
       "pattern": [
@@ -611,7 +652,8 @@
     "pattern18": {
       "name": "KXVIII",
       "description": "Patrón de vida estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 42,
       "color": "#d406ab",
       "pattern": [
@@ -629,7 +671,8 @@
     "pattern19": {
       "name": "KXIX",
       "description": "Patrón de vida estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 50,
       "color": "#06d42f",
       "pattern": [
@@ -648,7 +691,8 @@
     "pattern20": {
       "name": "KXX",
       "description": "Patrón de vida estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 10,
       "color": "#b981ff",
       "pattern": [
@@ -662,7 +706,8 @@
     "pattern21": {
       "name": "KXXI",
       "description": "Patrón de vida estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 78,
       "color": "#f59e0b",
       "pattern": [
@@ -682,7 +727,8 @@
     "highlife_replicator": {
       "name": "HighLife Replicator",
       "description": "Patrón replicador mitótico para reglas HighLife",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B36S23",
       "cellCount": 12,
       "color": "#3b82f6",
       "pattern": [
@@ -696,7 +742,8 @@
     "K17": {
       "name": "K20",
       "description": "Patrón estable para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 20,
       "color": "#d406ab",
       "pattern": [
@@ -712,7 +759,8 @@
     "diagonal_K": {
       "name": "Kauffman Diagonal",
       "description": "Patrón diagonal para reglas de Kauffman",
-      "category": "vida estable",
+      "category": "standard",
+      "rule": "B37S4567",
       "cellCount": 244,
       "color": "#8b5cf6",
       "pattern": [
@@ -744,7 +792,8 @@
       "diagonal_K2": {
         "name": "Kauffman Diagonal II",
         "description": "Patrón diagonal para reglas de Kauffman",
-        "category": "vida estable",
+        "category": "standard",
+        "rule": "B37S4567",
         "cellCount": 98,
         "color": "#8b5cf6",
         "pattern": [
@@ -768,7 +817,8 @@
       "K85": {
         "name": "Kauffman K85",
         "description": "Patrón periódico para reglas de Kauffman",
-        "category": "vida estable",
+        "category": "standard",
+        "rule": "B37S4567",
         "cellCount": 85,
         "color": "#f59e0b",
         "pattern": [
@@ -790,7 +840,8 @@
     "K43": {
         "name": "Kauffman K43",
         "description": "Patrón periódico para reglas de Kauffman",
-        "category": "vida estable",
+        "category": "standard",
+        "rule": "B37S4567",
         "cellCount": 43,
         "color": "#ef4444",
         "pattern": [
@@ -806,7 +857,8 @@
     "K25": {
         "name": "Kauffman K25",
         "description": "Patrón periódico para reglas de Kauffman",
-        "category": "vida estable",
+        "category": "standard",
+        "rule": "B37S4567",
         "cellCount": 25,
         "color": "#5c8df6",
         "pattern": [
@@ -822,7 +874,8 @@
     "K62": {
         "name": "Kauffman K62",
         "description": "Patrón periódico para reglas de Kauffman",
-        "category": "vida estable",
+        "category": "standard",
+        "rule": "B37S4567",
         "cellCount": 62,
         "color": "#8b5cf6",
         "pattern": [
@@ -842,7 +895,8 @@
     "K106": {
         "name": "Kauffman K106",
         "description": "Patrón periódico para reglas de Kauffman",
-        "category": "vida estable",
+        "category": "standard",
+        "rule": "B37S4567",
         "cellCount": 106,
         "color": "#d406ab",
         "pattern": [
@@ -866,7 +920,8 @@
     "circle": {
       "name": "Círculo",
       "description": "Patrón circular",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 56,
       "color": "#ef4444",
       "pattern": [
@@ -896,7 +951,8 @@
     "hexagon": {
       "name": "Hexágono",
       "description": "Patrón hexagonal",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 56,
       "color": "#f59e0b",
       "pattern": [
@@ -926,7 +982,8 @@
     "square": {
       "name": "Rectángulo",
       "description": "Patrón rectangular",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 80,
       "color": "#b981ff",
       "pattern": [
@@ -956,7 +1013,8 @@
     "rombus": {
       "name": "Rombo",
       "description": "Patrón romboidal",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 40,
       "color": "#06d42f",
       "pattern": [
@@ -986,7 +1044,8 @@
     "pentangle": {
       "name": "Pentágono",
       "description": "Patrón pentagonal",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 56,
       "color": "#d44e06",
       "pattern": [
@@ -1016,7 +1075,8 @@
     "triangle": {
       "name": "Triángulo",
       "description": "Patrón triangular",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 60,
       "color": "#8b5cf6",
       "pattern": [
@@ -1046,7 +1106,8 @@
     "triangle_2": {
       "name": "Triángulo II",
       "description": "Patrón triangular II",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 40,
       "color": "#f59e0b",
       "pattern": [
@@ -1066,7 +1127,8 @@
     "triangle_3": {
       "name": "Triángulo III",
       "description": "Patrón triangular III",
-      "category": "geometric-figure",
+      "category": "rd2d",
+      "rule": "general",
       "cellCount": 60,
       "color": "#d45506",
       "pattern": [
@@ -1096,7 +1158,8 @@
     "gate_and": {
       "name": "Gate AND",
       "description": "Compuerta AND",
-      "category": "wireworld_gates",
+      "category": "wireworld",
+      "rule": "general",
       "cellCount": 43,
       "color": "#d45506",
       "pattern": [
@@ -1114,7 +1177,8 @@
      "gate_not": {
       "name": "Gate NOT",
       "description": "Compuerta NOT",
-      "category": "wireworld_gates",
+      "category": "wireworld",
+      "rule": "general",
       "cellCount": 39,
       "color": "#d45506",
       "pattern": [
@@ -1131,7 +1195,8 @@
     "gate_or": {
       "name": "Gate OR",
       "description": "Compuerta OR",
-      "category": "wireworld_gates",
+      "category": "wireworld",
+      "rule": "general",
       "cellCount": 22,
       "color": "#d45506",
       "pattern": [
@@ -1151,7 +1216,8 @@
     "gate_xor": {
       "name": "Gate XOR",
       "description": "Compuerta XOR",
-      "category": "wireworld_gates",
+      "category": "wireworld",
+      "rule": "general",
       "cellCount": 27,
       "color": "#d45506",
       "pattern": [
@@ -1171,7 +1237,8 @@
     "gate_nand": {
       "name": "Gate NAND",
       "description": "Compuerta NAND",
-      "category": "wireworld_gates",
+      "category": "wireworld",
+      "rule": "general",
       "cellCount": 78,
       "color": "#d45506",
       "pattern": [
@@ -1191,7 +1258,8 @@
     "random": {
       "name": "Aleatorio",
       "description": "Patrón aleatorio con densidad ~35%",
-      "category": "especial",
+      "category": "general",
+      "rule": "general",
       "cellCount": 0,
       "color": "#8b5cf6",
       "pattern": "random"

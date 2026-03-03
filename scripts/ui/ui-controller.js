@@ -10,6 +10,7 @@ class UIController {
         this.patternsTwoRows = true;
         this.patternsCompactView = true;
         this.patternsSortByCount = false;
+        this.patternsShowAll = false;
 
         this._gridSizeDebounceTimer = null;
         this._gridSizePendingValue = null;
@@ -214,6 +215,10 @@ class UIController {
         if (window.RULES.conway) {
             selector.value = 'conway';
             this._displayController.updateRuleInfo(window.RULES.conway);
+            eventBus.emit('automaton:filterChanged', {
+                mode: 'standard',
+                rule: window.RULES.conway.ruleString
+            });
         }
     }
 
@@ -813,6 +818,10 @@ class UIController {
             if (window.RULES?.[selector.value]) {
                 this.automaton.setRule(window.RULES[selector.value].survival, window.RULES[selector.value].birth);
                 this._displayController.updateHeaderInfo();
+                eventBus.emit('automaton:filterChanged', {
+                    mode: 'standard',
+                    rule: window.RULES[selector.value].ruleString
+                });
             }
         }
     }
@@ -838,6 +847,10 @@ class UIController {
 
                 // ACTUALIZAR EL HEADER INMEDIATAMENTE
                 this._displayController.updateRuleInfo(window.RULES.custom);
+                eventBus.emit('automaton:filterChanged', {
+                    mode: 'standard',
+                    rule: window.RULES.custom.ruleString
+                });
 
                 console.debug(`✅ Regla personalizada aplicada: ${window.RULES.custom.ruleString}`);
             }
@@ -988,6 +1001,15 @@ class UIController {
             });
             window.patternManager.renderPatterns(false);
             toggleSortBtn.querySelector('i')?.classList.add('fa-sort-alpha-down');
+        }
+
+        const showAllBtn = document.getElementById('patternsShowAll');
+        if (showAllBtn && window.patternManager) {
+            this._addEventListener(showAllBtn, 'click', () => {
+                this.patternsShowAll = !this.patternsShowAll;
+                showAllBtn.classList.toggle('active', this.patternsShowAll);
+                window.patternManager.setShowAll(this.patternsShowAll);
+            });
         }
     }
 

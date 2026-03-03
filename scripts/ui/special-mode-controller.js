@@ -637,6 +637,11 @@ class SpecialModeController {
     }
 
     _updateModeIndicator(mode) {
+        // Notificar cambio de filtro de patrones.
+        // Modo estándar: rule=null → PatternManager resolverá la regla activa del selector.
+        // Modos especiales: rule=null (no aplica filtro B/S).
+        eventBus.emit('automaton:filterChanged', {mode, rule: null});
+
         const indicator = document.getElementById('modeIndicator');
         if (!indicator) return;
 

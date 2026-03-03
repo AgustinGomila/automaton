@@ -9,6 +9,12 @@ class PatternManager {
         // referencia compartida con UIController via setPatternState().
         this._patternState = {pattern: null, key: null, rotation: 0};
 
+        // Filtro activo: { mode, rule }
+        // mode: 'standard' | 'wireworld' | 'rd2d' | 'wolfram' | 'langton' | 'ulam-warburton' | 'triangle'
+        // rule: cadena B/S normalizada (sin slashes) | null = sin restricción de regla
+        this._filter = {mode: 'standard', rule: null};
+        this._showAll = false;
+
         this._init();
     }
 
@@ -47,8 +53,73 @@ class PatternManager {
             }),
             eventBus.on('pattern:rotationChanged', () => {
                 this._updatePatternInfo();
+            }),
+            eventBus.on('automaton:filterChanged', ({mode, rule}) => {
+                this.setFilter(mode, rule);
             })
         );
+    }
+
+    // =========================================
+    // FILTRADO POR CATEGORÍA / REGLA
+    // =========================================
+
+    /**
+     * Actualiza el filtro activo y vuelve a renderizar la lista.
+     * Si rule es null intenta resolverlo desde el selector de regla activo.
+     * @param {string} mode  — 'standard' | 'wireworld' | 'rd2d' | ...
+     * @param {string|null} rule — cadena B/S (ej. 'B3/S23') o null
+     */
+    setFilter(mode, rule) {
+        const resolvedRule = rule !== null ? this._normalizeRule(rule) : this._resolveCurrentRule();
+        this._filter = {mode, rule: resolvedRule};
+        this.renderPatterns(this._sortByCount);
+    }
+
+    /**
+     * Activa/desactiva el modo "mostrar todos".
+     * @param {boolean} showAll
+     */
+    setShowAll(showAll) {
+        this._showAll = showAll;
+        this.renderPatterns(this._sortByCount);
+    }
+
+    /** Lee la regla actualmente seleccionada en el ruleSelector. */
+    _resolveCurrentRule() {
+        const selector = document.getElementById('ruleSelector');
+        if (!selector) return null;
+        const ruleString = window.RULES?.[selector.value]?.ruleString;
+        return ruleString ? this._normalizeRule(ruleString) : null;
+    }
+
+    /** Normaliza una cadena B/S quitando slashes y poniendo mayúsculas. 'B3/S23' → 'B3S23' */
+    _normalizeRule(ruleString) {
+        if (!ruleString) return null;
+        return ruleString.replace(/\//g, '').toUpperCase();
+    }
+
+    /**
+     * Decide si un patrón debe mostrarse según el filtro activo.
+     *  - Sin category, o category === 'general'  → siempre visible
+     *  - category no coincide con mode           → oculto
+     *  - category coincide:
+     *      • sin rule en patrón / rule==='general' → visible para todas las reglas
+     *      • rule coincide con filtro activo      → visible
+     *      • otro                                 → oculto
+     */
+    _isPatternVisible(pattern) {
+        if (this._showAll) return true;
+
+        const cat = pattern.category;
+        if (!cat || cat === 'general') return true;
+        if (cat !== this._filter.mode) return false;
+
+        const patRule = pattern.rule;
+        if (!patRule || patRule === 'general') return true;
+        if (!this._filter.rule) return true;
+
+        return this._normalizeRule(patRule) === this._filter.rule;
     }
 
     // =========================================
@@ -56,6 +127,7 @@ class PatternManager {
     // =========================================
 
     renderPatterns(sortByCount = false) {
+        this._sortByCount = sortByCount; // recordar para re-renders del filtro
         const container = document.getElementById('patternsContainer');
         if (!container) return;
 
@@ -84,6 +156,9 @@ class PatternManager {
 
         sortedPatterns.forEach(key => {
             const pattern = PATTERNS[key];
+
+            // Aplicar filtro de categoría/regla
+            if (!this._isPatternVisible(pattern)) return;
             const patternBtn = document.createElement('button');
             patternBtn.className = 'pattern-btn-horizontal';
             patternBtn.dataset.patternKey = key;
@@ -480,7 +555,8 @@ const defaultPatterns = {
     single: {
         name: "Punto",
         description: "Celda individual",
-        category: "básico",
+        category: "general",
+        rule: "general",
         cellCount: 1,
         color: "#10b981",
         pattern: [[1]]
@@ -488,7 +564,8 @@ const defaultPatterns = {
     block: {
         name: "Bloque",
         description: "Bloque 2x2 - vida estable",
-        category: "vida estable",
+        category: "general",
+        rule: "general",
         cellCount: 4,
         color: "#3b82f6",
         pattern: [
@@ -500,7 +577,8 @@ const defaultPatterns = {
     random: {
         name: "Aleatorio",
         description: "Patrón aleatorio con densidad ~35%",
-        category: "especial",
+        category: "general",
+        rule: "general",
         cellCount: 0, // No aplica
         color: "#8b5cf6",
         pattern: "random"
