@@ -41,6 +41,15 @@ class PatternManager {
             console.warn('PATTERNS no cargado, usando fallback');
             window.PATTERNS = defaultPatterns; // mínimo viable
         }
+
+        // Pre-inicializar el filtro de regla desde window.RULES antes del primer render.
+        // PatternManager se crea antes que UIController, así que el selector aún no está
+        // poblado, pero window.RULES ya está cargado (paso 1 de main.js).
+        // Sin esto, _filter.rule=null y se muestran todos los patrones standard en el arranque.
+        if (window.RULES?.conway) {
+            this._filter.rule = this._normalizeRule(window.RULES.conway.ruleString);
+        }
+
         this.renderPatterns();
 
         // Suscribirse SOLO a eventos de COMANDO (no a eventos de notificación)
