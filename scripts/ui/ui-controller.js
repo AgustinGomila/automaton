@@ -1103,6 +1103,17 @@ class UIController {
                 showAllBtn.classList.toggle('active', this.patternsShowAll);
                 window.patternManager.setShowAll(this.patternsShowAll);
             });
+
+            // Al cambiar de modo el filtro se resetea — apagar el botón si estaba activo
+            this._cleanups.push(
+                eventBus.on('automaton:filterChanged', () => {
+                    if (this.patternsShowAll) {
+                        this.patternsShowAll = false;
+                        showAllBtn.classList.remove('active');
+                        window.patternManager.setShowAll(false);
+                    }
+                })
+            );
         }
     }
 

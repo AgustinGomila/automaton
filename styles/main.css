@@ -399,6 +399,13 @@ canvas {
     color: var(--primary);
 }
 
+.btn-toggle.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
 /* Controles de aleatoriedad */
 .random-control {
     display: flex;
