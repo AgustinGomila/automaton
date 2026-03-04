@@ -272,7 +272,7 @@ class UIController {
                 this.automaton._markAllDirty();
                 this.automaton.render();
                 this._displayController.updateNeighborhoodInfo();
-                if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine) {
+                if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine) {
                     this.automaton.triangleEngine.wrapEdges = wrap;
                 }
                 eventBus.emit('automaton:wrapChanged', {wrap});
@@ -505,14 +505,18 @@ class UIController {
         }
     }
 
-    clear() {
-        const wasRunning = this.automaton.isRunning;
+    /**
+     * Detiene la simulación y emite el evento de cambio de estado.
+     * Patrón común siempre que la UI necesita forzar la parada.
+     */
+    _stopAutomaton() {
+        this.automaton.stop();
+        this.automaton.isRunning = false;
+        eventBus.emit('automaton:runningChanged', {isRunning: false});
+    }
 
-        if (wasRunning) {
-            this.automaton.stop();
-            this.automaton.isRunning = false;
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
-        }
+    clear() {
+        if (this.automaton.isRunning) this._stopAutomaton();
 
         this.automaton.clear();
         this._syncPlayButtonState();
@@ -609,9 +613,7 @@ class UIController {
 
         // Detener si está corriendo (sin confirmar, forzar)
         if (this.automaton.isRunning) {
-            this.automaton.stop();
-            this.automaton.isRunning = false;
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            this._stopAutomaton();
             this._syncPlayButtonState();
         }
 
@@ -690,7 +692,7 @@ class UIController {
 
     exportPattern() {
         // WireWorld: exportar en formato MCL (preserva los 4 estados)
-        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
             this._exportMCL();
             return;
         }
@@ -835,7 +837,7 @@ class UIController {
             this.automaton.clear();
 
             // Si WireWorld ya está activo, cargar directamente con estados completos
-            if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+            if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
                 this.automaton.importWireworldState(decoded.stateGrid, decoded.width, decoded.height);
                 this._showNotification(t('notif.pattern.imported'), 'info', 2000);
                 return;
@@ -910,7 +912,7 @@ class UIController {
                 this.automaton.setRule(window.RULES[selector.value].survival, window.RULES[selector.value].birth);
                 this._displayController.updateHeaderInfo();
                 eventBus.emit('automaton:filterChanged', {
-                    mode: 'standard',
+                    mode: SpecialEngineManager.MODES.STANDARD,
                     rule: window.RULES[selector.value].ruleString
                 });
             }
@@ -939,7 +941,7 @@ class UIController {
                 // ACTUALIZAR EL HEADER INMEDIATAMENTE
                 this._displayController.updateRuleInfo(window.RULES.custom);
                 eventBus.emit('automaton:filterChanged', {
-                    mode: 'standard',
+                    mode: SpecialEngineManager.MODES.STANDARD,
                     rule: window.RULES.custom.ruleString
                 });
 

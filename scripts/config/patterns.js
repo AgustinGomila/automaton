@@ -12,7 +12,7 @@ class PatternManager {
         // Filtro activo: { mode, rule }
         // mode: 'standard' | 'wireworld' | 'rd2d' | 'wolfram' | 'langton' | 'ulam-warburton' | 'triangle'
         // rule: cadena B/S normalizada (sin slashes) | null = sin restricción de regla
-        this._filter = {mode: 'standard', rule: null};
+        this._filter = {mode: SpecialEngineManager.MODES.STANDARD, rule: null};
         this._showAll = false;
 
         this._init();

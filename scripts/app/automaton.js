@@ -494,6 +494,95 @@ class CellularAutomaton {
         this._workerManager.cleanup();
     }
 
+    /**
+     * Detiene la simulación y limpia el worker antes de una operación de edición.
+     * Versión síncrona: limpia el worker inmediatamente sin esperar a que termine.
+     * @returns {boolean} wasRunning — true si la simulación estaba corriendo
+     */
+    _haltForEdit() {
+        const wasRunning = this.isRunning;
+        this.stop();
+        if (this.isWorkerProcessing) {
+            this._cleanupWorker();
+        }
+        return wasRunning;
+    }
+
+    /**
+     * Detiene la simulación y espera a que el worker termine antes de limpiar.
+     * Versión asíncrona: necesaria cuando la operación siguiente modifica el grid
+     * y no puede ejecutarse mientras el worker está procesando.
+     * @returns {Promise<boolean>} wasRunning — true si la simulación estaba corriendo
+     */
+    async _haltForEditAsync() {
+        const wasRunning = this.isRunning;
+        this.stop();
+        if (this.isWorkerProcessing) {
+            await new Promise(resolve => {
+                const check = () => this.isWorkerProcessing ? setTimeout(check, 10) : resolve();
+                check();
+            });
+            this._cleanupWorker();
+        }
+        return wasRunning;
+    }
+
+    /**
+     * Reanuda la simulación si estaba corriendo antes de una edición.
+     * Patrón común al final de pasteArea, clearPatternCells, clearArea e importPattern.
+     * @param {boolean} wasRunning
+     */
+    _restartIfWasRunning(wasRunning) {
+        if (wasRunning) {
+            requestAnimationFrame(() => {
+                this.isRunning = true;
+                this.start();
+            });
+        }
+    }
+
+    /**
+     * Aplica el resultado de undo/redo al estado del autómata.
+     * Patrón común entre undo() y redo().
+     * @param {Object} result     — objeto devuelto por stateManager.undo/redo
+     * @param {string} eventName  — 'automaton:undo' | 'automaton:redo'
+     * @returns {boolean}
+     */
+    _applyHistoryStep(result, eventName) {
+        if (!result) return false;
+        this.generation = result.generation;
+        this._engineManager.resetActiveEngine();
+        this.renderer.markAllDirty();
+        this.updateStats();
+        this.render();
+        eventBus.emit(eventName, {generation: this.generation});
+        return true;
+    }
+
+    /**
+     * Propaga al renderer y actualiza el estado tras una edición de celdas.
+     * Patrón común a pasteArea, clearArea e importPattern (rama estándar).
+     *
+     * @param {Array}   changedCells — lista de {x, y} devuelta por stateManager
+     * @param {Object}  [opts]
+     * @param {boolean} [opts.full=true] — si true: copia _prevFlags, llama markAllDirty
+     *   e inicia worker si corresponde. Usar false para ediciones menores (clearPatternCells).
+     */
+    _commitCells(changedCells, {full = true} = {}) {
+        changedCells.forEach(cell => this.renderer.markDirty(cell.x, cell.y));
+        if (full) {
+            this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
+        }
+        this.updateStats();
+        if (full) {
+            this.renderer.markAllDirty();
+        }
+        this.render();
+        if (full && this.gridSize >= this.workerThreshold) {
+            this._initWorker();
+        }
+    }
+
     // =========================================
     // GENERACIÓN
     // =========================================
@@ -843,19 +932,7 @@ class CellularAutomaton {
     }
 
     async pasteArea(area, offsetX, offsetY) {
-        const wasRunning = this.isRunning;
-        if (wasRunning) {
-            this.stop();
-            this.isRunning = false;
-        }
-
-        if (this.isWorkerProcessing) {
-            await new Promise(resolve => {
-                const check = () => this.isWorkerProcessing ? setTimeout(check, 10) : resolve();
-                check();
-            });
-            this._cleanupWorker();
-        }
+        const wasRunning = await this._haltForEditAsync();
 
         const result = this.stateManager.pasteArea(area, offsetX, offsetY, {
             saveToHistory: true,
@@ -863,40 +940,15 @@ class CellularAutomaton {
         });
 
         if (result.changedCells.length > 0) {
-            result.changedCells.forEach(cell => {
-                this.renderer.markDirty(cell.x, cell.y);
-            });
-
-            this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-            this.updateStats();
-            this.renderer.markAllDirty();
-            this.render();
-
-            if (this.gridSize >= this.workerThreshold) {
-                this._initWorker();
-            }
+            this._commitCells(result.changedCells);
         }
 
-        if (wasRunning) {
-            requestAnimationFrame(() => {
-                this.isRunning = true;
-                this.start();
-            });
-        }
-
+        this._restartIfWasRunning(wasRunning);
         return result;
     }
 
     clearPatternCells(area, offsetX, offsetY) {
-        const wasRunning = this.isRunning;
-        if (wasRunning) {
-            this.stop();
-            this.isRunning = false;
-        }
-
-        if (this.isWorkerProcessing) {
-            this._cleanupWorker();
-        }
+        const wasRunning = this._haltForEdit();
 
         const result = this.stateManager.clearPatternCells(area, offsetX, offsetY, {
             saveToHistory: true,
@@ -904,33 +956,15 @@ class CellularAutomaton {
         });
 
         if (result.changedCells.length > 0) {
-            result.changedCells.forEach(cell => {
-                this.renderer.markDirty(cell.x, cell.y);
-            });
-            this.updateStats();
-            this.render();
+            this._commitCells(result.changedCells, {full: false});
         }
 
-        if (wasRunning) {
-            requestAnimationFrame(() => {
-                this.isRunning = true;
-                this.start();
-            });
-        }
-
+        this._restartIfWasRunning(wasRunning);
         return result;
     }
 
     clearArea(minX, minY, maxX, maxY) {
-        const wasRunning = this.isRunning;
-        if (wasRunning) {
-            this.stop();
-            this.isRunning = false;
-        }
-
-        if (this.isWorkerProcessing) {
-            this._cleanupWorker();
-        }
+        const wasRunning = this._haltForEdit();
 
         const result = this.stateManager.clearArea(minX, minY, maxX, maxY, {
             saveToHistory: true,
@@ -938,71 +972,30 @@ class CellularAutomaton {
         });
 
         if (result.changedCells.length > 0) {
-            result.changedCells.forEach(cell => {
-                this.renderer.markDirty(cell.x, cell.y);
-            });
-
             this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-            this.updateStats();
-            this.render();
+            this._commitCells(result.changedCells, {full: false});
         }
 
-        if (wasRunning) {
-            requestAnimationFrame(() => {
-                this.isRunning = true;
-                this.start();
-            });
-        }
-
+        this._restartIfWasRunning(wasRunning);
         return result;
     }
 
     undo() {
-        const result = this.stateManager.undo(this.generation);
-        if (result) {
-            this.generation = result.generation;
-
-            this._engineManager.resetActiveEngine();
-
-            this.renderer.markAllDirty();
-            this.updateStats();
-            this.render();
-            eventBus.emit('automaton:undo', {generation: this.generation});
-            return true;
-        }
-        return false;
+        return this._applyHistoryStep(
+            this.stateManager.undo(this.generation),
+            'automaton:undo'
+        );
     }
 
     redo() {
-        const result = this.stateManager.redo(this.generation);
-        if (result) {
-            this.generation = result.generation;
-
-            this._engineManager.resetActiveEngine();
-
-            this.renderer.markAllDirty();
-            this.updateStats();
-            this.render();
-            eventBus.emit('automaton:redo', {generation: this.generation});
-            return true;
-        }
-        return false;
+        return this._applyHistoryStep(
+            this.stateManager.redo(this.generation),
+            'automaton:redo'
+        );
     }
 
     async importPattern(pattern, centerX, centerY) {
-        const wasRunning = this.isRunning;
-        if (wasRunning) {
-            this.stop();
-            this.isRunning = false;
-        }
-
-        if (this.isWorkerProcessing) {
-            await new Promise(resolve => {
-                const check = () => this.isWorkerProcessing ? setTimeout(check, 10) : resolve();
-                check();
-            });
-            this._cleanupWorker();
-        }
+        const wasRunning = await this._haltForEditAsync();
 
         const result = this.stateManager.importPattern(pattern, centerX, centerY, {
             saveToHistory: true,
@@ -1031,25 +1024,11 @@ class CellularAutomaton {
                 this.renderer.markAllDirty();
                 this.render();
             } else {
-                result.changedCells.forEach(cell => {
-                    this.renderer.markDirty(cell.x, cell.y);
-                });
-                this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-                this.updateStats();
-                this.renderer.markAllDirty();
-                this.render();
-                if (this.gridSize >= this.workerThreshold) {
-                    this._initWorker();
-                }
+                this._commitCells(result.changedCells);
             }
         }
 
-        if (wasRunning) {
-            requestAnimationFrame(() => {
-                this.isRunning = true;
-                this.start();
-            });
-        }
+        this._restartIfWasRunning(wasRunning);
 
         return result;
     }
@@ -1121,10 +1100,7 @@ class CellularAutomaton {
     }
 
     randomize(density = 0.35) {
-        const wasRunning = this.isRunning;
-        this.stop();
-
-        this._cleanupWorker();
+        const wasRunning = this._haltForEdit();
 
         const result = this._engineManager.randomizeActiveEngine(density);
 
@@ -1168,17 +1144,10 @@ class CellularAutomaton {
     }
 
     clear() {
-        const wasRunning = this.isRunning;
-
         // === PASO 1: Detener siempre (común a todos los modos) ===
+        const wasRunning = this._haltForEdit();
         if (wasRunning) {
-            this.stop();
-            this.isRunning = false;
             eventBus.emit('automaton:runningChanged', {isRunning: false});
-        }
-
-        if (this.isWorkerProcessing) {
-            this._cleanupWorker();
         }
 
         // === PASO 2: Limpiar grid del autómata base (siempre) ===

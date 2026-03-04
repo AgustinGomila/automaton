@@ -182,12 +182,14 @@ class SpecialEngineManager {
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
         this.wireworldEngine?.deactivate?.();
+
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
         this.uwEngine = null;
         this.langtonEngine = null;
         this.wireworldEngine = null;
+
         this._originalRenderer = null;
         this._originalCore = null;
         this._getRenderer = null;

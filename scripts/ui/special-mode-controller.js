@@ -95,14 +95,9 @@ class SpecialModeController {
         if (langtonRuleInput) {
             this._addEventListener(langtonRuleInput, 'change', () => {
                 if (this.automaton.langtonEngine?.isActive) {
-                    this._stopIfRunning();
                     const rule = langtonRuleInput.value.toUpperCase().replace(/[^LRNU]/g, '') || 'RL';
                     langtonRuleInput.value = rule;
-                    const antCount = parseInt(document.getElementById('langtonAntCount')?.value) || 0;
-                    this.automaton.langtonEngine.activate({rule, antCount});
-                    this._updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
-                    this._onUpdateHeader();
-                    this._onSyncPlayButton();
+                    this._reactivateLangton(rule);
                 }
             });
         }
@@ -115,12 +110,7 @@ class SpecialModeController {
                 if (input) input.value = rule;
 
                 if (this.automaton.langtonEngine?.isActive) {
-                    this._stopIfRunning();
-                    const antCount = parseInt(document.getElementById('langtonAntCount')?.value) || 0;
-                    this.automaton.langtonEngine.activate({rule, antCount});
-                    this._updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
-                    this._onUpdateHeader();
-                    this._onSyncPlayButton();
+                    this._reactivateLangton(rule);
                 }
             });
         });
@@ -130,13 +120,9 @@ class SpecialModeController {
         if (langtonAntCount) {
             this._addEventListener(langtonAntCount, 'change', () => {
                 if (this.automaton.langtonEngine?.isActive) {
-                    this._stopIfRunning();
                     const rule = document.getElementById('langtonRule')?.value || 'RL';
                     const antCount = parseInt(langtonAntCount.value) || 0;
-                    this.automaton.langtonEngine.activate({rule, antCount});
-                    this._updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
-                    this._onUpdateHeader();
-                    this._onSyncPlayButton();
+                    this._reactivateLangton(rule, antCount);
                 }
             });
         }
@@ -184,11 +170,7 @@ class SpecialModeController {
                 if (display) display.textContent = String(rule);
 
                 if (this.automaton.wolframEngine?.isActive) {
-                    this._stopIfRunning();
-                    const direction = this.automaton.wolframEngine.direction;
-                    this.automaton.wolframEngine.activate(rule, direction);
-                    this._onUpdateHeader();
-                    this._onSyncPlayButton();
+                    this._reactivateWolfram(rule);
                 }
             });
         }
@@ -217,15 +199,8 @@ class SpecialModeController {
                 if (display) display.textContent = rule.toString();
 
                 if (this.automaton.wolframEngine?.isActive) {
-                    this._stopIfRunning();
-                    const direction = this.automaton.wolframEngine.direction;
-                    this.automaton.wolframEngine.activate(rule, direction);
-                    this._onUpdateHeader();
-                    this.automaton.clear();
-                    this.automaton.wolframEngine._initializeSeed();
-                    this.automaton.render();
+                    this._reactivateWolfram(rule, {resetSeed: true});
                     this._onShowNotification(t('notif.rule.enabled', {rule}), 'info', 1500);
-                    this._onSyncPlayButton();
                 }
             });
         });
@@ -239,11 +214,7 @@ class SpecialModeController {
                 if (display) display.textContent = String(rule);
 
                 if (this.automaton.triangleEngine?.isActive) {
-                    this._stopIfRunning();
-                    this.automaton.triangleEngine.activate({rule, wrap: this.automaton.triangleEngine.wrapEdges});
-                    this._updateTwinRuleInfo()
-                    this._onUpdateHeader();
-                    this._onSyncPlayButton();
+                    this._reactivateTriangle(rule);
                 }
             });
         }
@@ -275,14 +246,8 @@ class SpecialModeController {
                 if (display) display.textContent = rule.toString();
 
                 if (this.automaton.triangleEngine?.isActive) {
-                    this._stopIfRunning();
-                    const mode = this.automaton.triangleEngine.neighborhoodMode;
-                    this.automaton.triangleEngine.activate({rule, mode});
-                    this.automaton.triangleEngine.reset();
-                    this.automaton.render();
-                    this._onUpdateHeader();
+                    this._reactivateTriangle(rule, {reset: true});
                     this._onShowNotification(t('notif.rule.enabled', {rule}), 'info', 1500);
-                    this._onSyncPlayButton();
                 }
             });
         });
@@ -301,8 +266,7 @@ class SpecialModeController {
             await this._prepareEngine(SpecialEngineManager.MODES.WOLFRAM);
 
             this._toggleWolframControls(true);
-            document.getElementById('ruleSelector').disabled = true;
-            document.getElementById('neighborhoodType').disabled = true;
+            this._setModeSelectors(true);
 
             this.automaton.wolframEngine.activate(rule, direction);
             this._finalizeActivation(SpecialEngineManager.MODES.WOLFRAM, t('notif.wolfram.enabled', {rule}));
@@ -321,12 +285,7 @@ class SpecialModeController {
             await this._prepareEngine(SpecialEngineManager.MODES.RD2D);
 
             this._toggleRD2DControls(true);
-            document.getElementById('ruleSelector').disabled = true;
-            const neighborhoodSelect = document.getElementById('neighborhoodType');
-            if (neighborhoodSelect) {
-                neighborhoodSelect.value = 'neumann';
-                neighborhoodSelect.disabled = true;
-            }
+            this._setModeSelectors(true, 'neumann');
 
             this.automaton.rd2dEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.RD2D, t('notif.rd2d.enabled'));
@@ -355,8 +314,7 @@ class SpecialModeController {
             }
 
             this._toggleTriangleControls(true);
-            document.getElementById('ruleSelector').disabled = true;
-            document.getElementById('neighborhoodType').disabled = true;
+            this._setModeSelectors(true);
 
             const wrapToggle = document.getElementById('wrapToggle');
             const wrap = wrapToggle ? wrapToggle.checked : true;
@@ -408,8 +366,7 @@ class SpecialModeController {
             await this._prepareEngine(SpecialEngineManager.MODES.LANGTON);
 
             this._toggleLangtonControls(true);
-            document.getElementById('ruleSelector').disabled = true;
-            document.getElementById('neighborhoodType').disabled = true;
+            this._setModeSelectors(true);
 
             this.automaton.langtonEngine.activate({rule, antCount});
             this._finalizeActivation(SpecialEngineManager.MODES.LANGTON, t('notif.langton.enabled'));
@@ -430,12 +387,7 @@ class SpecialModeController {
             await this._prepareEngine(SpecialEngineManager.MODES.WIREWORLD);
 
             this._toggleWireworldControls(true);
-            document.getElementById('ruleSelector').disabled = true;
-            const neighborhoodSelectWW = document.getElementById('neighborhoodType');
-            if (neighborhoodSelectWW) {
-                neighborhoodSelectWW.value = 'moore';
-                neighborhoodSelectWW.disabled = true;
-            }
+            this._setModeSelectors(true, 'moore');
 
             this.automaton.wireworldEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.WIREWORLD, t('notif.wireworld.enabled'));
@@ -455,12 +407,7 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.ULAM_WARBURTON);
 
-            document.getElementById('ruleSelector').disabled = true;
-            const neighborhoodSelect = document.getElementById('neighborhoodType');
-            if (neighborhoodSelect) {
-                neighborhoodSelect.value = 'neumann';
-                neighborhoodSelect.disabled = true;
-            }
+            this._setModeSelectors(true, 'neumann');
 
             this.automaton.uwEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.ULAM_WARBURTON, t('notif.uw.enabled'));
@@ -508,43 +455,41 @@ class SpecialModeController {
         }
     }
 
-    _toggleLangtonControls(show) {
-        const el = document.getElementById('langtonControls');
+    /**
+     * Muestra u oculta un panel de controles de modo especial.
+     * @param {string}  selector   — id del elemento (o selector CSS si cssQuery=true)
+     * @param {boolean} show       — true para activar, false para desactivar
+     * @param {boolean} cssQuery   — true para usar querySelector en lugar de getElementById
+     * @param {boolean} toggleClass — true para aplicar la clase 'active' (default true)
+     */
+    _toggleControls(selector, show, {cssQuery = false, toggleClass = true} = {}) {
+        const el = cssQuery
+            ? document.querySelector(selector)
+            : document.getElementById(selector);
         if (!el) return;
-        el.classList.toggle('active', show);
+        if (toggleClass) el.classList.toggle('active', show);
         el.style.opacity = show ? '1' : '0.5';
         el.style.pointerEvents = show ? 'all' : 'none';
+    }
+
+    _toggleLangtonControls(show) {
+        this._toggleControls('langtonControls', show);
     }
 
     _toggleWireworldControls(show) {
-        const el = document.getElementById('wireworldControls');
-        if (!el) return;
-        el.classList.toggle('active', show);
-        el.style.opacity = show ? '1' : '0.5';
-        el.style.pointerEvents = show ? 'all' : 'none';
+        this._toggleControls('wireworldControls', show);
     }
 
     _toggleWolframControls(show) {
-        const el = document.getElementById('wolframControls');
-        if (!el) return;
-        el.classList.toggle('active', show);
-        el.style.opacity = show ? '1' : '0.5';
-        el.style.pointerEvents = show ? 'all' : 'none';
-    }
-
-    _toggleRD2DControls(show) {
-        const el = document.querySelector('.rd2d-info');
-        if (!el) return;
-        el.style.opacity = show ? '1' : '0.5';
-        el.style.pointerEvents = show ? 'all' : 'none';
+        this._toggleControls('wolframControls', show);
     }
 
     _toggleTriangleControls(show) {
-        const el = document.getElementById('triangleControls');
-        if (!el) return;
-        el.classList.toggle('active', show);
-        el.style.opacity = show ? '1' : '0.5';
-        el.style.pointerEvents = show ? 'all' : 'none';
+        this._toggleControls('triangleControls', show);
+    }
+
+    _toggleRD2DControls(show) {
+        this._toggleControls('.rd2d-info', show, {cssQuery: true, toggleClass: false});
     }
 
     _updateTwinRuleInfo() {
@@ -610,6 +555,22 @@ class SpecialModeController {
     }
 
     /**
+     * Configura ruleSelector y neighborhoodType para la entrada/salida de un modo especial.
+     *
+     * @param {boolean}      disabled      — true al activar un modo, false al volver al estándar
+     * @param {string|null}  neighborhood  — valor a asignar a neighborhoodType ('moore' | 'neumann')
+     *   null → no cambiar el valor, solo aplicar disabled
+     */
+    _setModeSelectors(disabled, neighborhood = null) {
+        document.getElementById('ruleSelector').disabled = disabled;
+        const neighborhoodSelect = document.getElementById('neighborhoodType');
+        if (neighborhoodSelect) {
+            if (neighborhood !== null) neighborhoodSelect.value = neighborhood;
+            neighborhoodSelect.disabled = disabled;
+        }
+    }
+
+    /**
      * Desactiva todos los modos especiales excepto el indicado.
      * Llamada al inicio de cada activateXMode() y deactivateXMode().
      * Cuando exceptMode === 'standard' desactiva absolutamente todos.
@@ -671,12 +632,7 @@ class SpecialModeController {
 
         // Restaurar selectores compartidos al estado neutro.
         // El modo entrante los reconfigurará según sus necesidades.
-        document.getElementById('ruleSelector').disabled = false;
-        const neighborhoodSelect = document.getElementById('neighborhoodType');
-        if (neighborhoodSelect) {
-            neighborhoodSelect.disabled = false;
-            neighborhoodSelect.value = 'moore';
-        }
+        this._setModeSelectors(false, 'moore');
     }
 
     /**
@@ -700,6 +656,60 @@ class SpecialModeController {
             this.automaton.core = this.automaton._originalCore;
             this.automaton._originalCore = null;
         }
+    }
+
+    /**
+     * Reactiva el engine de Langton con la regla/hormigas actuales.
+     * Patrón común al input de regla, presets y contador de hormigas.
+     * @param {string} rule
+     * @param {number} [antCount] — si se omite lee el valor del DOM
+     */
+    _reactivateLangton(rule, antCount = null) {
+        this._stopIfRunning();
+        const count = antCount ?? (parseInt(document.getElementById('langtonAntCount')?.value) || 0);
+        this.automaton.langtonEngine.activate({rule, antCount: count});
+        this._updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
+        this._onUpdateHeader();
+        this._onSyncPlayButton();
+    }
+
+    /**
+     * Reactiva el engine Wolfram con la regla indicada.
+     * @param {number}  rule
+     * @param {Object}  [opts]
+     * @param {boolean} [opts.resetSeed=false] — si true limpia el grid y reinicia la semilla
+     */
+    _reactivateWolfram(rule, {resetSeed = false} = {}) {
+        this._stopIfRunning();
+        const direction = this.automaton.wolframEngine.direction;
+        this.automaton.wolframEngine.activate(rule, direction);
+        if (resetSeed) {
+            this.automaton.clear();
+            this.automaton.wolframEngine._initializeSeed();
+            this.automaton.render();
+        }
+        this._onUpdateHeader();
+        this._onSyncPlayButton();
+    }
+
+    /**
+     * Reactiva el engine Triangle con la regla indicada.
+     * @param {number}  rule
+     * @param {Object}  [opts]
+     * @param {boolean} [opts.reset=false] — si true llama reset() y render() tras activate
+     */
+    _reactivateTriangle(rule, {reset = false} = {}) {
+        this._stopIfRunning();
+        const engine = this.automaton.triangleEngine;
+        const mode = engine.neighborhoodMode;
+        engine.activate({rule, mode, wrap: engine.wrapEdges});
+        if (reset) {
+            engine.reset();
+            this.automaton.render();
+        }
+        this._updateTwinRuleInfo();
+        this._onUpdateHeader();
+        this._onSyncPlayButton();
     }
 
     _stopIfRunning() {
