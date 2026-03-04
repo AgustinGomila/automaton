@@ -53,7 +53,7 @@ class CellularAutomaton {
             showActivityEffect: true,
             getCell: (x, y) => this.core.getCell(x, y),
             getRD2DState: (x, y) => this.rd2dEngine?.stateGrid?.[x]?.[y],
-            isRD2DActive: () => this.specialMode === 'rd2d' && this.rd2dEngine?.isActive,
+            isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridSize: () => this.gridSize
         });
 
@@ -529,7 +529,7 @@ class CellularAutomaton {
 
         let result;
 
-        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             return this._stepSpecialEngine({
                 engine: this.rd2dEngine,
                 label: 'RD-2D',
@@ -539,7 +539,7 @@ class CellularAutomaton {
             });
         }
 
-        if (this.specialMode === 'wolfram' && this.wolframEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.WOLFRAM && this.wolframEngine?.isActive) {
             return this._stepSpecialEngine({
                 engine: this.wolframEngine,
                 label: 'Wolfram',
@@ -553,7 +553,7 @@ class CellularAutomaton {
             });
         }
 
-        if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             if (!this.triangleEngine.gridManager) return 0;
             return this._stepSpecialEngine({
                 engine: this.triangleEngine,
@@ -565,7 +565,7 @@ class CellularAutomaton {
             });
         }
 
-        if (this.specialMode === 'ulam-warburton' && this.uwEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.ULAM_WARBURTON && this.uwEngine?.isActive) {
             return this._stepSpecialEngine({
                 engine: this.uwEngine,
                 label: 'Ulam-Warburton',
@@ -575,7 +575,7 @@ class CellularAutomaton {
             });
         }
 
-        if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
             return this._stepSpecialEngine({
                 engine: this.langtonEngine,
                 label: 'Langton',
@@ -584,7 +584,7 @@ class CellularAutomaton {
             });
         }
 
-        if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
             return this._stepSpecialEngine({
                 engine: this.wireworldEngine,
                 label: 'WireWorld',
@@ -696,7 +696,7 @@ class CellularAutomaton {
         if (changed) {
             this.renderer.markDirty(x, y);
 
-            if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+            if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
                 if (this.rd2dEngine.stateGrid?.[x]) {
                     if (state) {
                         this.rd2dEngine.stateGrid[x][y] = this.rd2dEngine._inferStateFromNeighbors(x, y) || 15;
@@ -735,14 +735,14 @@ class CellularAutomaton {
         this.core.resize(size);
         this.gridSize = this.core.gridManager.size;
 
-        if (this.specialMode === 'triangle' && this.triangleEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             this.triangleEngine.resize(size);
         } else {
             this.renderer.resize(this.gridSize, this.cellSize);
         }
 
         // Sincronizar stateGrid de RD-2D con el nuevo tamaño
-        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridSize = this.gridSize;
             this.rd2dEngine._initStateGrid();
             this.rd2dEngine.initialized = false;
@@ -751,7 +751,7 @@ class CellularAutomaton {
         this.updateStats();
         this.render();
 
-        if (size >= this.workerThreshold && this.specialMode !== 'triangle') {
+        if (size >= this.workerThreshold && this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
             this._initWorker();
         }
 
@@ -803,24 +803,24 @@ class CellularAutomaton {
     shiftGrid(dx, dy) {
         this.stateManager.saveState(this.generation);
 
-        const gridManager = this.specialMode === 'triangle' && this.triangleEngine?.isActive
+        const gridManager = this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive
             ? this.triangleEngine.gridManager
             : this.core.gridManager;
 
         gridManager.shift(dx, dy);
 
         // RD2D mantiene su propio stateGrid como fuente de verdad — hay que desplazarlo también
-        if (this.specialMode === 'rd2d' && this.rd2dEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.shift(dx, dy);
         }
 
         // Langton mantiene stateGrid + posiciones de hormigas
-        if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
             this.langtonEngine.shift(dx, dy);
         }
 
         // WireWorld mantiene su propio stateGrid como fuente de verdad
-        if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
             this.wireworldEngine.shift(dx, dy);
         }
 
@@ -1011,7 +1011,7 @@ class CellularAutomaton {
 
         if (result.changedCells.length > 0) {
             // Langton: las celdas vivas importadas se convierten en hormigas
-            if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+            if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
                 result.changedCells.forEach(cell => {
                     if (this.core.getCell(cell.x, cell.y)) {
                         this.langtonEngine.addAnt(cell.x, cell.y, 0);
@@ -1022,7 +1022,7 @@ class CellularAutomaton {
                 this.render();
                 eventBus.emit('automaton:ruleChanged');
                 // WireWorld: las celdas vivas importadas se convierten en Conductores vía syncFromGrid
-            } else if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+            } else if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
                 this.wireworldEngine.syncFromGrid();
                 result.changedCells.forEach(cell => {
                     this.renderer.markDirty(cell.x, cell.y);
@@ -1064,7 +1064,7 @@ class CellularAutomaton {
      * Devuelve null si WireWorld no está activo.
      */
     exportWireworldState(name, description) {
-        if (this.specialMode !== 'wireworld' || !this.wireworldEngine?.isActive) return null;
+        if (this.specialMode !== SpecialEngineManager.MODES.WIREWORLD || !this.wireworldEngine?.isActive) return null;
         return {
             stateGrid: this.wireworldEngine.stateGrid,
             gridSize: this.gridSize,
@@ -1080,7 +1080,7 @@ class CellularAutomaton {
      * El patrón se centra en el grid.
      */
     importWireworldState(stateGrid, patternWidth, patternHeight) {
-        if (this.specialMode !== 'wireworld' || !this.wireworldEngine?.isActive) return false;
+        if (this.specialMode !== SpecialEngineManager.MODES.WIREWORLD || !this.wireworldEngine?.isActive) return false;
 
         const size = this.gridSize;
         const offsetX = Math.floor((size - patternWidth) / 2);
@@ -1295,7 +1295,7 @@ class CellularAutomaton {
         // y tienen estado incremental — siempre 1 paso por frame.
         if (this.specialMode) {
             this.nextGeneration();
-            if (this.specialMode === 'triangle') {
+            if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE) {
                 if (this.generation % 5 === 0) this.updateStats();
             }
             return;

@@ -198,7 +198,7 @@ class CanvasController {
         // Pan toroidal: Alt tiene prioridad sobre cualquier modo de dibujo
         if (this.altPressed) {
             // Para triangle usamos coordenadas de celda propias; para el resto getCellFromMouse
-            if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+            if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
                 const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
                 this._panLastCell = result ? {x: result.q, y: result.r} : null;
             } else {
@@ -211,10 +211,10 @@ class CanvasController {
             return;
         }
 
-        if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
             const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
             if (result) {
-                this.lastCell = {q: result.q, r: result.r, mode: 'triangle'};
+                this.lastCell = {q: result.q, r: result.r, mode: SpecialEngineManager.MODES.TRIANGLE};
                 const state = !this.ctrlPressed ? 1 : 0;
                 const changed = this.automaton.triangleEngine.gridManager.setCell(result.q, result.r, state);
                 if (changed) {
@@ -262,7 +262,7 @@ class CanvasController {
         }
 
         // Langton: clic coloca una hormiga / Ctrl+clic borra
-        if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive) {
             if (this.ctrlPressed) {
                 this.automaton.langtonEngine.eraseAt(x, y);
             } else {
@@ -275,7 +275,7 @@ class CanvasController {
         }
 
         // WireWorld: left-click toggle Conductor↔Vacío / drag usa el estado inicial
-        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
             const engine = this.automaton.wireworldEngine;
             const currentState = engine.stateGrid[x]?.[y] ?? 0;
             // Conductor → Vacío; cualquier otro estado → Conductor
@@ -299,7 +299,7 @@ class CanvasController {
     _handleMouseMove(e) {
         // Pan tiene prioridad sobre cualquier modo de dibujo
         if (this.isMouseDown && this._isPanning) {
-            if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+            if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
                 const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
                 if (result && this._panLastCell) {
                     const dx = result.q - this._panLastCell.x;
@@ -323,12 +323,12 @@ class CanvasController {
             return;
         }
 
-        if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
             const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
             if (result) {
                 this._updateMouseCoords(result.q, result.r);
 
-                if (this.isMouseDown && this.lastCell?.mode === 'triangle') {
+                if (this.isMouseDown && this.lastCell?.mode === SpecialEngineManager.MODES.TRIANGLE) {
                     const {q, r} = result;
                     if (this.lastCell.q === q && this.lastCell.r === r) return;
 
@@ -337,7 +337,7 @@ class CanvasController {
                     if (changed) {
                         this.automaton.renderer.markDirty(q, r);
                         this.automaton.renderer.render();
-                        this.lastCell = {q, r, mode: 'triangle'};
+                        this.lastCell = {q, r, mode: SpecialEngineManager.MODES.TRIANGLE};
                     }
                 }
             }
@@ -360,7 +360,7 @@ class CanvasController {
                 this.updateSelection(x, y);
             } else if (this.isDragging) {
                 this.updateDrag(x, y);
-            } else if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive && !this._patternState.pattern) {
+            } else if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive && !this._patternState.pattern) {
                 // Langton: arrastrar coloca/borra hormigas a lo largo del trazo
                 if (!this.lastCell || (this.lastCell.x === x && this.lastCell.y === y)) {
                     this.lastCell = {x, y};
@@ -383,7 +383,7 @@ class CanvasController {
                         eventBus.emit('automaton:ruleChanged');
                     }
                 }
-            } else if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
+            } else if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
                 // WireWorld: arrastrar aplica el estado decidido al inicio del drag
                 if (this._wwDrawState === null) {
                     this.lastCell = {x, y};
@@ -452,7 +452,7 @@ class CanvasController {
         e.preventDefault();
 
         // WireWorld: right-click sobre Head→Tail, sobre Tail→Head, sobre otro→Head
-        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
             const {x, y} = this.automaton.getCellFromMouse(e);
             const engine = this.automaton.wireworldEngine;
             const current = engine.stateGrid[x]?.[y] ?? 0;
@@ -715,11 +715,11 @@ class CanvasController {
 
         // Sincronizar motores especiales tras el move — la fuente de verdad
         // pasa a ser grid[][] (modificado por clearPatternCells + pasteArea).
-        if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive) {
             this.automaton.langtonEngine.syncFromGrid();
-        } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.RD2D && this.automaton.rd2dEngine?.isActive) {
             this.automaton.rd2dEngine._syncFromAutomatonGrid();
-        } else if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
             this.automaton.wireworldEngine.syncFromGrid();
         }
 
@@ -916,8 +916,8 @@ class CanvasController {
      */
     _floodFill(startX, startY, fillState) {
         const size = this.automaton.gridSize;
-        const langton = this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive;
-        const rd2d = this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive;
+        const langton = this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive;
+        const rd2d = this.automaton.specialMode === SpecialEngineManager.MODES.RD2D && this.automaton.rd2dEngine?.isActive;
 
         // En RD2D la fuente de verdad visual es stateGrid. grid[][] está sincronizado
         // con stateGrid para detectar paredes, así que se usa igual que modo normal.
@@ -1004,9 +1004,9 @@ class CanvasController {
             canvas.style.cursor = this.ctrlPressed
                 ? 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell'
                 : 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🪣</text></svg>") 2 18, cell';
-        } else if (this.automaton.specialMode === 'langton') {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON) {
             canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>🐜</text></svg>") 10 10, crosshair';
-        } else if (this.automaton.specialMode === 'wireworld') {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD) {
             canvas.style.cursor = 'url("data:image/svg+xml,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'20\' height=\'20\'><text y=\'16\' font-size=\'16\'>⚡</text></svg>") 10 10, crosshair';
         } else {
             canvas.style.cursor = this._ctrlPressed

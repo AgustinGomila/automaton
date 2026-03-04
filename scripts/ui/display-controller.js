@@ -23,7 +23,7 @@ class DisplayController {
 
     updateHeaderInfo() {
         // === MODO RD-2D ===
-        if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.RD2D && this.automaton.rd2dEngine?.isActive) {
             const wrap = this.automaton.wrapEdges ? '∞' : '■';
             this._setTitle(t('app.title.rd2d'));
             this._setH1('fas fa-border-style', t('header.title', {ruleName: 'RD-2D'}));
@@ -37,7 +37,7 @@ class DisplayController {
         }
 
         // === MODO WOLFRAM ===
-        if (this.automaton.specialMode === 'wolfram' && this.automaton.wolframEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.WOLFRAM && this.automaton.wolframEngine?.isActive) {
             const info = this.automaton.wolframEngine.getInfo();
             const wrap = this.automaton.wrapEdges ? '∞' : '■';
             const directionSymbol = info.direction === 'vertical' ? '↓' : '→';
@@ -59,7 +59,7 @@ class DisplayController {
         }
 
         // === MODO TRIANGULAR ===
-        if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
             const info = this.automaton.triangleEngine.getInfo();
             const binary = info.rule.toString(2).padStart(8, '0');
 
@@ -75,7 +75,7 @@ class DisplayController {
         }
 
         // === MODO LANGTON ===
-        if (this.automaton.specialMode === 'langton' && this.automaton.langtonEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive) {
             const info = this.automaton.langtonEngine.getInfo();
             const wrap = this.automaton.wrapEdges ? '∞' : '■';
             const antLabel = info.antCount > 0
@@ -94,7 +94,7 @@ class DisplayController {
         }
 
         // === MODO WIREWORLD ===
-        if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
             const wrap = this.automaton.wrapEdges ? '∞' : '■';
             this._setTitle(t('app.title.wireworld'));
             this._setH1('fas fa-bolt', t('header.title', {ruleName: 'WireWorld'}));
@@ -109,7 +109,7 @@ class DisplayController {
         }
 
         // === MODO ULAM-WARBURTON ===
-        if (this.automaton.specialMode === 'ulam-warburton' && this.automaton.uwEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.ULAM_WARBURTON && this.automaton.uwEngine?.isActive) {
             const wrap = this.automaton.wrapEdges ? '∞' : '■';
             this._setTitle(t('app.title.uw'));
             this._setH1('fas fa-snowflake', t('header.title', {ruleName: 'Ulam-Warburton'}));
@@ -158,13 +158,13 @@ class DisplayController {
 
         const wrap = this.automaton.wrapEdges ? '∞' : '■';
 
-        if (this.automaton.specialMode === 'wolfram' && this.automaton.wolframEngine?.isActive) {
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.WOLFRAM && this.automaton.wolframEngine?.isActive) {
             el.innerHTML = `<i class="fas fa-dice"></i> ${t('wolfram.neighborhood', {wrap})}`;
-        } else if (this.automaton.specialMode === 'rd2d' && this.automaton.rd2dEngine?.isActive) {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.RD2D && this.automaton.rd2dEngine?.isActive) {
             el.innerHTML = `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood', {wrap})}`;
-        } else if (this.automaton.specialMode === 'triangle' && this.automaton.triangleEngine?.isActive) {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
             el.innerHTML = `<i class="fa-solid fa-play"></i> ${t('triangle.neighborhood', {wrap})}`;
-        } else if (this.automaton.specialMode === 'ulam-warburton' && this.automaton.uwEngine?.isActive) {
+        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.ULAM_WARBURTON && this.automaton.uwEngine?.isActive) {
             el.innerHTML = `<i class="fas fa-snowflake"></i> ${t('uw.neighborhood', {wrap})}`;
         } else {
             const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';

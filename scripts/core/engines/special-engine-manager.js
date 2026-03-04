@@ -14,6 +14,22 @@
  *   UWEngine        → grid, gridSize, renderer.markDirty, _markAllDirty
  */
 class SpecialEngineManager {
+
+    // =========================================
+    // CONSTANTES DE MODO
+    // =========================================
+
+    /** Identificadores canónicos de cada motor especial. */
+    static MODES = Object.freeze({
+        STANDARD: 'standard',
+        WOLFRAM: 'wolfram',
+        RD2D: 'rd2d',
+        TRIANGLE: 'triangle',
+        ULAM_WARBURTON: 'ulam-warburton',
+        LANGTON: 'langton',
+        WIREWORLD: 'wireworld'
+    });
+
     /**
      * @param {Object} options
      * @param {Function} options.getRenderer  - () => renderer actual del automaton
@@ -64,42 +80,42 @@ class SpecialEngineManager {
         this.wireworldEngine?.deactivate?.();
         this._restoreOriginals();
 
-        if (engineName === 'rd2d') {
+        if (engineName === SpecialEngineManager.MODES.RD2D) {
             if (typeof RD2DEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/rd2d-engine.js');
             }
             this.rd2dEngine = new RD2DEngine(this._buildRD2DContext());
-            this.specialMode = 'rd2d';
+            this.specialMode = SpecialEngineManager.MODES.RD2D;
 
-        } else if (engineName === 'wolfram') {
+        } else if (engineName === SpecialEngineManager.MODES.WOLFRAM) {
             if (typeof WolframEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/wolfram-engine.js');
             }
             this.wolframEngine = new WolframEngine(this._buildWolframContext());
-            this.specialMode = 'wolfram';
+            this.specialMode = SpecialEngineManager.MODES.WOLFRAM;
 
-        } else if (engineName === 'ulam-warburton') {
+        } else if (engineName === SpecialEngineManager.MODES.ULAM_WARBURTON) {
             if (typeof UlamWarburtonEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/ulam-warburton-engine.js');
             }
             this.uwEngine = new UlamWarburtonEngine(this._buildUWContext());
-            this.specialMode = 'ulam-warburton';
+            this.specialMode = SpecialEngineManager.MODES.ULAM_WARBURTON;
 
-        } else if (engineName === 'langton') {
+        } else if (engineName === SpecialEngineManager.MODES.LANGTON) {
             if (typeof LangtonEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/langton-engine.js');
             }
             this.langtonEngine = new LangtonEngine(this._buildLangtonContext());
-            this.specialMode = 'langton';
+            this.specialMode = SpecialEngineManager.MODES.LANGTON;
 
-        } else if (engineName === 'wireworld') {
+        } else if (engineName === SpecialEngineManager.MODES.WIREWORLD) {
             if (typeof WireWorldEngine === 'undefined') {
                 await this._loadScript('scripts/core/engines/wireworld-engine.js');
             }
             this.wireworldEngine = new WireWorldEngine(this._buildWireworldContext());
-            this.specialMode = 'wireworld';
+            this.specialMode = SpecialEngineManager.MODES.WIREWORLD;
 
-        } else if (engineName === 'triangle') {
+        } else if (engineName === SpecialEngineManager.MODES.TRIANGLE) {
             if (typeof TriangleGridManager === 'undefined') {
                 await this._loadScript('scripts/core/triangle-grid-manager.js');
             }
@@ -142,7 +158,7 @@ class SpecialEngineManager {
                 : new TriangleRenderer(rendererOptions);
 
             this._setRenderer(newRenderer);
-            this.specialMode = 'triangle';
+            this.specialMode = SpecialEngineManager.MODES.TRIANGLE;
         }
 
         this._specialEngineLoaded = true;
@@ -296,16 +312,16 @@ class SpecialEngineManager {
      */
     clearActiveEngine() {
         switch (this.specialMode) {
-            case 'wolfram':
+            case SpecialEngineManager.MODES.WOLFRAM:
                 this.wolframEngine?.reset();
                 this.wolframEngine?._initializeSeed?.();
                 return true;
 
-            case 'rd2d':
+            case SpecialEngineManager.MODES.RD2D:
                 this.rd2dEngine?.reset();
                 return true;
 
-            case 'triangle':
+            case SpecialEngineManager.MODES.TRIANGLE:
                 if (this.triangleEngine?.gridManager) {
                     for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
                         this.triangleEngine.gridManager.grid[q].fill(0);
@@ -314,11 +330,11 @@ class SpecialEngineManager {
                 this.triangleEngine?.reset?.();
                 return true;
 
-            case 'langton':
+            case SpecialEngineManager.MODES.LANGTON:
                 this.langtonEngine?.reset();
                 return true;
 
-            case 'wireworld':
+            case SpecialEngineManager.MODES.WIREWORLD:
                 this.wireworldEngine?.reset();
                 return true;
 
@@ -337,7 +353,7 @@ class SpecialEngineManager {
      * @returns {{ handled: boolean, population?: number|null, resetLimit?: boolean }}
      */
     randomizeActiveEngine(density) {
-        if (this.specialMode === 'triangle' && this.triangleEngine?.gridManager) {
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.gridManager) {
             const {width, height} = this.triangleEngine.gridManager;
             for (let q = 0; q < width; q++) {
                 for (let r = 0; r < height; r++) {
@@ -351,17 +367,17 @@ class SpecialEngineManager {
             };
         }
 
-        if (this.specialMode === 'ulam-warburton' && this.uwEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.ULAM_WARBURTON && this.uwEngine?.isActive) {
             this.uwEngine.randomize(density);
             return {handled: true, population: null, resetLimit: true};
         }
 
-        if (this.specialMode === 'langton' && this.langtonEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
             const population = this.langtonEngine.randomize(density);
             return {handled: true, population, resetLimit: false};
         }
 
-        if (this.specialMode === 'wireworld' && this.wireworldEngine?.isActive) {
+        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
             this.wireworldEngine.randomize(density);
             return {handled: true, population: null, resetLimit: false};
         }
@@ -391,10 +407,10 @@ class SpecialEngineManager {
      */
     resetActiveEngine() {
         switch (this.specialMode) {
-            case 'wolfram':
+            case SpecialEngineManager.MODES.WOLFRAM:
                 this.wolframEngine?.reset?.();
                 break;
-            case 'rd2d':
+            case SpecialEngineManager.MODES.RD2D:
                 this.rd2dEngine?.reset?.();
                 break;
         }
