@@ -705,7 +705,7 @@ class UIController {
 
         const patternData = this.automaton.exportPattern(bounds);
         if (!patternData) {
-            alert(t('notif.pattern.empty'));
+            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
             return;
         }
 
@@ -730,20 +730,20 @@ class UIController {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        alert(t('notif.pattern.exported'));
+        this._showNotification(t('notif.pattern.exported'), 'info', 2000);
     }
 
     _exportMCL() {
         const state = this.automaton.exportWireworldState();
         if (!state) {
-            alert(t('notif.pattern.empty'));
+            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
             return;
         }
 
         const codec = new MCLCodec();
         const mclText = codec.encode(state);
         if (!mclText) {
-            alert(t('notif.pattern.empty'));
+            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
             return;
         }
 
@@ -756,7 +756,7 @@ class UIController {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        alert(t('notif.pattern.exported'));
+        this._showNotification(t('notif.pattern.exported'), 'info', 2000);
     }
 
     importPatternFromFile() {
@@ -791,7 +791,7 @@ class UIController {
                     } else if (format === 'json') {
                         patternData = JSON.parse(text);
                     } else {
-                        alert(t('notif.pattern.invalidFormat'));
+                        this._showNotification(t('notif.pattern.invalidFormat'), 'warning', 2500);
                         return;
                     }
 
@@ -799,10 +799,10 @@ class UIController {
                     this.automaton.importPattern(patternData, center, center);
                     this.automaton.updateStats();
                     this.automaton.render();
-                    alert(t('notif.pattern.imported'));
+                    this._showNotification(t('notif.pattern.imported'), 'info', 2000);
                 } catch (err) {
                     console.error('Error importando patrón:', err);
-                    alert(t('notif.pattern.importError'));
+                    this._showNotification(t('notif.pattern.importError'), 'warning', 3000);
                 }
             };
             reader.readAsText(file);
@@ -815,10 +815,29 @@ class UIController {
             const codec = new MCLCodec();
             const decoded = codec.decode(text);
 
+            // Auto-resize: si el patrón no cabe en el grid actual, ampliar con margen
+            const needed = Math.max(decoded.width, decoded.height);
+            const current = this.automaton.gridSize;
+            if (needed > current) {
+                // Margen del 20% redondeado a múltiplo de 5, mínimo 20px de margen
+                const margin = Math.max(20, Math.round(needed * 0.2 / 5) * 5);
+                const newSize = Math.min(Math.round((needed + margin) / 5) * 5, 1000);
+                this.automaton.resizeGrid(newSize);
+
+                // Sincronizar slider y display
+                const slider = document.getElementById('gridSize');
+                const display = document.getElementById('gridSizeValue');
+                if (slider) slider.value = newSize;
+                if (display) display.textContent = `${newSize}×${newSize}`;
+            }
+
+            // Limpiar el grid antes de importar para no superponer circuitos
+            this.automaton.clear();
+
             // Si WireWorld ya está activo, cargar directamente con estados completos
             if (this.automaton.specialMode === 'wireworld' && this.automaton.wireworldEngine?.isActive) {
                 this.automaton.importWireworldState(decoded.stateGrid, decoded.width, decoded.height);
-                alert(t('notif.pattern.imported'));
+                this._showNotification(t('notif.pattern.imported'), 'info', 2000);
                 return;
             }
 
@@ -841,10 +860,10 @@ class UIController {
             this.automaton.importPattern(patternData, center, center);
             this.automaton.updateStats();
             this.automaton.render();
-            alert(t('notif.pattern.importedMCLPartial'));
+            this._showNotification(t('notif.pattern.importedMCLPartial'), 'warning', 3000);
         } catch (err) {
             console.error('Error importando MCL:', err);
-            alert(t('notif.pattern.importError'));
+            this._showNotification(t('notif.pattern.importError'), 'warning', 3000);
         }
     }
 
