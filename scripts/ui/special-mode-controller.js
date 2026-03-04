@@ -427,6 +427,13 @@ class SpecialModeController {
         // Modos especiales: rule=null (no aplica filtro B/S).
         eventBus.emit('automaton:filterChanged', {mode, rule: null});
 
+        // Colapsar el acordeón de reglas estándar al entrar en modo especial, expandir al salir.
+        const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
+        if (rulesHeader) {
+            const isSpecial = mode !== SpecialEngineManager.MODES.STANDARD;
+            rulesHeader.classList.toggle('active', !isSpecial);
+        }
+
         const indicator = document.getElementById('modeIndicator');
         if (!indicator) return;
 
