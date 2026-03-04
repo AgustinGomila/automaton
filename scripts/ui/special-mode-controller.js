@@ -434,6 +434,14 @@ class SpecialModeController {
             rulesHeader.classList.toggle('active', !isSpecial);
         }
 
+        // Colapsar los acordeones de los otros motores especiales; expandir solo el activo.
+        // Los data-accordion coinciden exactamente con los valores de MODES, sin mapeo extra.
+        for (const engineMode of Object.values(SpecialEngineManager.MODES)) {
+            if (engineMode === SpecialEngineManager.MODES.STANDARD) continue;
+            const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
+            if (header) header.classList.toggle('active', engineMode === mode);
+        }
+
         const indicator = document.getElementById('modeIndicator');
         if (!indicator) return;
 
