@@ -56,8 +56,7 @@ class SpecialModeController {
             this._addEventListener(triangleToggle, 'change', () => {
                 if (triangleToggle.checked) {
                     const rule = parseInt(document.getElementById('triangleRule')?.value) || 50;
-                    const mode = document.getElementById('triangleMode')?.value || 'edge';
-                    this.activateTriangleMode(rule, mode);
+                    this.activateTriangleMode(rule);
                 } else {
                     this.deactivateTriangleMode();
                 }
@@ -215,23 +214,6 @@ class SpecialModeController {
 
                 if (this.automaton.triangleEngine?.isActive) {
                     this._reactivateTriangle(rule);
-                }
-            });
-        }
-
-        // Modo de vecindad triangular
-        const triangleModeSelect = document.getElementById('triangleMode');
-        if (triangleModeSelect) {
-            this._addEventListener(triangleModeSelect, 'change', () => {
-                if (this.automaton.triangleEngine?.isActive) {
-                    this._stopIfRunning();
-                    const rule = this.automaton.triangleEngine.ruleNumber;
-                    const mode = triangleModeSelect.value;
-                    this.automaton.triangleEngine.activate({rule, mode});
-                    this.automaton.triangleEngine.reset();
-                    this.automaton.render();
-                    this._onUpdateHeader();
-                    this._onSyncPlayButton();
                 }
             });
         }
@@ -448,7 +430,7 @@ class SpecialModeController {
         if (mode === SpecialEngineManager.MODES.TRIANGLE) {
             const info = this.automaton.triangleEngine.getInfo();
             indicator.className = 'mode-indicator triangle-mode';
-            indicator.innerHTML = `<i class="fa-solid fa-play"></i> ETA R${info.rule} ${info.mode === 'edge' ? '▲' : '▽'}`;
+            indicator.innerHTML = `<i class="fa-solid fa-play"></i> ETA R${info.rule}`;
         } else if (mode === SpecialEngineManager.MODES.WOLFRAM) {
             const info = this.automaton.wolframEngine.getInfo();
             indicator.className = 'mode-indicator wolfram-mode';
@@ -716,8 +698,7 @@ class SpecialModeController {
     _reactivateTriangle(rule, {reset = false} = {}) {
         this._stopIfRunning();
         const engine = this.automaton.triangleEngine;
-        const mode = engine.neighborhoodMode;
-        engine.activate({rule, mode, wrap: engine.wrapEdges});
+        engine.activate({rule, wrap: engine.wrapEdges});
         if (reset) {
             engine.reset();
             this.automaton.render();
