@@ -199,7 +199,7 @@ class CanvasController {
         if (this.altPressed) {
             // Para triangle usamos coordenadas de celda propias; para el resto getCellFromMouse
             if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
-                const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+                const result = this.automaton.getCellCoords(e.clientX, e.clientY);
                 this._panLastCell = result ? {x: result.q, y: result.r} : null;
             } else {
                 const {x, y} = this.automaton.getCellFromMouse(e);
@@ -212,16 +212,10 @@ class CanvasController {
         }
 
         if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
-            const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+            const result = this.automaton.getCellCoords(e.clientX, e.clientY);
             if (result) {
                 this.lastCell = {q: result.q, r: result.r, mode: SpecialEngineManager.MODES.TRIANGLE};
-                const state = !this.ctrlPressed ? 1 : 0;
-                const changed = this.automaton.triangleEngine.gridManager.setCell(result.q, result.r, state);
-                if (changed) {
-                    this.automaton.renderer.markDirty(result.q, result.r);
-                    this.automaton.renderer.render();
-                    this.automaton.updateStats(this.automaton.triangleEngine.gridManager.countPopulation());
-                }
+                this.automaton.drawCellAt(result, !this.ctrlPressed ? 1 : 0);
             }
             return;
         }
@@ -264,28 +258,20 @@ class CanvasController {
         // Langton: clic coloca una hormiga / Ctrl+clic borra
         if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive) {
             if (this.ctrlPressed) {
-                this.automaton.langtonEngine.eraseAt(x, y);
+                this.automaton.eraseEngineAt(x, y);
             } else {
-                this.automaton.langtonEngine.addAnt(x, y, 0);
+                this.automaton.addEngineAgentAt(x, y);
             }
-            this.automaton.renderer.markDirty(x, y);
-            this.automaton.render();
             eventBus.emit('automaton:ruleChanged');
             return;
         }
 
         // WireWorld: left-click toggle Conductor↔Vacío / drag usa el estado inicial
         if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
-            const engine = this.automaton.wireworldEngine;
-            const currentState = engine.stateGrid[x]?.[y] ?? 0;
             // Conductor → Vacío; cualquier otro estado → Conductor
-            const newState = currentState === 3 ? 0 : 3;
+            const newState = this.automaton.getEngineStateAt(x, y) === 3 ? 0 : 3;
             this._wwDrawState = newState;
-            const changed = engine.setStateAt(x, y, newState);
-            if (changed) {
-                this.automaton.updateStats();
-                this.automaton.render();
-            }
+            this.automaton.setEngineStateAt(x, y, newState);
             return;
         }
 
@@ -300,7 +286,7 @@ class CanvasController {
         // Pan tiene prioridad sobre cualquier modo de dibujo
         if (this.isMouseDown && this._isPanning) {
             if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
-                const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+                const result = this.automaton.getCellCoords(e.clientX, e.clientY);
                 if (result && this._panLastCell) {
                     const dx = result.q - this._panLastCell.x;
                     const dy = result.r - this._panLastCell.y;
@@ -324,7 +310,7 @@ class CanvasController {
         }
 
         if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
-            const result = this.automaton.renderer.getCellFromMouse(e.clientX, e.clientY);
+            const result = this.automaton.getCellCoords(e.clientX, e.clientY);
             if (result) {
                 this._updateMouseCoords(result.q, result.r);
 
@@ -332,11 +318,7 @@ class CanvasController {
                     const {q, r} = result;
                     if (this.lastCell.q === q && this.lastCell.r === r) return;
 
-                    const state = !this.ctrlPressed ? 1 : 0;
-                    const changed = this.automaton.triangleEngine.gridManager.setCell(q, r, state);
-                    if (changed) {
-                        this.automaton.renderer.markDirty(q, r);
-                        this.automaton.renderer.render();
+                    if (this.automaton.drawCellAt(result, !this.ctrlPressed ? 1 : 0)) {
                         this.lastCell = {q, r, mode: SpecialEngineManager.MODES.TRIANGLE};
                     }
                 }
@@ -370,16 +352,14 @@ class CanvasController {
                     for (const cell of cells) {
                         if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) continue;
                         if (this.ctrlPressed) {
-                            this.automaton.langtonEngine.eraseAt(cell.x, cell.y);
+                            this.automaton.eraseEngineAt(cell.x, cell.y);
                         } else {
-                            this.automaton.langtonEngine.addAnt(cell.x, cell.y, 0);
+                            this.automaton.addEngineAgentAt(cell.x, cell.y);
                         }
-                        this.automaton.renderer.markDirty(cell.x, cell.y);
                         changed = true;
                     }
                     this.lastCell = {x, y};
                     if (changed) {
-                        this.automaton.render();
                         eventBus.emit('automaton:ruleChanged');
                     }
                 }
@@ -396,7 +376,7 @@ class CanvasController {
                     let needsRender = false;
                     for (const cell of cells) {
                         if (cell.x === this.lastCell.x && cell.y === this.lastCell.y) continue;
-                        if (this.automaton.wireworldEngine.setStateAt(cell.x, cell.y, this._wwDrawState)) {
+                        if (this.automaton.setEngineStateAt(cell.x, cell.y, this._wwDrawState)) {
                             needsRender = true;
                         }
                     }
@@ -454,14 +434,9 @@ class CanvasController {
         // WireWorld: right-click sobre Head→Tail, sobre Tail→Head, sobre otro→Head
         if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
             const {x, y} = this.automaton.getCellFromMouse(e);
-            const engine = this.automaton.wireworldEngine;
-            const current = engine.stateGrid[x]?.[y] ?? 0;
+            const current = this.automaton.getEngineStateAt(x, y);
             const newState = current === 1 ? 2 : 1; // HEAD→TAIL, anything else→HEAD
-            const changed = engine.setStateAt(x, y, newState);
-            if (changed) {
-                this.automaton.updateStats();
-                this.automaton.render();
-            }
+            this.automaton.setEngineStateAt(x, y, newState);
             return false;
         }
 
@@ -711,17 +686,9 @@ class CanvasController {
         this.selection.endY = targetY + height - 1;
 
         this._removeDragPreview();
-        this.automaton.renderer.resetActivity();
-
-        // Sincronizar motores especiales tras el move — la fuente de verdad
+        // Sincroniza motores especiales tras el move: la fuente de verdad
         // pasa a ser grid[][] (modificado por clearPatternCells + pasteArea).
-        if (this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive) {
-            this.automaton.langtonEngine.syncFromGrid();
-        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.RD2D && this.automaton.rd2dEngine?.isActive) {
-            this.automaton.rd2dEngine._syncFromAutomatonGrid();
-        } else if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
-            this.automaton.wireworldEngine.syncFromGrid();
-        }
+        this.automaton.syncEngineAfterEdit();
 
         this.automaton.render();
         this._updateSelectionVisual();
@@ -927,66 +894,72 @@ class CanvasController {
         const getState = (gx, gy) => this.automaton.grid[gx]?.[gy] ?? 0;
 
         const targetState = getState(startX, startY);
-
-        // Si la celda origen ya tiene el estado destino, nada que hacer
         if (targetState === fillState) return;
 
         const visited = new Uint8Array(size * size);
+        // BFS con puntero de cabeza — evita queue.shift() O(n) en cada iteración.
         const queue = [startX * size + startY];
-        visited[startX * size + startY] = 1;
+        let head = 0;
+        visited[queue[0]] = 1;
 
-        const changed = [];
-
-        while (queue.length > 0) {
-            const idx = queue.shift();
+        while (head < queue.length) {
+            const idx = queue[head++];
             const x = (idx / size) | 0;
             const y = idx % size;
 
             if (rd2d) {
-                // RD2D: escribir en stateGrid (fuente de verdad del engine)
-                const newRdState = fillState === 1 ? 15 : 0;
-                rd2dStateGrid[x][y] = newRdState;
+                rd2dStateGrid[x][y] = fillState === 1 ? 15 : 0;
                 this.automaton.grid[x][y] = fillState;
             } else {
                 this.automaton.grid[x][y] = fillState;
             }
-            changed.push(idx);
             this.automaton.renderer.markDirtyIndex(idx);
 
-            // En Langton: sincronizar con el engine
+            // Langton: sincronizar con el engine usando su API, no sus campos internos.
+            // (acceso directo a langtonEngine aceptable aquí por razones de rendimiento
+            // en batch, igual que rd2dStateGrid; addAnt incluye la guarda de deduplicación)
             if (langton) {
                 if (fillState === 1) {
-                    // Nueva hormiga — agregar si no existe ya en esta posición
-                    const engine = this.automaton.langtonEngine;
-                    if (!engine.ants.some(a => a.x === x && a.y === y)) {
-                        engine.ants.push({x, y, dir: 0});
-                    }
+                    this.automaton.langtonEngine.addAnt(x, y, 0);
                 } else {
-                    // Borrar: quitar hormiga y limpiar stateGrid
-                    this.automaton.langtonEngine.eraseAt(x, y);
+                    this.automaton.eraseEngineAt(x, y);
                 }
             }
 
             // 4 vecinos (Von Neumann)
-            const neighbors = [
-                x > 0 ? (x - 1) * size + y : -1,
-                x < size - 1 ? (x + 1) * size + y : -1,
-                y > 0 ? x * size + (y - 1) : -1,
-                y < size - 1 ? x * size + (y + 1) : -1,
-            ];
-
-            for (const nIdx of neighbors) {
-                if (nIdx < 0 || visited[nIdx]) continue;
-                const nx = (nIdx / size) | 0;
-                const ny = nIdx % size;
-                if (getState(nx, ny) === targetState) {
-                    visited[nIdx] = 1;
-                    queue.push(nIdx);
+            const x1 = x - 1, x2 = x + 1;
+            const y1 = y - 1, y2 = y + 1;
+            if (x1 >= 0) {
+                const ni = x1 * size + y;
+                if (!visited[ni] && getState(x1, y) === targetState) {
+                    visited[ni] = 1;
+                    queue.push(ni);
+                }
+            }
+            if (x2 < size) {
+                const ni = x2 * size + y;
+                if (!visited[ni] && getState(x2, y) === targetState) {
+                    visited[ni] = 1;
+                    queue.push(ni);
+                }
+            }
+            if (y1 >= 0) {
+                const ni = x * size + y1;
+                if (!visited[ni] && getState(x, y1) === targetState) {
+                    visited[ni] = 1;
+                    queue.push(ni);
+                }
+            }
+            if (y2 < size) {
+                const ni = x * size + y2;
+                if (!visited[ni] && getState(x, y2) === targetState) {
+                    visited[ni] = 1;
+                    queue.push(ni);
                 }
             }
         }
 
-        if (changed.length > 0) {
+        if (head > 0) {
             this.automaton.updateStats();
             this.automaton.render();
         }

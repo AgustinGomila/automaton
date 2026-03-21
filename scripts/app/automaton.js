@@ -1,15 +1,19 @@
 /**
- * CellularAutomaton - Coordinador del autómata celular
+ * CellularAutomaton — Coordinador del autómata celular.
  *
- * Responsabilidad: Integrar todos los subsistemas:
- * - Core matemático (CellularAutomatonCore)
- * - Gestión de estado (StateManager)
- * - Renderizado visual (GridRenderer)
- * - Workers para grids grandes
- * - Motores especiales (Wolfram, RD-2D)
- * - Comunicación con UI (EventBus)
+ * Responsabilidad: conectar y orquestar los subsistemas sin conocer sus
+ * detalles internos.
+ *
+ * Subsistemas directos:
+ *   CellularAutomatonCore — matemática pura (grid, vecindad, reglas)
+ *   StateManager          — undo/redo, historial de población
+ *   GridRenderer          — renderizado Canvas 2D con dirty rendering
+ *   AnimationLoop         — timing RAF
+ *   SimulationLimiter     — límites por generación / población
+ *   GridWorkerManager     — Web Worker para grids grandes
+ *   SpecialEngineManager  — motores alternativos (Wolfram, RD-2D, ...)
+ *   EditCoordinator       — operaciones de edición del grid
  */
-
 class CellularAutomaton {
     constructor(gridSize = 400, cellSize = 2) {
         this.gridSize = Math.min(Math.max(gridSize, 20), 1000);
@@ -59,9 +63,7 @@ class CellularAutomaton {
 
         // === ESTADO DE EJECUCIÓN ===
         this.generation = 0;
-        this._loop = new AnimationLoop({
-            onStep: () => this._step()
-        });
+        this._loop = new AnimationLoop({onStep: () => this._step()});
 
         // === WORKERS ===
         this._workerManager = new GridWorkerManager({
@@ -74,16 +76,18 @@ class CellularAutomaton {
                 this.stateManager.recordPopulation(population);
 
                 if (Array.isArray(changedCells)) {
-                    changedCells.forEach(index => {
-                        if (index >= 0 && index < size * size) {
-                            this.renderer.markDirty(Math.floor(index / size), index % size);
-                        }
-                    });
+                    // markDirtyIndex evita la decodificación x/y: el índice plano
+                    // ya es el formato interno del renderer.
+                    for (let i = 0; i < changedCells.length; i++) {
+                        this.renderer.markDirtyIndex(changedCells[i]);
+                    }
                 } else {
                     this.renderer.markAllDirty();
                 }
 
-                this.updateStats();
+                // Pasar population directamente: ya viene calculado del worker,
+                // evita un segundo countPopulation() O(n²) en updateStats().
+                this.updateStats(population);
                 this.checkLimits();
                 this.renderer.updateActivityAges(changedCells || []);
                 this.render();
@@ -118,7 +122,10 @@ class CellularAutomaton {
             }
         });
 
-        // === EVENTOS ===
+        // === EDITOR ===
+        this._editor = new EditCoordinator(this);
+
+        // === EVENTOS GLOBALES ===
         this._cleanupResize = this._addEventListener(window, 'resize', () => {
             setTimeout(() => this.render(), 100);
         });
@@ -150,9 +157,7 @@ class CellularAutomaton {
     }
 
     set grid(value) {
-        if (this.core?.gridManager) {
-            this.core.gridManager.grid = value;
-        }
+        if (this.core?.gridManager) this.core.gridManager.grid = value;
     }
 
     get limitType() {
@@ -187,9 +192,7 @@ class CellularAutomaton {
     }
 
     set wrapEdges(value) {
-        if (this.core?.neighborhood) {
-            this.core.neighborhood.configure({wrapEdges: value});
-        }
+        this.core?.neighborhood?.configure({wrapEdges: value});
     }
 
     get undoCount() {
@@ -292,38 +295,22 @@ class CellularAutomaton {
         this._workerManager.isProcessing = v;
     }
 
-    // =========================================
-    // INICIALIZACIÓN
-    // =========================================
-
     get isRunning() {
         return this._loop.isRunning;
     }
 
+    // Asignaciones directas (this.isRunning = false) son no-ops por compatibilidad.
     set isRunning(_) {
-        // Las asignaciones directas (this.isRunning = false) son redundantes
-        // tras llamar a start()/stop(). Este setter las convierte en no-ops
-        // para mantener compatibilidad sin efectos secundarios.
     }
 
     // =========================================
-    // LIFECYCLE & CLEANUP
+    // INICIALIZACIÓN
     // =========================================
 
     async _init() {
         await this._initRule();
-
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                if (this.core.getCell(x, y)) {
-                    this.renderer.markDirty(x, y);
-                }
-            }
-        }
-
         this.renderer.markAllDirty();
         this.renderer.render({generation: 0});
-
         eventBus.emit('automaton:ready', this);
     }
 
@@ -333,7 +320,6 @@ class CellularAutomaton {
             await new Promise(r => setTimeout(r, 100));
             attempts++;
         }
-
         const ruleKey = window.RULES?.conway ? 'conway' : Object.keys(window.RULES || {})[0];
         if (ruleKey && window.RULES?.[ruleKey]) {
             const rule = window.RULES[ruleKey];
@@ -345,83 +331,53 @@ class CellularAutomaton {
     // CALLBACKS DEL CORE
     // =========================================
 
-    destroy() {
-        if (this._isDestroyed) return;
-
-        this.stop();
-
-        if (this._cleanupResize) {
-            try {
-                this._cleanupResize();
-            } catch (e) {
-            }
-            this._cleanupResize = null;
-        }
-
-        this._cleanupWorker();
-
-        if (this.stateManager) {
-            this.stateManager.destroy();
-            this.stateManager = null;
-        }
-
-        if (this.renderer) {
-            this.renderer.destroy();
-            this.renderer = null;
-        }
-
-        if (this.core) {
-            this.core.destroy();
-            this.core = null;
-        }
-
-        if (this.wolframEngine) {
-            this.wolframEngine.deactivate?.();
-            this.wolframEngine = null;
-        }
-        if (this.rd2dEngine) {
-            this.rd2dEngine.deactivate?.();
-            this.rd2dEngine = null;
-        }
-        if (this.uwEngine) {
-            this.uwEngine.deactivate?.();
-            this.uwEngine = null;
-        }
-        if (this.langtonEngine) {
-            this.langtonEngine.deactivate?.();
-            this.langtonEngine = null;
-        }
-
-        this._loop?.destroy();
-        this._loop = null;
-
-        this._limiter?.destroy();
-        this._limiter = null;
-
-        this._engineManager?.destroy();
-        this._engineManager = null;
-
-        this._workerManager?.destroy();
-        this._workerManager = null;
-
-        this._isDestroyed = true;
-        eventBus.emit('automaton:destroyed');
-    }
-
-    _addEventListener(target, event, handler, options) {
-        target.addEventListener(event, handler, options);
-        return () => target.removeEventListener(event, handler, options);
-    }
-
     _handleCoreGeneration(stats) {
         this.generation = stats.generation;
         this.stateManager.recordPopulation(stats.population);
         eventBus.emit('stats:updated', stats);
     }
 
+    _handleCoreCellChange(indices, count) {
+        for (let i = 0; i < count; i++) {
+            this.renderer.markDirtyIndex(indices[i]);
+        }
+    }
+
+    _handleCoreStateChange(event) {
+        switch (event.type) {
+            case 'clear':
+                this.renderer.resetActivity();
+                this.renderer.markAllDirty();
+                break;
+            case 'resize':
+                this.gridSize = event.size;
+                this.renderer.markAllDirty();
+                break;
+            case 'ruleChange':
+                this.generation = 0;
+                this.isLimitReached = false;
+                this.renderer.markAllDirty();
+                eventBus.emit('automaton:ruleChanged', this.core.ruleEngine);
+                break;
+            case 'neighborhoodChange':
+                this.generation = 0;
+                this.isLimitReached = false;
+                this.renderer.markAllDirty();
+                eventBus.emit('automaton:neighborhoodChanged', event.info);
+                break;
+            case 'randomize':
+                this.renderer.markAllDirty();
+                eventBus.emit('automaton:randomized', event);
+                break;
+            case 'deserialize':
+                this.renderer.markAllDirty();
+                this.updateStats();
+                break;
+        }
+    }
+
     _handleStateChange(event) {
         eventBus.emit('state:changed', event);
-
         switch (event.type) {
             case 'clear':
             case 'randomize':
@@ -442,50 +398,6 @@ class CellularAutomaton {
     // WORKERS
     // =========================================
 
-    _handleCoreCellChange(indices, count) {
-        for (let i = 0; i < count; i++) {
-            this.renderer.markDirtyIndex(indices[i]);
-        }
-    }
-
-    _handleCoreStateChange(event) {
-        switch (event.type) {
-            case 'clear':
-                this.renderer.resetActivity();
-                this.renderer.markAllDirty();
-                break;
-
-            case 'resize':
-                this.gridSize = event.size;
-                this.renderer.markAllDirty();
-                break;
-
-            case 'ruleChange':
-                this.generation = 0;
-                this.isLimitReached = false;
-                this.renderer.markAllDirty();
-                eventBus.emit('automaton:ruleChanged', this.core.ruleEngine);
-                break;
-
-            case 'neighborhoodChange':
-                this.generation = 0;
-                this.isLimitReached = false;
-                this.renderer.markAllDirty();
-                eventBus.emit('automaton:neighborhoodChanged', event.info);
-                break;
-
-            case 'randomize':
-                this.renderer.markAllDirty();
-                eventBus.emit('automaton:randomized', event);
-                break;
-
-            case 'deserialize':
-                this.renderer.markAllDirty();
-                this.updateStats();
-                break;
-        }
-    }
-
     _initWorker() {
         this._workerManager.init();
     }
@@ -494,276 +406,139 @@ class CellularAutomaton {
         this._workerManager.cleanup();
     }
 
-    /**
-     * Detiene la simulación y limpia el worker antes de una operación de edición.
-     * Versión síncrona: limpia el worker inmediatamente sin esperar a que termine.
-     * @returns {boolean} wasRunning — true si la simulación estaba corriendo
-     */
-    _haltForEdit() {
-        const wasRunning = this.isRunning;
-        this.stop();
-        if (this.isWorkerProcessing) {
-            this._cleanupWorker();
-        }
-        return wasRunning;
-    }
-
-    /**
-     * Detiene la simulación y espera a que el worker termine antes de limpiar.
-     * Versión asíncrona: necesaria cuando la operación siguiente modifica el grid
-     * y no puede ejecutarse mientras el worker está procesando.
-     * @returns {Promise<boolean>} wasRunning — true si la simulación estaba corriendo
-     */
-    async _haltForEditAsync() {
-        const wasRunning = this.isRunning;
-        this.stop();
-        if (this.isWorkerProcessing) {
-            await new Promise(resolve => {
-                const check = () => this.isWorkerProcessing ? setTimeout(check, 10) : resolve();
-                check();
-            });
-            this._cleanupWorker();
-        }
-        return wasRunning;
-    }
-
-    /**
-     * Reanuda la simulación si estaba corriendo antes de una edición.
-     * Patrón común al final de pasteArea, clearPatternCells, clearArea e importPattern.
-     * @param {boolean} wasRunning
-     */
-    _restartIfWasRunning(wasRunning) {
-        if (wasRunning) {
-            requestAnimationFrame(() => {
-                this.isRunning = true;
-                this.start();
-            });
-        }
-    }
-
-    /**
-     * Aplica el resultado de undo/redo al estado del autómata.
-     * Patrón común entre undo() y redo().
-     * @param {Object} result     — objeto devuelto por stateManager.undo/redo
-     * @param {string} eventName  — 'automaton:undo' | 'automaton:redo'
-     * @returns {boolean}
-     */
-    _applyHistoryStep(result, eventName) {
-        if (!result) return false;
-        this.generation = result.generation;
-        this._engineManager.resetActiveEngine();
-        this.renderer.markAllDirty();
-        this.updateStats();
-        this.render();
-        eventBus.emit(eventName, {generation: this.generation});
-        return true;
-    }
-
-    /**
-     * Propaga al renderer y actualiza el estado tras una edición de celdas.
-     * Patrón común a pasteArea, clearArea e importPattern (rama estándar).
-     *
-     * @param {Array}   changedCells — lista de {x, y} devuelta por stateManager
-     * @param {Object}  [opts]
-     * @param {boolean} [opts.full=true] — si true: copia _prevFlags, llama markAllDirty
-     *   e inicia worker si corresponde. Usar false para ediciones menores (clearPatternCells).
-     */
-    _commitCells(changedCells, {full = true} = {}) {
-        changedCells.forEach(cell => this.renderer.markDirty(cell.x, cell.y));
-        if (full) {
-            this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-        }
-        this.updateStats();
-        if (full) {
-            this.renderer.markAllDirty();
-        }
-        this.render();
-        if (full && this.gridSize >= this.workerThreshold) {
-            this._initWorker();
-        }
-    }
-
     // =========================================
-    // GENERACIÓN
+    // GENERACIÓN — dispatch polimórfico
     // =========================================
-
-    _nextGenerationCore() {
-        const stats = this.core.step();
-
-        // Capturar los índices reales (births+deaths) ANTES de markAllDirty.
-        // En este punto _dirtyCells solo contiene lo que marcó _handleCoreCellChange.
-        // Si se llamase markAllDirty() primero, changedIndices contendría las
-        // gridSize² celdas, disparando work innecesario en updateActivityAges.
-        const changedIndices = [...this.renderer._dirtyCells];
-
-        if (stats.births + stats.deaths > this.gridSize * this.gridSize * 0.1) {
-            this.renderer.markAllDirty();
-        }
-
-        this.checkLimits();
-        this.renderer.updateActivityAges(changedIndices);
-
-        return stats.births + stats.deaths;
-    }
-
-    _nextGenerationWorker() {
-        return this._workerManager.requestNextGeneration(this.generation) ? 0 : 0;
-    }
 
     nextGeneration() {
         if (this.checkLimits()) return 0;
-
-        // === TIMING DEBUG ===
         const t0 = performance.now();
-
-        let result;
-
-        if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
-            return this._stepSpecialEngine({
-                engine: this.rd2dEngine,
-                label: 'RD-2D',
-                t0,
-                stopMessage: 'RD-2D: Simulación detenida (estable)',
-                getChangedCells: () => this.rd2dEngine.getChangedCells()
-            });
-        }
-
-        if (this.specialMode === SpecialEngineManager.MODES.WOLFRAM && this.wolframEngine?.isActive) {
-            return this._stepSpecialEngine({
-                engine: this.wolframEngine,
-                label: 'Wolfram',
-                t0,
-                stopMessage: 'Wolfram: Límite alcanzado',
-                getChangedCells: () => {
-                    const arr = [];
-                    this.renderer._dirtyCells.forEach(i => arr.push(i));
-                    return arr;
-                }
-            });
-        }
-
-        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            if (!this.triangleEngine.gridManager) return 0;
-            return this._stepSpecialEngine({
-                engine: this.triangleEngine,
-                label: 'Triangle',
-                t0,
-                getPopulation: () => this.triangleEngine.gridManager?.countPopulation() ?? 0,
-                getChangedCells: () => this.triangleEngine.getChangedCells(),
-                markDirtyFromCells: true
-            });
-        }
-
-        if (this.specialMode === SpecialEngineManager.MODES.ULAM_WARBURTON && this.uwEngine?.isActive) {
-            return this._stepSpecialEngine({
-                engine: this.uwEngine,
-                label: 'Ulam-Warburton',
-                t0,
-                stopMessage: 'Ulam-Warburton: patrón estable',
-                getChangedCells: () => this.uwEngine.getChangedCells()
-            });
-        }
-
-        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
-            return this._stepSpecialEngine({
-                engine: this.langtonEngine,
-                label: 'Langton',
-                t0,
-                getChangedCells: () => this.langtonEngine.getChangedCells()
-            });
-        }
-
-        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
-            return this._stepSpecialEngine({
-                engine: this.wireworldEngine,
-                label: 'WireWorld',
-                t0,
-                getChangedCells: () => this.wireworldEngine.getChangedCells()
-            });
-        }
-
-        this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-
-        const tStep = performance.now();
-
-        if (this.worker && this.gridSize >= this.workerThreshold) {
-            result = this._nextGenerationWorker();
-        } else {
-            result = this._nextGenerationCore();
-        }
-
-        const tRender = performance.now();
-        this._debugTiming('Standard', t0, tStep, tRender);
-        return result;
-    }
-
-    _debugTiming(mode, t0, tStep, tRender) {
-        // Throttle: solo loguear cada 2 segundos
-        const now = tRender;
-        if (!this._lastDebugLog || now - this._lastDebugLog >= 2000) {
-            this._lastDebugLog = now;
-            const stepMs = (tStep - t0).toFixed(2);
-            const renderMs = (tRender - tStep).toFixed(2);
-            const totalMs = (tRender - t0).toFixed(2);
-            console.debug(
-                `⏱ [${mode}] Gen ${this.generation} | ` +
-                `step: ${stepMs}ms | render: ${renderMs}ms | total: ${totalMs}ms`
-            );
-        }
+        return this.specialMode
+            ? this._stepEngineMode(t0)
+            : this._stepStandardMode(t0);
     }
 
     /**
-     * Patrón común para avanzar un motor especial (RD-2D, Wolfram, Triangle).
-     *
-     * @param {Object}      options
-     * @param {Object}      options.engine            - Motor con .step() y .generation
-     * @param {string}      options.label             - Etiqueta para _debugTiming
-     * @param {number}      options.t0                - Timestamp de inicio del frame
-     * @param {string|null} [options.stopMessage]     - Mensaje si el motor se detiene
-     * @param {Function|null} [options.getPopulation] - () => number para updateStats
-     * @param {Function}    options.getChangedCells   - () => Array con celdas cambiadas
-     * @param {boolean}     [options.markDirtyFromCells] - Si true, desempaqueta cada celda
-     *   como coord packed (x<<16|y) y llama markDirty
-     * @returns {number} 1
+     * Paso en modo motor especial: obtiene el descriptor del engine activo
+     * y ejecuta la lógica común (stop, stats, activity, render, timing).
      */
-    _stepSpecialEngine({
-                           engine,
-                           label,
-                           t0,
-                           stopMessage = null,
-                           getPopulation = null,
-                           getChangedCells,
-                           markDirtyFromCells = false
-                       }) {
-        const continued = engine.step();
-        if (!continued) {
+    _stepEngineMode(t0) {
+        const desc = this._engineManager.stepActive();
+        if (!desc) return 0;
+
+        if (!desc.continued) {
             this.stop();
             eventBus.emit('automaton:runningChanged', {isRunning: false});
-            if (stopMessage) console.debug(stopMessage);
+            if (desc.stopMessage) console.debug(desc.stopMessage);
         }
 
-        this.generation = engine.generation;
-        this.updateStats(getPopulation ? getPopulation() : null);
+        this.generation = desc.generation;
+        this.updateStats(desc.population);
 
-        const changedCells = getChangedCells();
-        this.renderer.updateActivityAges(changedCells);
-
-        if (markDirtyFromCells) {
-            for (let i = 0; i < changedCells.length; i++) {
-                const packed = changedCells[i];
-                this.renderer.markDirty(packed >>> 16, packed & 0xFFFF);
+        const cc = desc.changedCells;
+        if (!desc.skipActivity) {
+            this.renderer.updateActivityAges(cc);
+        }
+        if (desc.markDirtyFromCells) {
+            for (let i = 0; i < cc.length; i++) {
+                this.renderer.markDirty(cc[i] >>> 16, cc[i] & 0xFFFF);
             }
         }
 
         const tStep = performance.now();
         this.render();
-        const tRender = performance.now();
-        this._debugTiming(label, t0, tStep, tRender);
+        this._debugTiming(desc.label, t0, tStep, performance.now());
         return 1;
     }
 
+    /** Paso en modo estándar: core síncrono o worker. */
+    _stepStandardMode(t0) {
+        const tStep = performance.now();
+        const result = (this.worker && this.gridSize >= this.workerThreshold)
+            ? this._nextGenerationWorker()
+            : this._nextGenerationCore();
+        this._debugTiming('Standard', t0, tStep, performance.now());
+        return result;
+    }
+
     // =========================================
-    // MÉTODOS PÚBLICOS
+    // WRAPPERS DE RENDERER — para SpecialModeController
+    // Evitan que el controller UI acceda directamente a this.renderer.
+    // =========================================
+
+    _resetRendererCanvas() {
+        this.renderer.resizeCanvas();
+    }
+
+    _reGrid() {
+        this.renderer.reGrid();
+    }
+
+    _resizeRenderer(gs, cs) {
+        this.renderer.resize(gs, cs);
+    }
+
+    /** Conecta el gridManager del motor triangular al renderer activo. */
+    _setRendererGridManager(gm) {
+        this.renderer.setGridManager?.(gm);
+    }
+
+    _nextGenerationCore() {
+        const stats = this.core.step();
+        // stats.changedCells es el Uint32Array interno de RuleEngine (reutilizado).
+        // Debe consumirse antes del próximo step(). Lo pasamos con el count lógico
+        // para evitar el spread [...Set] que creaba un Array de hasta 160k entradas.
+        const changed = stats.births + stats.deaths;
+        if (changed > this.gridSize * this.gridSize * 0.1) {
+            this.renderer.markAllDirty();
+        }
+        // Population ya viene calculada en stats: evita un segundo countPopulation() O(n²).
+        this._checkLimitsWithPop(stats.population);
+        this.renderer.updateActivityAges(stats.changedCells, stats.changedCount);
+        return changed;
+    }
+
+    _nextGenerationWorker() {
+        this._workerManager.requestNextGeneration(this.generation);
+        return 0;
+    }
+
+    _debugTiming(mode, t0, tStep, tRender) {
+        const now = tRender;
+        if (!this._lastDebugLog || now - this._lastDebugLog >= 2000) {
+            this._lastDebugLog = now;
+            console.debug(
+                `⏱ [${mode}] Gen ${this.generation} | ` +
+                `step: ${(tStep - t0).toFixed(2)}ms | ` +
+                `render: ${(tRender - tStep).toFixed(2)}ms | ` +
+                `total: ${(tRender - t0).toFixed(2)}ms`
+            );
+        }
+    }
+
+    // =========================================
+    // BUCLE DE ANIMACIÓN
+    // =========================================
+
+    _step(stepsPerFrame = 1) {
+        if (this.specialMode) {
+            this.nextGeneration();
+            return;
+        }
+        if (this._workerManager.isProcessing) return;
+        if (this._workerManager.isAvailable) {
+            this.nextGeneration();
+            return;
+        }
+        for (let i = 0; i < stepsPerFrame; i++) {
+            if (!this.isRunning) break;
+            if (this.nextGeneration() === 0) break;
+        }
+        this.render();
+    }
+
+    // =========================================
+    // API PÚBLICA — consulta y configuración
     // =========================================
 
     render() {
@@ -787,11 +562,9 @@ class CellularAutomaton {
 
             if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
                 if (this.rd2dEngine.stateGrid?.[x]) {
-                    if (state) {
-                        this.rd2dEngine.stateGrid[x][y] = this.rd2dEngine._inferStateFromNeighbors(x, y) || 15;
-                    } else {
-                        this.rd2dEngine.stateGrid[x][y] = 0;
-                    }
+                    this.rd2dEngine.stateGrid[x][y] = state
+                        ? (this.rd2dEngine._inferStateFromNeighbors(x, y) || 15)
+                        : 0;
                 }
             }
         }
@@ -808,9 +581,7 @@ class CellularAutomaton {
     }
 
     setRuleByKey(ruleKey) {
-        if (!window.RULES?.[ruleKey]) {
-            throw new Error(`Regla ${ruleKey} no encontrada`);
-        }
+        if (!window.RULES?.[ruleKey]) throw new Error(`Regla ${ruleKey} no encontrada`);
         const rule = window.RULES[ruleKey];
         this.setRule(rule.survival, rule.birth);
         return true;
@@ -818,7 +589,6 @@ class CellularAutomaton {
 
     resizeGrid(newSize) {
         const size = Math.min(Math.max(newSize, 20), 1000);
-
         if (this.isRunning) this.stop();
 
         this.core.resize(size);
@@ -830,7 +600,6 @@ class CellularAutomaton {
             this.renderer.resize(this.gridSize, this.cellSize);
         }
 
-        // Sincronizar stateGrid de RD-2D con el nuevo tamaño
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridSize = this.gridSize;
             this.rd2dEngine._initStateGrid();
@@ -851,6 +620,9 @@ class CellularAutomaton {
         const newSize = Math.min(Math.max(size, 1), 20);
         this.cellSize = newSize;
         this.renderer.resize(this.gridSize, newSize);
+        // Resetear actividad: el redimensionado del canvas invalida el estado
+        // visual anterior y dejaría todas las celdas pintadas de amarillo.
+        this.renderer.resetActivity();
         this.render();
         eventBus.emit('automaton:zoomChanged', {zoom: newSize});
     }
@@ -867,21 +639,21 @@ class CellularAutomaton {
         const population = populationOverride !== null
             ? populationOverride
             : this.core.gridManager.countPopulation();
-
         const density = (population / (this.gridSize * this.gridSize) * 100).toFixed(1);
-
-        eventBus.emit('stats:updated', {
-            generation: this.generation,
-            population,
-            density
-        });
+        eventBus.emit('stats:updated', {generation: this.generation, population, density});
     }
 
     checkLimits() {
-        return this._limiter.check(
-            this.generation,
-            () => this.core.gridManager.countPopulation()
-        );
+        return this._limiter.check(this.generation, () => this.core.gridManager.countPopulation());
+    }
+
+    /**
+     * Igual que checkLimits() pero recibe la población ya calculada en este frame,
+     * evitando un segundo countPopulation() O(n²) en _nextGenerationCore().
+     * @param {number} population
+     */
+    _checkLimitsWithPop(population) {
+        return this._limiter.check(this.generation, () => population);
     }
 
     setLimit(type, value) {
@@ -889,409 +661,8 @@ class CellularAutomaton {
         eventBus.emit('automaton:limitChanged', {type, value});
     }
 
-    shiftGrid(dx, dy) {
-        this.stateManager.saveState(this.generation);
-
-        const gridManager = this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive
-            ? this.triangleEngine.gridManager
-            : this.core.gridManager;
-
-        gridManager.shift(dx, dy);
-
-        // RD2D mantiene su propio stateGrid como fuente de verdad — hay que desplazarlo también
-        if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
-            this.rd2dEngine.shift(dx, dy);
-        }
-
-        // Langton mantiene stateGrid + posiciones de hormigas
-        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
-            this.langtonEngine.shift(dx, dy);
-        }
-
-        // WireWorld mantiene su propio stateGrid como fuente de verdad
-        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
-            this.wireworldEngine.shift(dx, dy);
-        }
-
-        // Resetear actividad: las celdas cambiaron de posición, el estado amarillo
-        // de actividad quedaría huérfano en las posiciones anteriores.
-        this.renderer.resetActivity();
-        this.render();
-    }
-
     getCellFromMouse(e) {
         return this.renderer.getCellFromMouse(e);
-    }
-
-    // =========================================
-    // EDICIÓN DE ÁREAS
-    // =========================================
-
-    copyArea(minX, minY, maxX, maxY) {
-        return this.stateManager.copyArea(minX, minY, maxX, maxY);
-    }
-
-    async pasteArea(area, offsetX, offsetY) {
-        const wasRunning = await this._haltForEditAsync();
-
-        const result = this.stateManager.pasteArea(area, offsetX, offsetY, {
-            saveToHistory: true,
-            generation: this.generation
-        });
-
-        if (result.changedCells.length > 0) {
-            this._commitCells(result.changedCells);
-        }
-
-        this._restartIfWasRunning(wasRunning);
-        return result;
-    }
-
-    clearPatternCells(area, offsetX, offsetY) {
-        const wasRunning = this._haltForEdit();
-
-        const result = this.stateManager.clearPatternCells(area, offsetX, offsetY, {
-            saveToHistory: true,
-            generation: this.generation
-        });
-
-        if (result.changedCells.length > 0) {
-            this._commitCells(result.changedCells, {full: false});
-        }
-
-        this._restartIfWasRunning(wasRunning);
-        return result;
-    }
-
-    clearArea(minX, minY, maxX, maxY) {
-        const wasRunning = this._haltForEdit();
-
-        const result = this.stateManager.clearArea(minX, minY, maxX, maxY, {
-            saveToHistory: true,
-            generation: this.generation
-        });
-
-        if (result.changedCells.length > 0) {
-            this.renderer._prevFlags = new Uint8Array(this.renderer._renderFlags);
-            this._commitCells(result.changedCells, {full: false});
-        }
-
-        this._restartIfWasRunning(wasRunning);
-        return result;
-    }
-
-    undo() {
-        return this._applyHistoryStep(
-            this.stateManager.undo(this.generation),
-            'automaton:undo'
-        );
-    }
-
-    redo() {
-        return this._applyHistoryStep(
-            this.stateManager.redo(this.generation),
-            'automaton:redo'
-        );
-    }
-
-    async importPattern(pattern, centerX, centerY) {
-        const wasRunning = await this._haltForEditAsync();
-
-        const result = this.stateManager.importPattern(pattern, centerX, centerY, {
-            saveToHistory: true,
-            generation: this.generation
-        });
-
-        if (result.changedCells.length > 0) {
-            // Langton: las celdas vivas importadas se convierten en hormigas
-            if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
-                result.changedCells.forEach(cell => {
-                    if (this.core.getCell(cell.x, cell.y)) {
-                        this.langtonEngine.addAnt(cell.x, cell.y, 0);
-                    }
-                    this.renderer.markDirty(cell.x, cell.y);
-                });
-                this.updateStats();
-                this.render();
-                eventBus.emit('automaton:ruleChanged');
-                // WireWorld: las celdas vivas importadas se convierten en Conductores vía syncFromGrid
-            } else if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
-                this.wireworldEngine.syncFromGrid();
-                result.changedCells.forEach(cell => {
-                    this.renderer.markDirty(cell.x, cell.y);
-                });
-                this.updateStats();
-                this.renderer.markAllDirty();
-                this.render();
-            } else {
-                this._commitCells(result.changedCells);
-            }
-        }
-
-        this._restartIfWasRunning(wasRunning);
-
-        return result;
-    }
-
-    exportPattern(bounds = null) {
-        return this.stateManager.exportPattern(bounds);
-    }
-
-    /**
-     * Exporta el estado WireWorld completo como objeto { stateGrid, gridSize, name, description }.
-     * stateGrid es columna-mayor: stateGrid[x][y] con estados 0..3.
-     * Devuelve null si WireWorld no está activo.
-     */
-    exportWireworldState(name, description) {
-        if (this.specialMode !== SpecialEngineManager.MODES.WIREWORLD || !this.wireworldEngine?.isActive) return null;
-        return {
-            stateGrid: this.wireworldEngine.stateGrid,
-            gridSize: this.gridSize,
-            name: name || `WireWorld ${new Date().toLocaleDateString()}`,
-            description: description || 'Exported from cellular automaton',
-            wrap: this.wrapEdges
-        };
-    }
-
-    /**
-     * Importa un stateGrid WireWorld al engine activo.
-     * stateGrid debe ser columna-mayor: stateGrid[x][y] con estados 0..3.
-     * El patrón se centra en el grid.
-     */
-    importWireworldState(stateGrid, patternWidth, patternHeight) {
-        if (this.specialMode !== SpecialEngineManager.MODES.WIREWORLD || !this.wireworldEngine?.isActive) return false;
-
-        const size = this.gridSize;
-        const offsetX = Math.floor((size - patternWidth) / 2);
-        const offsetY = Math.floor((size - patternHeight) / 2);
-
-        // Recrear stateGrid y _nextState con el tamaño actual del grid.
-        // Evita fallos si stateGrid quedó desajustado respecto a gridSize
-        // (puede ocurrir tras un redimensionado del grid o recreación del engine).
-        this.wireworldEngine.stateGrid = Array.from({length: size}, () => new Uint8Array(size));
-        this.wireworldEngine._nextState = Array.from({length: size}, () => new Uint8Array(size));
-
-        // Limpiar grid principal
-        for (let x = 0; x < size; x++) {
-            this.grid[x].fill(0);
-        }
-
-        // Copiar patrón centrado — solo las celdas dentro del grid
-        for (let px = 0; px < patternWidth; px++) {
-            for (let py = 0; py < patternHeight; py++) {
-                const gx = offsetX + px;
-                const gy = offsetY + py;
-                if (gx < 0 || gx >= size || gy < 0 || gy >= size) continue;
-                const state = stateGrid[px]?.[py] ?? 0;
-                this.wireworldEngine.stateGrid[gx][gy] = state;
-                this.grid[gx][gy] = state > 0 ? 1 : 0;
-            }
-        }
-
-        this.wireworldEngine.generation = 0;
-        this.renderer.markAllDirty();
-        this.updateStats();
-        this.render();
-        return true;
-    }
-
-    downloadPattern(filename) {
-        return this.stateManager.downloadPattern(filename);
-    }
-
-    randomize(density = 0.35) {
-        const wasRunning = this._haltForEdit();
-
-        const result = this._engineManager.randomizeActiveEngine(density);
-
-        if (result.handled) {
-            this.generation = 0;
-            if (result.resetLimit) this.isLimitReached = false;
-            this.renderer.resetActivity();  // incluye markAllDirty internamente
-            this.updateStats(result.population);
-            this.render();
-
-            if (wasRunning) {
-                setTimeout(() => this.start(), 0);
-            }
-            return;
-        }
-
-        // Modo estándar
-        const stats = this.stateManager.randomize({
-            density,
-            saveToHistory: true,
-            generation: this.generation
-        });
-
-        this.renderer.resetActivity();
-        this.generation = 0;
-        this.isLimitReached = false;
-
-        this._engineManager.resetAllEngines();
-
-        this.renderer.markAllDirty();
-        this.updateStats(stats.population);
-        this.render();
-
-        this._initWorker();
-
-        if (wasRunning) {
-            setTimeout(() => this.start(), 0);
-        }
-
-        return stats;
-    }
-
-    clear() {
-        // === PASO 1: Detener siempre (común a todos los modos) ===
-        const wasRunning = this._haltForEdit();
-        if (wasRunning) {
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
-        }
-
-        // === PASO 2: Limpiar grid del autómata base (siempre) ===
-        this._clearBaseGrid();
-
-        // === PASO 3: Limpiar motor especial activo ===
-        this._clearSpecialEngine();
-
-        // === PASO 4: Resetear estado común (SIEMPRE, sin condiciones) ===
-        this._resetCommonState();
-
-        // === PASO 5: Renderizado y actualización ===
-        this.renderer._isFirstRender = true;
-        this.renderer.markAllDirty();
-        this.render();
-        this.updateStats(0);
-
-        // Reiniciar worker para que esté disponible en la próxima ejecución
-        this._initWorker();
-
-        console.debug('🧹 Clear completado - Modo:', this.specialMode || 'estándar');
-    }
-
-    /**
-     * Limpia el grid base del autómata (array 2D estándar)
-     * @private
-     */
-    _clearBaseGrid() {
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                this.grid[x][y] = 0;
-            }
-        }
-    }
-
-    /**
-     * Limpia el motor especial activo según el modo.
-     * Delega en SpecialEngineManager; si no hay motor especial activo,
-     * limpia el stateManager (modo estándar).
-     * @private
-     */
-    _clearSpecialEngine() {
-        const handled = this._engineManager.clearActiveEngine();
-        if (!handled) {
-            this.stateManager?.clear({
-                saveToHistory: true,
-                generation: this.generation
-            });
-        }
-    }
-
-    /**
-     * Resetea estado común SIEMPRE, independientemente del modo
-     * @private
-     */
-    _resetCommonState() {
-        // Estas líneas son CRÍTICAS y deben ejecutarse SIEMPRE
-        this.generation = 0;
-        this.isLimitReached = false;
-
-        // Resetear activity del renderer
-        this.renderer?.resetActivity();
-
-        // Resetear todos los motores especiales por si acaso
-        this._engineManager.resetAllEngines();
-    }
-
-    // =========================================
-    // CONTROL DE EJECUCIÓN
-    // =========================================
-
-    toggleRunning() {
-        if (this.checkLimits()) {
-            this.isLimitReached = false;
-            this.generation = 0;
-            this.updateStats();
-        }
-
-        if (this._loop.isRunning) {
-            this.stop();
-        } else {
-            this.start();
-        }
-
-        return this._loop.isRunning;
-    }
-
-    start() {
-        if (this._loop.isRunning) return;
-
-        // Los motores especiales gestionan sus propios dirtyCells por paso —
-        // no necesitan un full render al reanudar. El canvas queda válido
-        // desde la última pausa y el engine retoma incrementalmente.
-        if (!this.specialMode) {
-            for (let x = 0; x < this.gridSize; x++) {
-                for (let y = 0; y < this.gridSize; y++) {
-                    if (this.core.getCell(x, y)) {
-                        this.renderer.markDirty(x, y);
-                    }
-                }
-            }
-            this.renderer.markAllDirty();
-        }
-
-        this._loop.start();
-    }
-
-    stop() {
-        this._loop.stop();
-    }
-
-    _step(stepsPerFrame = 1) {
-        // Los motores especiales gestionan su propio render internamente
-        // y tienen estado incremental — siempre 1 paso por frame.
-        if (this.specialMode) {
-            this.nextGeneration();
-            if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE) {
-                if (this.generation % 5 === 0) this.updateStats();
-            }
-            return;
-        }
-
-        // Worker ocupado: esperar a que termine; no acumular pasos.
-        if (this._workerManager.isProcessing) return;
-
-        // Worker disponible: delegar 1 paso y salir (resultado llega async).
-        if (this._workerManager.isAvailable) {
-            this.nextGeneration();
-            return;
-        }
-
-        // Modo estándar sin worker: múltiples pasos, un solo render al final.
-        for (let i = 0; i < stepsPerFrame; i++) {
-            if (!this.isRunning) break;
-            const changed = this.nextGeneration();
-            if (changed === 0) break;   // límite alcanzado o patrón estable
-        }
-        this.render();
-    }
-
-    setSpeed(level) {
-        const result = this._loop.setSpeed(level);
-        eventBus.emit('automaton:speedChanged', {speed: result.interval, stepsPerFrame: result.stepsPerFrame});
-        return result.interval;
     }
 
     toggleGrid() {
@@ -1309,11 +680,292 @@ class CellularAutomaton {
     }
 
     // =========================================
+    // CONTROL DE EJECUCIÓN
+    // =========================================
+
+    toggleRunning() {
+        if (this.checkLimits()) {
+            this.isLimitReached = false;
+            this.generation = 0;
+            this.updateStats();
+        }
+        if (this._loop.isRunning) {
+            this.stop();
+        } else {
+            this.start();
+        }
+        return this._loop.isRunning;
+    }
+
+    start() {
+        if (this._loop.isRunning) return;
+        // markAllDirty garantiza que el primer frame pinta el estado actual.
+        // Los motores especiales retoman incrementalmente y no necesitan esto.
+        if (!this.specialMode) this.renderer.markAllDirty();
+        this._loop.start();
+    }
+
+    stop() {
+        this._loop.stop();
+    }
+
+    setSpeed(level) {
+        const result = this._loop.setSpeed(level);
+        eventBus.emit('automaton:speedChanged', {speed: result.interval, stepsPerFrame: result.stepsPerFrame});
+        return result.interval;
+    }
+
+    // =========================================
+    // DELEGACIÓN A EditCoordinator
+    // =========================================
+
+    randomize(density) {
+        return this._editor.randomize(density);
+    }
+
+    clear() {
+        return this._editor.clear();
+    }
+
+    copyArea(minX, minY, maxX, maxY) {
+        return this._editor.copyArea(minX, minY, maxX, maxY);
+    }
+
+    async pasteArea(area, ox, oy) {
+        return this._editor.pasteArea(area, ox, oy);
+    }
+
+    clearPatternCells(area, ox, oy) {
+        return this._editor.clearPatternCells(area, ox, oy);
+    }
+
+    clearArea(minX, minY, maxX, maxY) {
+        return this._editor.clearArea(minX, minY, maxX, maxY);
+    }
+
+    async importPattern(pat, cx, cy) {
+        return this._editor.importPattern(pat, cx, cy);
+    }
+
+    exportPattern(bounds) {
+        return this._editor.exportPattern(bounds);
+    }
+
+    exportWireworldState(name, desc) {
+        return this._editor.exportWireworldState(name, desc);
+    }
+
+    importWireworldState(sg, pw, ph) {
+        return this._editor.importWireworldState(sg, pw, ph);
+    }
+
+    shiftGrid(dx, dy) {
+        return this._editor.shiftGrid(dx, dy);
+    }
+
+    undo() {
+        return this._editor.undo();
+    }
+
+    redo() {
+        return this._editor.redo();
+    }
+
+    downloadPattern(filename) {
+        return this._editor.downloadPattern(filename);
+    }
+
+    // =========================================
     // MOTORES ESPECIALES
     // =========================================
 
     async _initSpecialEngine(engineName) {
         return this._engineManager.activate(engineName);
+    }
+
+    // =========================================
+    // API DE DIBUJO — para CanvasController
+    // Centralizan el dispatch al motor activo,
+    // evitando que el controller conozca los engines.
+    // =========================================
+
+    /**
+     * Traduce coordenadas de cliente (pixels CSS) a coordenadas de celda del
+     * motor activo.
+     * - Modo Triangle: devuelve {q, r} del renderer triangular.
+     * - Resto: devuelve {x, y} del renderer estándar.
+     * @param {number} clientX
+     * @param {number} clientY
+     * @returns {{q?: number, r?: number, x?: number, y?: number} | null}
+     */
+    getCellCoords(clientX, clientY) {
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
+            return this.renderer.getCellFromMouse(clientX, clientY);
+        }
+        return this.renderer.getCellFromMouse({clientX, clientY});
+    }
+
+    /**
+     * Dibuja una celda usando el motor activo y actualiza el estado.
+     * - Triangle: acepta {q, r}.
+     * - Resto: acepta {x, y}.
+     * No aplica a Langton ni WireWorld (tienen APIs propias).
+     * @param {{ q: number, r: number } | { x: number, y: number }} coords
+     * @param {number} state — 0 o 1
+     * @returns {boolean} changed
+     */
+    drawCellAt(coords, state) {
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
+            const changed = this.triangleEngine.gridManager.setCell(coords.q, coords.r, state);
+            if (changed) {
+                this.renderer.markDirty(coords.q, coords.r);
+                this.render();
+                this.updateStats(this.triangleEngine.gridManager.countPopulation());
+            }
+            return !!changed;
+        }
+        const changed = this.setCell(coords.x, coords.y, state ? 1 : 0);
+        if (changed) {
+            this.updateStats();
+            this.render();
+        }
+        return changed;
+    }
+
+    /**
+     * Lee el estado de celda del motor especial activo.
+     * WireWorld: estados 0-3. Resto: estado binario del grid.
+     */
+    getEngineStateAt(x, y) {
+        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
+            return this.wireworldEngine.stateGrid[x]?.[y] ?? 0;
+        }
+        return this.core.getCell(x, y);
+    }
+
+    /**
+     * Establece el estado de celda del motor especial activo y renderiza.
+     * WireWorld: estados 0-3 vía engine.setStateAt.
+     */
+    setEngineStateAt(x, y, state) {
+        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
+            const changed = this.wireworldEngine.setStateAt(x, y, state);
+            if (changed) {
+                this.updateStats();
+                this.render();
+            }
+            return changed;
+        }
+        return this.setCell(x, y, state);
+    }
+
+    /**
+     * Elimina el agente/celda del motor activo en (x, y) y renderiza.
+     * - Langton: quita hormiga y limpia stateGrid.
+     * - Resto: borra celda (state 0).
+     */
+    eraseEngineAt(x, y) {
+        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
+            this.langtonEngine.eraseAt(x, y);
+            this.renderer.markDirty(x, y);
+            this.render();
+            return;
+        }
+        const changed = this.setCell(x, y, 0);
+        if (changed) {
+            this.updateStats();
+            this.render();
+        }
+    }
+
+    /**
+     * Añade un agente en (x, y) para el motor activo y renderiza.
+     * Langton: agrega hormiga. Resto: dibuja celda viva.
+     * @param {number} x
+     * @param {number} y
+     * @param {number} [dir=0] — dirección inicial (Langton: 0=N 1=E 2=S 3=W)
+     */
+    addEngineAgentAt(x, y, dir = 0) {
+        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
+            this.langtonEngine.addAnt(x, y, dir);
+            this.renderer.markDirty(x, y);
+            this.render();
+            return;
+        }
+        this.drawCellAt({x, y}, 1);
+    }
+
+    /**
+     * Sincroniza el motor activo con el estado del grid tras una edición
+     * masiva (mover/pegar selección). Reemplaza los tres if/else de endDrag
+     * en CanvasController.
+     */
+    syncEngineAfterEdit() {
+        this.renderer.resetActivity();
+        const {specialMode, langtonEngine, rd2dEngine, wireworldEngine} = this;
+        if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.syncFromGrid();
+        if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
+        if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
+    }
+
+    /**
+     * Retorna el modo activo y la info del engine para DisplayController.
+     * @returns {{ mode: string, info: Object|null }}
+     */
+    getActiveEngineInfo() {
+        return this._engineManager.getActiveInfo();
+    }
+
+    // =========================================
+    // LIFECYCLE
+    // =========================================
+
+    destroy() {
+        if (this._isDestroyed) return;
+
+        this.stop();
+
+        if (this._cleanupResize) {
+            try {
+                this._cleanupResize();
+            } catch (e) {
+            }
+            this._cleanupResize = null;
+        }
+
+        this._cleanupWorker();
+
+        this.stateManager?.destroy();
+        this.stateManager = null;
+
+        this.renderer?.destroy();
+        this.renderer = null;
+
+        this.core?.destroy();
+        this.core = null;
+
+        this._loop?.destroy();
+        this._loop = null;
+
+        this._limiter?.destroy();
+        this._limiter = null;
+
+        this._engineManager?.destroy();
+        this._engineManager = null;
+
+        this._workerManager?.destroy();
+        this._workerManager = null;
+
+        // EditCoordinator solo guarda una referencia, no tiene recursos propios
+        this._editor = null;
+
+        this._isDestroyed = true;
+        eventBus.emit('automaton:destroyed');
+    }
+
+    _addEventListener(target, event, handler, options) {
+        target.addEventListener(event, handler, options);
+        return () => target.removeEventListener(event, handler, options);
     }
 }
 

@@ -15,6 +15,12 @@ class PatternManager {
         this._filter = {mode: SpecialEngineManager.MODES.STANDARD, rule: null};
         this._showAll = false;
 
+        // Canvas reutilizables para los overlays de preview e influencia.
+        // Se crean lazily la primera vez que se necesitan y se reusan en
+        // cada mousemove — evita crear/destruir N elementos DOM por frame.
+        this._previewCanvas = null;
+        this._influenceCanvas = null;
+
         this._init();
     }
 
@@ -32,14 +38,15 @@ class PatternManager {
         this._cleanups = [];
         this.hidePatternPreview();
         this.hideInfluenceArea();
+        this._previewCanvas = null;
+        this._influenceCanvas = null;
         window.patternManager = null;
     }
 
     _init() {
-        // Fallback temporal
         if (!window.PATTERNS) {
             console.warn('PATTERNS no cargado, usando fallback');
-            window.PATTERNS = defaultPatterns; // mínimo viable
+            window.PATTERNS = defaultPatterns;
         }
 
         // Pre-inicializar el filtro de regla desde window.RULES antes del primer render.
@@ -52,10 +59,9 @@ class PatternManager {
 
         this.renderPatterns();
 
-        // Suscribirse SOLO a eventos de COMANDO (no a eventos de notificación)
         this._cleanups.push(
             eventBus.on('pattern:selected', () => {
-                this._updatePatternInfo(); // OK: este evento NO lo emite este método
+                this._updatePatternInfo();
             }),
             eventBus.on('pattern:updated', () => {
                 this._updatePatternInfo();
@@ -136,27 +142,25 @@ class PatternManager {
     // =========================================
 
     renderPatterns(sortByCount = false) {
-        this._sortByCount = sortByCount; // recordar para re-renders del filtro
+        this._sortByCount = sortByCount;
         const container = document.getElementById('patternsContainer');
         if (!container) return;
 
         container.innerHTML = '';
 
-        const sortedPatterns = Object.keys(PATTERNS).sort((a, b) => {
-            const patternA = PATTERNS[a];
-            const patternB = PATTERNS[b];
+        const patterns = window.PATTERNS;
+        const sortedPatterns = Object.keys(patterns).sort((a, b) => {
+            const patternA = patterns[a];
+            const patternB = patterns[b];
 
-            // Random siempre al final
             if (patternA.pattern === 'random') return 1;
             if (patternB.pattern === 'random') return -1;
 
             if (sortByCount) {
-                // Orden por cantidad primero, luego alfabético
                 const countCompare = patternA.cellCount - patternB.cellCount;
                 if (countCompare !== 0) return countCompare;
                 return patternA.name.localeCompare(patternB.name);
             } else {
-                // Orden alfabético primero, luego por cantidad
                 const nameCompare = patternA.name.localeCompare(patternB.name);
                 if (nameCompare !== 0) return nameCompare;
                 return patternA.cellCount - patternB.cellCount;
@@ -164,9 +168,8 @@ class PatternManager {
         });
 
         sortedPatterns.forEach(key => {
-            const pattern = PATTERNS[key];
+            const pattern = patterns[key];
 
-            // Aplicar filtro de categoría/regla
             if (!this._isPatternVisible(pattern)) return;
             const patternBtn = document.createElement('button');
             patternBtn.className = 'pattern-btn-horizontal';
@@ -218,10 +221,9 @@ class PatternManager {
                 this._patternState.key = key;
                 this._patternState.pattern = getPatternWithRotation(key, 0);
 
-                this._updatePatternInfo(); // Actualizar UI inmediatamente
+                this._updatePatternInfo();
 
-                // EMITE EVENTO DE COMANDO (no de notificación)
-                eventBus.emit('pattern:selected', {patternKey: key, pattern: PATTERNS[key]});
+                eventBus.emit('pattern:selected', {patternKey: key, pattern: patterns[key]});
             });
 
             patternBtn.addEventListener('contextmenu', (e) => {
@@ -240,9 +242,8 @@ class PatternManager {
                         this._renderPatternToCanvas(ctx, rotatedPattern.pattern, pattern.color);
                     }
 
-                    this._updatePatternInfo(); // OK: actualiza UI
+                    this._updatePatternInfo();
 
-                    // EMITE EVENTO DE NOTIFICACIÓN (otros componentes pueden escuchar)
                     eventBus.emit('pattern:updated', {pattern: this._patternState.pattern});
                 }
 
@@ -297,83 +298,62 @@ class PatternManager {
         const pattern = getPatternWithRotation(this._patternState.key, this._patternState.rotation);
 
         if (nameEl && detailsEl && pattern) {
-            const originalPattern = PATTERNS[this._patternState.key];
+            const originalPattern = window.PATTERNS[this._patternState.key];
             const rotationText = this._patternState.rotation > 0 ? ` (${this._patternState.rotation}°)` : '';
             nameEl.textContent = `${pattern.name}${rotationText}`;
 
-            const categoryText = originalPattern.category ? t('patterns.category', {category: originalPattern.category}) : '';
-            const cellCountText = originalPattern.cellCount ? t('patterns.cells', {count: originalPattern.cellCount}) : '';
+            const categoryText = originalPattern.category
+                ? t('patterns.category', {category: originalPattern.category})
+                : '';
+            const cellCountText = originalPattern.cellCount
+                ? t('patterns.cells', {count: originalPattern.cellCount})
+                : '';
             detailsEl.textContent = `${categoryText} ${cellCountText}`;
 
-            if (descEl) {
-                descEl.textContent = originalPattern.description || '';
-            }
+            if (descEl) descEl.textContent = originalPattern.description || '';
         }
 
         this._patternState.pattern = pattern;
     }
 
     // =========================================
-    // PREVIEW DE PATRONES
+    // OVERLAY DE PREVIEW — canvas reutilizable
     // =========================================
 
+    /**
+     * Muestra un preview semitransparente del patrón seleccionado sobre el grid.
+     *
+     * Implementación anterior: creaba un <div> por celda viva en cada mousemove.
+     * Para un glider gun (36 celdas) a 60fps = ~2160 createElement/s.
+     *
+     * Implementación actual: un <canvas> creado una vez, limpiado y redibujado
+     * cada mousemove con fillRect() — sin tocar el DOM entre frames.
+     */
     showPatternPreview(x, y) {
-        const preview = document.getElementById('patternPreview');
-        const pattern = this._patternState.pattern;
-
-        if (!pattern?.pattern || pattern.pattern === 'random') {
+        const patternData = this._patternState.pattern?.pattern;
+        if (!patternData || patternData === 'random') {
             this.hidePatternPreview();
             return;
         }
 
-        const canvas = document.getElementById('canvas');
-        const container = document.getElementById('canvas-container');
-        if (!canvas || !container) return;
+        const {ctx, w, h} = this._getOverlayCtx('patternPreview', 3);
+        if (!ctx) return;
 
         const cellSize = this.automaton.cellSize;
-        const canvasRect = canvas.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
+        const gridSize = this.automaton.gridSize;
+        const patternOffX = Math.floor(patternData[0].length / 2);
+        const patternOffY = Math.floor(patternData.length / 2);
 
-        const scaleX = this.automaton.canvas.width / canvasRect.width;
-        const scaleY = this.automaton.canvas.height / canvasRect.height;
-
-        const patternData = pattern.pattern;
-        const patternOffsetX = Math.floor(patternData[0].length / 2);
-        const patternOffsetY = Math.floor(patternData.length / 2);
-
-        preview.innerHTML = '';
-        preview.style.cssText = `
-      position: absolute;
-      left: ${canvasRect.left - containerRect.left}px;
-      top: ${canvasRect.top - containerRect.top}px;
-      width: ${canvasRect.width}px;
-      height: ${canvasRect.height}px;
-      display: block;
-      pointer-events: none;
-      z-index: 3;
-    `;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.7)';
 
         for (let row = 0; row < patternData.length; row++) {
             for (let col = 0; col < patternData[row].length; col++) {
-                if (patternData[row][col] === 1) {
-                    const gridX = x - patternOffsetX + col;
-                    const gridY = y - patternOffsetY + row;
-
-                    if (gridX >= 0 && gridX < this.automaton.gridSize && gridY >= 0 && gridY < this.automaton.gridSize) {
-                        const cell = document.createElement('div');
-                        cell.className = 'pattern-preview-cell';
-                        cell.style.cssText = `
-              position: absolute;
-              left: ${gridX * cellSize / scaleX}px;
-              top: ${gridY * cellSize / scaleY}px;
-              width: ${cellSize / scaleX}px;
-              height: ${cellSize / scaleY}px;
-              background: #3b82f6;
-              border-radius: 2px;
-              opacity: 0.8;
-            `;
-                        preview.appendChild(cell);
-                    }
+                if (!patternData[row][col]) continue;
+                const gx = x - patternOffX + col;
+                const gy = y - patternOffY + row;
+                if (gx >= 0 && gx < gridSize && gy >= 0 && gy < gridSize) {
+                    ctx.fillRect(gx * cellSize, gy * cellSize, cellSize, cellSize);
                 }
             }
         }
@@ -382,134 +362,154 @@ class PatternManager {
     }
 
     hidePatternPreview() {
-        const preview = document.getElementById('patternPreview');
-        if (preview) {
-            // Limpiar hijos para liberar memoria
-            while (preview.firstChild) {
-                preview.removeChild(preview.firstChild);
-            }
-            preview.style.display = 'none';
+        if (this._previewCanvas) {
+            const ctx = this._previewCanvas.getContext('2d');
+            ctx.clearRect(0, 0, this._previewCanvas.width, this._previewCanvas.height);
+            this._previewCanvas.parentElement.style.display = 'none';
         }
         this.isPreviewVisible = false;
     }
 
     // =========================================
-    // ÁREA DE INFLUENCIA
+    // OVERLAY DE ÁREA DE INFLUENCIA — canvas reutilizable
     // =========================================
 
+    /**
+     * Dibuja el área de influencia (vecindad) de la celda/patrón bajo el cursor.
+     *
+     * Misma estrategia que showPatternPreview: un solo canvas reutilizable
+     * en lugar de N divs por mousemove.
+     */
     showInfluenceArea(x, y) {
-        const influenceDiv = document.getElementById('influenceArea');
-        if (!influenceDiv) return;
+        const {ctx, w, h} = this._getOverlayCtx('influenceArea', 2);
+        if (!ctx) return;
 
-        influenceDiv.innerHTML = '';
-        const canvas = document.getElementById('canvas');
-        const container = document.getElementById('canvas-container');
-        if (!canvas || !container) return;
-
-        const canvasRect = canvas.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const cellSize = this.automaton.cellSize;
-        const scaleX = this.automaton.canvas.width / canvasRect.width;
-        const scaleY = this.automaton.canvas.height / canvasRect.height;
-
-        influenceDiv.style.cssText = `
-      position: absolute;
-      left: ${canvasRect.left - containerRect.left}px;
-      top: ${canvasRect.top - containerRect.top}px;
-      width: ${canvasRect.width}px;
-      height: ${canvasRect.height}px;
-      display: block;
-      pointer-events: none;
-      z-index: 2;
-    `;
-
+        const gridSize = this.automaton.gridSize;
         const radius = this.automaton.neighborhoodRadius;
         const type = this.automaton.neighborhoodType;
 
+        // Calcula vecinos de una celda según tipo y radio (toroidal)
         const getNeighborhood = (cx, cy) => {
             const neighbors = [];
             for (let i = -radius; i <= radius; i++) {
                 for (let j = -radius; j <= radius; j++) {
                     if (i === 0 && j === 0) continue;
                     if (type === 'neumann' && Math.abs(i) + Math.abs(j) > radius) continue;
-
-                    const nx = (cx + i + this.automaton.gridSize) % this.automaton.gridSize;
-                    const ny = (cy + j + this.automaton.gridSize) % this.automaton.gridSize;
-                    neighbors.push({x: nx, y: ny});
+                    neighbors.push({
+                        x: (cx + i + gridSize) % gridSize,
+                        y: (cy + j + gridSize) % gridSize
+                    });
                 }
             }
             return neighbors;
         };
 
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+
         const pattern = this._patternState.pattern?.pattern;
-        let cellsToHighlight;
 
         if (!pattern || pattern === 'random') {
-            cellsToHighlight = getNeighborhood(x, y);
+            // Influencia de celda individual
+            for (const {x: nx, y: ny} of getNeighborhood(x, y)) {
+                ctx.fillRect(nx * cellSize, ny * cellSize, cellSize, cellSize);
+            }
         } else {
-            const patternOffsetX = Math.floor(pattern[0].length / 2);
-            const patternOffsetY = Math.floor(pattern.length / 2);
-            const patternCells = new Set();
+            // Influencia del patrón completo: unión de vecindades de cada celda viva,
+            // excluyendo las celdas del propio patrón.
+            const patternOffX = Math.floor(pattern[0].length / 2);
+            const patternOffY = Math.floor(pattern.length / 2);
 
+            // Set de celdas del patrón para exclusión rápida
+            const patternSet = new Set();
             for (let row = 0; row < pattern.length; row++) {
                 for (let col = 0; col < pattern[row].length; col++) {
-                    if (pattern[row][col] === 1) {
-                        const gridX = x - patternOffsetX + col;
-                        const gridY = y - patternOffsetY + row;
-                        if (gridX >= 0 && gridX < this.automaton.gridSize && gridY >= 0 && gridY < this.automaton.gridSize) {
-                            patternCells.add(`${gridX},${gridY}`);
-                        }
+                    if (!pattern[row][col]) continue;
+                    const gx = x - patternOffX + col;
+                    const gy = y - patternOffY + row;
+                    if (gx >= 0 && gx < gridSize && gy >= 0 && gy < gridSize) {
+                        patternSet.add(gx * gridSize + gy);
                     }
                 }
             }
 
-            const influenceMap = new Set();
-            patternCells.forEach(key => {
-                const [cx, cy] = key.split(',').map(Number);
-                getNeighborhood(cx, cy).forEach(n => influenceMap.add(`${n.x},${n.y}`));
-            });
+            // Set de influencia
+            const influenceSet = new Set();
+            for (const key of patternSet) {
+                const cx = (key / gridSize) | 0;
+                const cy = key % gridSize;
+                for (const {x: nx, y: ny} of getNeighborhood(cx, cy)) {
+                    const nk = nx * gridSize + ny;
+                    if (!patternSet.has(nk)) influenceSet.add(nk);
+                }
+            }
 
-            patternCells.forEach(key => influenceMap.delete(key));
-            cellsToHighlight = Array.from(influenceMap).map(key => {
-                const [x, y] = key.split(',').map(Number);
-                return {x, y};
-            });
+            for (const key of influenceSet) {
+                const nx = (key / gridSize) | 0;
+                const ny = key % gridSize;
+                ctx.fillRect(nx * cellSize, ny * cellSize, cellSize, cellSize);
+            }
         }
-
-        cellsToHighlight.forEach(({x, y}) => {
-            const cell = document.createElement('div');
-            cell.className = `influence-cell ${type} radius-${radius}`;
-            cell.style.cssText = `
-        position: absolute;
-        left: ${x * cellSize / scaleX}px;
-        top: ${y * cellSize / scaleY}px;
-        width: ${cellSize / scaleX}px;
-        height: ${cellSize / scaleY}px;
-        background: rgba(59, 130, 246, 0.2);
-        pointer-events: none;
-      `;
-            influenceDiv.appendChild(cell);
-        });
 
         this.isInfluenceVisible = true;
     }
 
     hideInfluenceArea() {
-        const influenceDiv = document.getElementById('influenceArea');
-        if (influenceDiv) {
-            // Limpiar hijos para liberar memoria
-            while (influenceDiv.firstChild) {
-                influenceDiv.removeChild(influenceDiv.firstChild);
-            }
-            influenceDiv.style.display = 'none';
-            this.isInfluenceVisible = false;
+        if (this._influenceCanvas) {
+            const ctx = this._influenceCanvas.getContext('2d');
+            ctx.clearRect(0, 0, this._influenceCanvas.width, this._influenceCanvas.height);
+            this._influenceCanvas.parentElement.style.display = 'none';
         }
+        this.isInfluenceVisible = false;
+    }
+
+    // =========================================
+    // UTILIDADES PRIVADAS
+    // =========================================
+
+    /**
+     * Devuelve el contexto 2D del canvas overlay para el div indicado.
+     * Crea el canvas la primera vez; lo redimensiona si el grid cambió de tamaño.
+     * El div contenedor se pone en display:block.
+     *
+     * @param {'patternPreview'|'influenceArea'} divId
+     * @param {number} zIndex  — z-index del div contenedor
+     * @returns {{ ctx: CanvasRenderingContext2D, w: number, h: number } | null}
+     */
+    _getOverlayCtx(divId, zIndex) {
+        const div = document.getElementById(divId);
+        if (!div) return null;
+
+        const w = this.automaton.canvas.width;
+        const h = this.automaton.canvas.height;
+
+        const cacheKey = divId === 'patternPreview' ? '_previewCanvas' : '_influenceCanvas';
+        let canvas = this[cacheKey];
+
+        if (!canvas || canvas.width !== w || canvas.height !== h) {
+            // Crear o reemplazar el canvas cuando no existe o el grid cambió de tamaño
+            canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            // El selector CSS global `canvas { background: #0f172a }` se aplica a todos
+            // los canvas de la página. Sobreescribir explícitamente con transparent para
+            // que el overlay no tape el canvas del juego.
+            canvas.style.cssText = 'display:block; image-rendering:pixelated; background:transparent;';
+            div.innerHTML = '';
+            div.appendChild(canvas);
+            this[cacheKey] = canvas;
+        }
+
+        div.style.cssText = `display:block; z-index:${zIndex};`;
+        return {ctx: canvas.getContext('2d'), w, h};
     }
 }
 
 // =========================================
-// EXPORTAR FUNCIONES GLOBALES NECESARIAS
+// FUNCIONES GLOBALES — usadas por botones de patrón y canvas-controller
 // =========================================
+
 function rotateMatrix(matrix) {
     if (!matrix || matrix === 'random') return matrix;
 
@@ -528,11 +528,11 @@ function rotateMatrix(matrix) {
     return rotated;
 }
 
-// Función que necesitan los botones de patrón
 function getPatternWithRotation(patternKey, rotation = 0) {
-    if (!PATTERNS[patternKey]) return null;
+    const patterns = window.PATTERNS;
+    if (!patterns[patternKey]) return null;
 
-    const original = PATTERNS[patternKey];
+    const original = patterns[patternKey];
     if (original.pattern === 'random' || rotation === 0) {
         return {
             name: original.name,
@@ -545,7 +545,6 @@ function getPatternWithRotation(patternKey, rotation = 0) {
 
     let rotatedPattern = original.pattern;
     const rotations = rotation / 90;
-
     for (let i = 0; i < rotations; i++) {
         rotatedPattern = rotateMatrix(rotatedPattern);
     }
@@ -555,12 +554,11 @@ function getPatternWithRotation(patternKey, rotation = 0) {
         description: original.description,
         color: original.color,
         pattern: rotatedPattern,
-        rotation: rotation
+        rotation
     };
 }
 
 const defaultPatterns = {
-    // === PATRONES PEQUEÑOS ===
     single: {
         name: "Punto",
         description: "Celda individual",
@@ -582,18 +580,16 @@ const defaultPatterns = {
             [1, 1]
         ]
     },
-    // === ALEATORIO ===
     random: {
         name: "Aleatorio",
         description: "Patrón aleatorio con densidad ~35%",
         category: "general",
         rule: "general",
-        cellCount: 0, // No aplica
+        cellCount: 0,
         color: "#8b5cf6",
         pattern: "random"
     },
 };
 
-// Exportar al scope global
 window.getPatternWithRotation = getPatternWithRotation;
 window.rotateMatrix = rotateMatrix;

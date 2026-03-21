@@ -107,19 +107,5 @@ class RulesLoader {
 }
 
 // Crear instancia global
-if (typeof window.eventBus === 'undefined') {
-    console.warn('EventBus no disponible, creando instancia temporal');
-    window.eventBus = new (class {
-        emit() {
-        }
 
-        on() {
-            return () => {
-            };
-        }
-
-        destroy() {
-        }
-    })();
-}
 window.rulesLoader = new RulesLoader();

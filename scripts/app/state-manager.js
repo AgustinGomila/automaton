@@ -599,32 +599,6 @@ class StateManager {
         return {changedCells, stats};
     }
 
-    /**
-     * Descarga el patrón actual como archivo JSON
-     */
-    downloadPattern(filename = null) {
-        const pattern = this.exportPattern();
-        if (!pattern) {
-            console.warn('No hay patrón para exportar');
-            return false;
-        }
-
-        const blob = new Blob([JSON.stringify(pattern, null, 2)], {
-            type: 'application/json'
-        });
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename || `pattern-${Date.now()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        return true;
-    }
-
     // =========================================
     // HISTORIAL DE POBLACIÓN
     // =========================================
@@ -632,68 +606,6 @@ class StateManager {
     recordPopulation(population) {
         this.populationHistory.push(population);
         return this;
-    }
-
-    getPopulationHistory() {
-        return this.populationHistory.toArray();
-    }
-
-    getPopulationTrend() {
-        const history = this.populationHistory.toArray();
-        if (history.length < 2) return 'stable';
-
-        const recent = history.slice(-10);
-        const first = recent[0];
-        const last = recent[recent.length - 1];
-
-        if (last > first * 1.1) return 'growing';
-        if (last < first * 0.9) return 'shrinking';
-        return 'stable';
-    }
-
-    // =========================================
-    // SERIALIZACIÓN COMPLETA
-    // =========================================
-
-    /**
-     * Serializa todo el estado incluyendo historial
-     */
-    serializeFull() {
-        return {
-            grid: this.gridManager.serialize(),
-            undoStack: [...this.undoStack],
-            redoStack: [...this.redoStack],
-            populationHistory: this.populationHistory.toArray(),
-            timestamp: Date.now()
-        };
-    }
-
-    /**
-     * Restaura estado completo incluyendo historial
-     */
-    deserializeFull(data) {
-        if (!data) return false;
-
-        if (data.grid) {
-            this.gridManager.deserialize(data.grid);
-        }
-
-        if (Array.isArray(data.undoStack)) {
-            this.undoStack = [...data.undoStack];
-        }
-
-        if (Array.isArray(data.redoStack)) {
-            this.redoStack = [...data.redoStack];
-        }
-
-        if (Array.isArray(data.populationHistory)) {
-            this.populationHistory.clear();
-            data.populationHistory.forEach(p => this.populationHistory.push(p));
-        }
-
-        this._emit('onStateChange', {type: 'restore'});
-
-        return true;
     }
 
     // =========================================

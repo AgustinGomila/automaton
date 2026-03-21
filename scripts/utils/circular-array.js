@@ -1,4 +1,9 @@
-// scripts/utils/circular-array.js
+/**
+ * CircularArray — Buffer circular de tamaño fijo con política LRU.
+ *
+ * Cuando está lleno, push() sobreescribe el elemento más antiguo.
+ * Útil para el historial de población donde solo interesa la ventana reciente.
+ */
 class CircularArray {
     constructor(maxSize) {
         this.maxSize = maxSize;
@@ -13,13 +18,12 @@ class CircularArray {
     }
 
     push(item) {
+        this.buffer[this.tail] = item;
+        this.tail = (this.tail + 1) % this.maxSize;
         if (this.size < this.maxSize) {
-            this.buffer[this.tail] = item;
-            this.tail = (this.tail + 1) % this.maxSize;
             this.size++;
         } else {
-            this.buffer[this.tail] = item;
-            this.tail = (this.tail + 1) % this.maxSize;
+            // Buffer lleno: avanzar head para descartar el más antiguo
             this.head = this.tail;
         }
     }
@@ -33,6 +37,20 @@ class CircularArray {
         this.head = 0;
         this.tail = 0;
         this.size = 0;
+    }
+
+    /**
+     * Devuelve los elementos en orden de inserción como Array plano.
+     * Usado por StateManager.getPopulationHistory(), getPopulationTrend()
+     * y serializeFull().
+     * @returns {Array}
+     */
+    toArray() {
+        const result = new Array(this.size);
+        for (let i = 0; i < this.size; i++) {
+            result[i] = this.buffer[(this.head + i) % this.maxSize];
+        }
+        return result;
     }
 
     * [Symbol.iterator]() {

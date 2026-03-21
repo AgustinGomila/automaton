@@ -1,37 +1,34 @@
-// Responsive Controller para móviles
+/**
+ * ResponsiveController — Ajustes de layout para móviles.
+ *
+ * Gestiona la apertura/cierre del panel lateral y el panel de reglas en
+ * viewports pequeños, y aplica valores de grid/zoom apropiados al inicio.
+ *
+ * Se inicializa desde main.js después de que la app está lista (app:ready),
+ * recibiendo automaton y uiController como parámetros para evitar el
+ * acoplamiento implícito a window.app.
+ */
 class ResponsiveController {
     constructor() {
         this.isMobile = window.innerWidth <= 768;
         this.isPanelOpen = false;
         this.isRulesOpen = false;
-
-        // No llamar init aquí, esperar a que todo esté listo
         this._initialized = false;
     }
 
-    init() {
+    /**
+     * @param {CellularAutomaton} [automaton]    — instancia del autómata (opcional; solo
+     *   necesaria para aplicar ajustes de grid/zoom en el primer arranque móvil)
+     * @param {UIController}      [uiController] — solo necesario junto con automaton
+     */
+    init(automaton, uiController) {
         if (this._initialized) return;
         this._initialized = true;
 
         this.bindEvents();
 
-        // Aplicar ajustes iniciales si es móvil - SIEMPRE esperar app:ready
         if (this.isMobile) {
-            console.debug('ResponsiveController: Modo móvil detectado, esperando app:ready...');
-
-            // Si ya está listo, aplicar inmediatamente
-            if (window.app?.automaton && window.app?.uiController) {
-                console.debug('ResponsiveController: App ya lista, aplicando ajustes móviles');
-                this.adjustForMobile();
-            } else {
-                // Esperar evento de ready
-                const unbind = eventBus.on('app:ready', () => {
-                    unbind();
-                    console.debug('ResponsiveController: App:ready recibido, aplicando ajustes móviles');
-                    // Delay adicional para asegurar que UIController terminó su init
-                    setTimeout(() => this.adjustForMobile(), 100);
-                });
-            }
+            this.adjustForMobile(automaton, uiController);
         }
 
         window.addEventListener('resize', () => this.handleResize());
@@ -40,25 +37,13 @@ class ResponsiveController {
         });
     }
 
-    adjustForMobile() {
-        console.log('=== adjustForMobile() llamado ===');
-        console.log('isMobile:', this.isMobile);
-        console.log('window.app:', window.app);
-        console.log('window.app?.automaton:', window.app?.automaton);
-        console.log('window.app?.uiController:', window.app?.uiController);
-
-        if (!this.isMobile) {
-            console.log('No es móvil, saliendo');
-            return;
-        }
-
-        const automaton = window.app?.automaton;
-        const uiController = window.app?.uiController;
-
-        if (!automaton) {
-            console.error('ERROR: Automata no disponible');
-            return;
-        }
+    /**
+     * Aplica los valores de grid y zoom apropiados para móviles.
+     * Si automaton/uiController no están listos todavía, el caller debe
+     * invocar este método cuando lo estén (ver main.js).
+     */
+    adjustForMobile(automaton, uiController) {
+        if (!this.isMobile || !automaton) return;
 
         const defaultGridSize = 400;
         const defaultCellSize = 2;
@@ -66,54 +51,32 @@ class ResponsiveController {
         const gridSizeInput = document.getElementById('gridSize');
         const cellSizeInput = document.getElementById('cellSize');
 
-        // === GRID SIZE ===
         const currentGridSize = parseInt(gridSizeInput?.value) || 0;
         if (currentGridSize !== defaultGridSize) {
-            console.debug(`Ajustando grid: ${currentGridSize} → ${defaultGridSize}`);
-
             if (gridSizeInput) gridSizeInput.value = String(defaultGridSize);
-
-            // Llamar a UIController para mantener consistencia
-            if (uiController) {
-                uiController.updateGridSizeDisplay();
-            }
-
+            uiController?.updateGridSizeDisplay();
             automaton.resizeGrid(defaultGridSize);
         }
 
-        // === ZOOM/CELL SIZE ===
         const currentCellSize = parseInt(cellSizeInput?.value) || 0;
-
-        // Forzar el valor 2
         if (currentCellSize !== defaultCellSize) {
-            console.debug(`Ajustando zoom: ${currentCellSize} → ${defaultCellSize}`);
-
             if (cellSizeInput) cellSizeInput.value = String(defaultCellSize);
-
-            if (uiController) {
-                uiController.updateCellSizeDisplay();
-            }
-
+            uiController?.updateCellSizeDisplay();
             automaton.setCellSize(defaultCellSize);
         }
 
-        // Forzar actualización visual
         automaton._markAllDirty();
         automaton.render();
 
-        // Ajustes de patrones para móviles
         const container = document.getElementById('patternsContainer');
         if (container) {
-            container.classList.remove('two-rows');
-            container.classList.remove('compact-view');
+            container.classList.remove('two-rows', 'compact-view');
 
             const controls = document.querySelector('.patterns-controls');
             if (controls && window.innerWidth < 480) {
                 controls.style.display = 'none';
             }
         }
-
-        console.debug('ResponsiveController: Ajustes móviles aplicados');
     }
 
     bindEvents() {
@@ -161,7 +124,6 @@ class ResponsiveController {
             if (this.isMobile && this.isPanelOpen) {
                 const leftPanel = document.getElementById('leftPanel');
                 const menuBtn = document.getElementById('mobileMenuBtn');
-
                 if (leftPanel && !leftPanel.contains(e.target) &&
                     menuBtn && !menuBtn.contains(e.target)) {
                     this.closeLeftPanel();
@@ -171,7 +133,6 @@ class ResponsiveController {
             if (this.isMobile && this.isRulesOpen) {
                 const rulesPanel = document.getElementById('rulesPanel');
                 const rulesToggle = document.getElementById('rulesToggle');
-
                 if (rulesPanel && !rulesPanel.contains(e.target) &&
                     rulesToggle && !rulesToggle.contains(e.target)) {
                     this.closeRules();
@@ -181,69 +142,43 @@ class ResponsiveController {
     }
 
     toggleLeftPanel() {
-        // Solo operar en móvil. En desktop no hay panel lateral deslizable.
-        if (!this.isMobile) {
-            console.debug('Panel toggle ignorado: no estamos en vista móvil');
-            return;
-        }
-
+        if (!this.isMobile) return;
         const leftPanel = document.getElementById('leftPanel');
-        if (!leftPanel) {
-            console.warn('Left panel no encontrado');
-            return;
-        }
-
-        if (this.isPanelOpen) {
-            this.closeLeftPanel();
-        } else {
-            this.openLeftPanel();
-        }
+        if (!leftPanel) return;
+        this.isPanelOpen ? this.closeLeftPanel() : this.openLeftPanel();
     }
 
     openLeftPanel() {
         const leftPanel = document.getElementById('leftPanel');
         if (!leftPanel) return;
-
         leftPanel.classList.remove('mobile-hidden');
         leftPanel.classList.add('mobile-visible');
         document.body.classList.add('panel-open');
-
         this.isPanelOpen = true;
-        console.debug('Panel izquierdo abierto');
     }
 
     closeLeftPanel() {
         const leftPanel = document.getElementById('leftPanel');
         if (!leftPanel) return;
-
         leftPanel.classList.remove('mobile-visible');
         leftPanel.classList.add('mobile-hidden');
         document.body.classList.remove('panel-open');
-
         this.isPanelOpen = false;
-        console.debug('Panel izquierdo cerrado');
     }
 
     toggleRules() {
         const rulesPanel = document.getElementById('rulesPanel');
         if (!rulesPanel) return;
-
-        if (this.isRulesOpen) {
-            this.closeRules();
-        } else {
-            this.openRules();
-        }
+        this.isRulesOpen ? this.closeRules() : this.openRules();
     }
 
     openRules() {
-        const rulesPanel = document.getElementById('rulesPanel');
-        rulesPanel.classList.add('show');
+        document.getElementById('rulesPanel')?.classList.add('show');
         this.isRulesOpen = true;
     }
 
     closeRules() {
-        const rulesPanel = document.getElementById('rulesPanel');
-        rulesPanel.classList.remove('show');
+        document.getElementById('rulesPanel')?.classList.remove('show');
         this.isRulesOpen = false;
     }
 
@@ -251,16 +186,12 @@ class ResponsiveController {
         const wasMobile = this.isMobile;
         this.isMobile = window.innerWidth <= 768;
 
-        if (wasMobile !== this.isMobile) {
-            if (!this.isMobile) {
-                this.closeLeftPanel();
-                this.closeRules();
-                document.body.style.overflow = '';
-            }
+        if (wasMobile !== this.isMobile && !this.isMobile) {
+            this.closeLeftPanel();
+            this.closeRules();
+            document.body.style.overflow = '';
         }
 
-        if (window.automaton) {
-            setTimeout(() => window.automaton.render(), 100);
-        }
+        window.app?.automaton?.render();
     }
 }

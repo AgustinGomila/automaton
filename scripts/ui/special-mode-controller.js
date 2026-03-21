@@ -304,7 +304,7 @@ class SpecialModeController {
             this.automaton.triangleEngine.activate({rule, wrap});
 
             if (this.automaton.triangleEngine.gridManager) {
-                this.automaton.renderer.setGridManager(this.automaton.triangleEngine.gridManager);
+                this.automaton._setRendererGridManager(this.automaton.triangleEngine.gridManager);
             }
 
             this.automaton.triangleEngine._initializeFromAutomaton();
@@ -316,7 +316,7 @@ class SpecialModeController {
             }
             this._updateTwinRuleInfo();
 
-            this.automaton.renderer.markAllDirty();
+            this.automaton._markAllDirty();
             this._finalizeActivation(SpecialEngineManager.MODES.TRIANGLE, t('notif.triangle.enabled', {rule}), true);
         } catch (error) {
             console.error('Error cargando TriangleEngine:', error);
@@ -335,7 +335,7 @@ class SpecialModeController {
             }
         }
 
-        this.automaton.renderer.markAllDirty();
+        this.automaton._markAllDirty();
         this._returnToStandard();
     }
 
@@ -525,8 +525,8 @@ class SpecialModeController {
      */
     _finalizeActivation(mode, successMsg, skipResize = false) {
         if (!skipResize) {
-            this.automaton.renderer.resizeCanvas();
-            this.automaton.renderer.reGrid();
+            this.automaton._resetRendererCanvas();
+            this.automaton._reGrid();
         }
         this.automaton.render();
         this._onUpdateHeader();
@@ -543,7 +543,11 @@ class SpecialModeController {
         this._stopIfRunning();
         this._deactivateAllModes(SpecialEngineManager.MODES.STANDARD);
 
-        this.automaton.renderer.reGrid();
+        // Limpiar el modo especial DESPUÉS de desactivar todos los engines,
+        // para que nextGeneration() no vuelva a entrar en la rama de motor especial.
+        this.automaton.specialMode = null;
+
+        this.automaton._reGrid();
         this.automaton.render();
         this._updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
         this._onUpdateHeader();
@@ -647,7 +651,7 @@ class SpecialModeController {
             this.automaton.renderer = this.automaton._originalRenderer;
             this.automaton._originalRenderer = null;
             oldRenderer?.destroy?.();
-            this.automaton.renderer.resize(this.automaton.gridSize, this.automaton.cellSize);
+            this.automaton._resizeRenderer(this.automaton.gridSize, this.automaton.cellSize);
         }
         if (this.automaton._originalCore) {
             this.automaton.core = this.automaton._originalCore;

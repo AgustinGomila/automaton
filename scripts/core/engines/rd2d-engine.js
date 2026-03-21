@@ -85,7 +85,6 @@ class RD2DEngine {
         // Inicializar grid de estados
         this._initStateGrid();
 
-        console.debug('🔲 RD-2D activado: 16 estados [N,S,E,W]');
         return this;
     }
 
@@ -96,7 +95,6 @@ class RD2DEngine {
         this.isActive = false;
         this.stateGrid = null;
         this.initialized = false;
-        console.debug('🔲 RD-2D desactivado');
     }
 
     /**
@@ -132,7 +130,7 @@ class RD2DEngine {
      * Convierte celdas vivas del usuario a estados RD apropiados.
      * @private
      */
-    _syncFromAutomatonGrid() {
+    syncFromGrid() {
         // Reiniciar stateGrid
         this._initStateGrid();
 
@@ -252,10 +250,8 @@ class RD2DEngine {
             const hasUserSeed = this._checkUserSeed();
 
             if (hasUserSeed) {
-                console.debug('🔲 RD-2D: Detectada semilla del usuario');
-                this._syncFromAutomatonGrid();
+                this.syncFromGrid();
             } else {
-                console.debug('🔲 RD-2D: Inicializando semilla por defecto');
                 this._initializeDefaultSeed();
             }
 
@@ -309,7 +305,6 @@ class RD2DEngine {
         this._syncToAutomatonGrid();
 
         if (!changed) {
-            console.debug('🔲 RD-2D: Estado estable alcanzado');
             return false;
         }
 
@@ -390,68 +385,6 @@ class RD2DEngine {
         }
     }
 
-    /**
-     * Debug: Muestra estadísticas de estados en consola
-     */
-    debugStateDistribution() {
-        if (!this.stateGrid) return;
-
-        const counts = new Array(16).fill(0);
-        let total = 0;
-
-        for (let x = 0; x < this.gridSize; x++) {
-            for (let y = 0; y < this.gridSize; y++) {
-                const state = this.stateGrid[x]?.[y] || 0;
-                counts[state]++;
-                if (state !== 0) total++;
-            }
-        }
-
-        console.log('=== RD-2D State Distribution ===');
-        console.log('Total celdas vivas:', total);
-        for (let i = 0; i < 16; i++) {
-            if (counts[i] > 0) {
-                const borders = RD2DEngine.stateToBorders(i);
-                const borderCount = RD2DEngine.countBorders(i);
-                console.log(`  Estado ${i} (${RD2DEngine.getStateName(i)}): ${counts[i]} celdas, ${borderCount} fronteras`);
-            }
-        }
-        console.log('================================');
-
-        return counts;
-    }
-
-    /**
-     * Debug: Verifica sincronización entre stateGrid y automaton.grid
-     */
-    debugSyncCheck() {
-        let mismatches = 0;
-        const maxChecks = 100;
-        const sampleX = Math.floor(Math.random() * (this.gridSize - maxChecks));
-        const sampleY = Math.floor(Math.random() * (this.gridSize - maxChecks));
-
-        for (let x = sampleX; x < sampleX + 10 && x < this.gridSize; x++) {
-            for (let y = sampleY; y < sampleY + 10 && y < this.gridSize; y++) {
-                const stateAlive = (this.stateGrid[x]?.[y] || 0) !== 0;
-                const gridAlive = this.automaton.grid[x]?.[y] === 1;
-
-                if (stateAlive !== gridAlive) {
-                    mismatches++;
-                    console.warn(`Mismatch en (${x},${y}): stateGrid=${this.stateGrid[x][y]}, grid=${this.automaton.grid[x][y]}`);
-                }
-            }
-        }
-
-        if (mismatches === 0) {
-            console.log('✅ Sincronización OK en muestra');
-        } else {
-            console.error(`❌ ${mismatches} desincronizaciones encontradas`);
-        }
-    }
-
-    /**
-     * Desplaza stateGrid toroidalmente. Llamado desde shiftGrid del coordinador.
-     */
     shift(dx, dy) {
         if (!this.stateGrid) return;
         const size = this.gridSize;
@@ -467,6 +400,8 @@ class RD2DEngine {
         this.stateGrid = dst;
     }
 }
+
+// Exportar global
 
 // Exportar global
 window.RD2DEngine = RD2DEngine;

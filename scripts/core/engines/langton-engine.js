@@ -264,8 +264,11 @@ class LangtonEngine {
     // =========================================
 
     addAnt(x, y, dir = 0) {
+        // Evitar duplicados: si ya hay una hormiga en esta posición, no agregar otra.
+        // La guarda vive aquí para que todos los callers (flood fill, drag, presets)
+        // obtengan el mismo comportamiento sin duplicar la lógica afuera.
+        if (this.ants.some(a => a.x === x && a.y === y)) return;
         this.ants.push({x, y, dir});
-        // Marcar la celda como viva en el grid principal para que el renderer la muestre
         const size = this._ctx.gridSize;
         if (x >= 0 && x < size && y >= 0 && y < size) {
             this._ctx.grid[x][y] = 1;

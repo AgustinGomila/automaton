@@ -2,16 +2,15 @@
  * SpecialEngineManager - Gestiona los motores especiales de simulación.
  *
  * Responsabilidad: ciclo de vida (activación, desactivación, swap de renderer)
- * de WolframEngine, RD2DEngine, TriangleEngine y UlamWarburtonEngine.
+ * de WolframEngine, RD2DEngine, TriangleEngine, UlamWarburtonEngine, LangtonEngine
+ * y WireWorldEngine.
  *
  * Cada engine recibe un EngineContext mínimo en lugar del automaton completo,
  * aplicando DI fina: el engine solo puede acceder a las dependencias que necesita.
  *
- * Superficies de cada engine:
- *   WolframEngine   → grid, gridSize, generation (set), renderer.markDirty, _markAllDirty, setCell
- *   RD2DEngine      → grid, gridSize, renderer.markDirty
- *   TriangleEngine  → grid, gridSize, cellSize, render(), renderer.*
- *   UWEngine        → grid, gridSize, renderer.markDirty, _markAllDirty
+ * stepActive() centraliza el dispatch de paso de simulación: devuelve un descriptor
+ * normalizado que CellularAutomaton.nextGeneration() consume sin necesidad de
+ * ramificación por modo.
  */
 class SpecialEngineManager {
 
@@ -19,7 +18,6 @@ class SpecialEngineManager {
     // CONSTANTES DE MODO
     // =========================================
 
-    /** Identificadores canónicos de cada motor especial. */
     static MODES = Object.freeze({
         STANDARD: 'standard',
         WOLFRAM: 'wolfram',
@@ -30,16 +28,6 @@ class SpecialEngineManager {
         WIREWORLD: 'wireworld'
     });
 
-    /**
-     * @param {Object} options
-     * @param {Function} options.getRenderer  - () => renderer actual del automaton
-     * @param {Function} options.setRenderer  - (r) => asigna nuevo renderer al automaton
-     * @param {Function} options.getCore      - () => core actual del automaton
-     * @param {Function} options.setCore      - (c) => asigna core al automaton (restauración)
-     * @param {Function} options.getGridSize  - () => gridSize actual
-     * @param {Function} options.getCellSize  - () => cellSize actual
-     * @param {Function} options.getAutomaton - () => instancia completa (solo para TriangleEngine que llama render())
-     */
     constructor({getRenderer, setRenderer, getCore, setCore, getGridSize, getCellSize, getAutomaton}) {
         this._getRenderer = getRenderer;
         this._setRenderer = setRenderer;
@@ -63,10 +51,134 @@ class SpecialEngineManager {
         this._originalCore = null;
     }
 
+    // =========================================
+    // DISPATCH DE PASO — API PÚBLICA
+    // =========================================
+
     /**
-     * Activa un motor especial, desactivando el anterior si lo hubiera.
-     * @param {'wolfram'|'rd2d'|'triangle'} engineName
+     * Ejecuta un paso del motor especial activo y devuelve un descriptor normalizado.
+     *
+     * @typedef  {Object}        EngineStepDescriptor
+     * @property {boolean}       continued          — false = motor terminó, detener simulación
+     * @property {string}        label              — etiqueta para _debugTiming
+     * @property {string|null}   stopMessage        — mensaje de log cuando continued=false
+     * @property {number}        generation         — generación tras el paso
+     * @property {Array}         changedCells       — índices o packed coords (según markDirtyFromCells)
+     * @property {number|null}   population         — null = calcular desde grid
+     * @property {boolean}       markDirtyFromCells — si true, changedCells contiene packed (q<<16|r)
+     *
+     * @returns {EngineStepDescriptor|null} null si no hay motor especial activo
      */
+    stepActive() {
+        switch (this.specialMode) {
+            case SpecialEngineManager.MODES.RD2D:
+                return this._describeStep(this.rd2dEngine, {
+                    label: 'RD-2D',
+                    stopMessage: 'RD-2D: Simulación detenida (estable)'
+                });
+            case SpecialEngineManager.MODES.WOLFRAM:
+                return this._describeStep(this.wolframEngine, {
+                    label: 'Wolfram',
+                    stopMessage: 'Wolfram: Límite alcanzado'
+                });
+            case SpecialEngineManager.MODES.ULAM_WARBURTON:
+                return this._describeStep(this.uwEngine, {
+                    label: 'Ulam-Warburton',
+                    stopMessage: 'Ulam-Warburton: patrón estable'
+                });
+            case SpecialEngineManager.MODES.LANGTON:
+                return this._describeStep(this.langtonEngine, {label: 'Langton'});
+            case SpecialEngineManager.MODES.WIREWORLD:
+                return this._describeStep(this.wireworldEngine, {label: 'WireWorld'});
+            case SpecialEngineManager.MODES.TRIANGLE:
+                return this._describeTriangleStep();
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Descriptor genérico para motores con interfaz estándar: step() + getChangedCells().
+     * @param {Object} engine
+     * @param {string} label
+     * @param {string|null} [stopMessage]
+     * @returns {EngineStepDescriptor}
+     */
+    _describeStep(engine, {label, stopMessage = null}) {
+        const continued = engine.step();
+        return {
+            continued,
+            label,
+            stopMessage,
+            generation: engine.generation,
+            changedCells: engine.getChangedCells(),
+            population: null,
+            markDirtyFromCells: false
+        };
+    }
+
+    /**
+     * Descriptor para TriangleEngine: paso asíncrono / worker-based.
+     *
+     * step() se llama sin await: cuando usa worker, el resultado llega vía
+     * _onWorkerResult (que llama a render internamente y emite stats:updated
+     * con el conteo correcto del grid triangular). Para el path síncrono,
+     * changedCells contiene las celdas del paso actual; para el worker, son las
+     * del paso anterior (stale), pero _onWorkerResult sobreescribe con las correctas.
+     *
+     * population: null evita countPopulation() sobre el grid 2× (potencialmente
+     * 2 M de celdas). CellularAutomaton.updateStats() usa el grid base mapeado,
+     * y _onWorkerResult emite los stats finales con el valor preciso.
+     *
+     * skipActivity: true — TriangleRenderer maneja su propio visual; el efecto
+     * de actividad amarillo del GridRenderer no aplica a este modo.
+     * @returns {EngineStepDescriptor}
+     */
+    _describeTriangleStep() {
+        if (!this.triangleEngine?.gridManager) return null;
+        this.triangleEngine.step(); // fire-and-forget; resultado via _onWorkerResult
+        return {
+            continued: true,
+            label: 'Triangle',
+            stopMessage: null,
+            generation: this.triangleEngine.generation,
+            changedCells: this.triangleEngine.getChangedCells(),
+            population: null,
+            markDirtyFromCells: true,
+            skipActivity: true
+        };
+    }
+
+    // =========================================
+    // INFO DEL MOTOR ACTIVO — para DisplayController
+    // =========================================
+
+    /**
+     * Retorna el modo activo y la info del engine correspondiente.
+     * Centraliza el dispatch que antes se repetía en DisplayController.
+     *
+     * @returns {{ mode: string, info: Object|null }}
+     *   mode — SpecialEngineManager.MODES.*
+     *   info — engine.getInfo() si el modo lo expone; null si no aplica
+     */
+    getActiveInfo() {
+        const mode = this.specialMode || SpecialEngineManager.MODES.STANDARD;
+        switch (mode) {
+            case SpecialEngineManager.MODES.WOLFRAM:
+                return {mode, info: this.wolframEngine?.getInfo() ?? null};
+            case SpecialEngineManager.MODES.TRIANGLE:
+                return {mode, info: this.triangleEngine?.getInfo() ?? null};
+            case SpecialEngineManager.MODES.LANGTON:
+                return {mode, info: this.langtonEngine?.getInfo() ?? null};
+            default:
+                return {mode, info: null};
+        }
+    }
+
+    // =========================================
+    // ACTIVACIÓN / DESACTIVACIÓN
+    // =========================================
+
     async activate(engineName) {
         if (this.specialMode === engineName && this._specialEngineLoaded) {
             return;
@@ -164,17 +276,6 @@ class SpecialEngineManager {
         this._specialEngineLoaded = true;
     }
 
-    /**
-     * Restaura el renderer y core originales (salir de modo triangle).
-     */
-    restoreStandardMode() {
-        this._restoreOriginals();
-        this.specialMode = null;
-    }
-
-    /**
-     * Desactiva todos los motores y libera recursos.
-     */
     destroy() {
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
@@ -198,120 +299,10 @@ class SpecialEngineManager {
         this._setCore = null;
     }
 
-    // ─── Privados ───────────────────────────────────────────────
+    // =========================================
+    // OPERACIONES BATCH — usadas por EditCoordinator / CellularAutomaton
+    // =========================================
 
-    /**
-     * Contexto mínimo para WolframEngine.
-     * Expone: grid, gridSize (live), generation (set), renderer.markDirty,
-     *         _markAllDirty, setCell.
-     */
-    _buildWolframContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get generation() {
-                return automaton.generation;
-            },
-            set generation(v) {
-                automaton.generation = v;
-            },
-            get renderer() {
-                return self._getRenderer();
-            },
-            _markAllDirty() {
-                automaton._markAllDirty();
-            },
-            setCell(x, y, state, markDirty) {
-                return automaton.setCell(x, y, state, markDirty);
-            }
-        };
-    }
-
-    /**
-     * Contexto mínimo para RD2DEngine.
-     * Expone: grid, gridSize (live), renderer.markDirty.
-     */
-    _buildRD2DContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            }
-        };
-    }
-
-    /**
-     * Contexto mínimo para TriangleEngine.
-     * TriangleEngine llama automaton.render() directamente, por lo que necesita
-     * la referencia completa; sin embargo la envolvemos para poder interceptar
-     * o sustituir en el futuro sin tocar el engine.
-     * Expone: grid, gridSize, cellSize, render(), renderer.*.
-     */
-    _buildTriangleContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get cellSize() {
-                return self._getCellSize();
-            },
-            render() {
-                return automaton.render();
-            },
-            get renderer() {
-                return self._getRenderer();
-            }
-        };
-    }
-
-    /**
-     * Contexto mínimo para UlamWarburtonEngine.
-     * Expone: grid, gridSize (live), renderer.markDirty, _markAllDirty.
-     */
-    _buildUWContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            },
-            _markAllDirty() {
-                automaton._markAllDirty();
-            }
-        };
-    }
-
-    /**
-     * Limpia el motor especial activo.
-     * Retorna true si un motor especial fue limpiado, false si el modo es
-     * estándar (sin motor especial). En ese caso, el coordinador es
-     * responsable de limpiar el stateManager.
-     * @returns {boolean}
-     */
     clearActiveEngine() {
         switch (this.specialMode) {
             case SpecialEngineManager.MODES.WOLFRAM:
@@ -345,15 +336,6 @@ class SpecialEngineManager {
         }
     }
 
-    /**
-     * Aleatoriza el grid del motor especial activo.
-     * Retorna { handled: true, population, resetLimit } si un motor especial
-     * lo gestionó, o { handled: false } si el modo estándar debe encargarse.
-     * - population: número de celdas vivas tras randomizar, o null para recalcular
-     * - resetLimit: true si el motor requiere limpiar isLimitReached
-     * @param {number} density
-     * @returns {{ handled: boolean, population?: number|null, resetLimit?: boolean }}
-     */
     randomizeActiveEngine(density) {
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.gridManager) {
             const {width, height} = this.triangleEngine.gridManager;
@@ -387,11 +369,6 @@ class SpecialEngineManager {
         return {handled: false};
     }
 
-    /**
-     * Resetea todos los motores especiales.
-     * Se usa cuando el grid base es randomizado/limpiado en modo estándar,
-     * para sincronizar cualquier motor que estuviera activo.
-     */
     resetAllEngines() {
         this.wolframEngine?.reset?.();
         this.rd2dEngine?.reset?.();
@@ -400,13 +377,6 @@ class SpecialEngineManager {
         this.wireworldEngine?.reset?.();
     }
 
-    /**
-     * Resetea el motor especial activo al estado inicial de su grid.
-     * Se usa al deshacer/rehacer, cuando el grid base fue restaurado
-     * y el motor especial debe sincronizarse con él.
-     * Solo aplica a Wolfram y RD-2D; Triangle y Ulam-Warburton
-     * no tienen estado derivado que deba resetearse en undo/redo.
-     */
     resetActiveEngine() {
         switch (this.specialMode) {
             case SpecialEngineManager.MODES.WOLFRAM:
@@ -418,10 +388,95 @@ class SpecialEngineManager {
         }
     }
 
-    /**
-     * Contexto mínimo para LangtonEngine.
-     * Expone: grid, gridSize, renderer, wrapEdges.
-     */
+    // =========================================
+    // CONTEXTOS POR ENGINE
+    // =========================================
+
+    _buildWolframContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get generation() {
+                return automaton.generation;
+            },
+            set generation(v) {
+                automaton.generation = v;
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            _markAllDirty() {
+                automaton._markAllDirty();
+            },
+            setCell(x, y, state, markDirty) {
+                return automaton.setCell(x, y, state, markDirty);
+            }
+        };
+    }
+
+    _buildRD2DContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            }
+        };
+    }
+
+    _buildTriangleContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get cellSize() {
+                return self._getCellSize();
+            },
+            render() {
+                return automaton.render();
+            },
+            get renderer() {
+                return self._getRenderer();
+            }
+        };
+    }
+
+    _buildUWContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            _markAllDirty() {
+                automaton._markAllDirty();
+            }
+        };
+    }
+
     _buildLangtonContext() {
         const self = this;
         const automaton = self._getAutomaton();
@@ -441,10 +496,6 @@ class SpecialEngineManager {
         };
     }
 
-    /**
-     * Contexto mínimo para WireWorldEngine.
-     * Expone: grid, gridSize, renderer, wrapEdges.
-     */
     _buildWireworldContext() {
         const self = this;
         const automaton = self._getAutomaton();
@@ -464,6 +515,10 @@ class SpecialEngineManager {
         };
     }
 
+    // =========================================
+    // UTILIDADES PRIVADAS
+    // =========================================
+
     _restoreOriginals() {
         if (this._originalRenderer) {
             this._setRenderer(this._originalRenderer);
@@ -480,8 +535,8 @@ class SpecialEngineManager {
             const canvas = document.createElement('canvas');
             const gl = canvas.getContext('webgl2');
             if (!gl) return false;
-            return typeof gl.createVertexArray === 'function' &&
-                typeof gl.drawArraysInstanced === 'function';
+            return typeof gl.createVertexArray === 'function'
+                && typeof gl.drawArraysInstanced === 'function';
         } catch (e) {
             return false;
         }

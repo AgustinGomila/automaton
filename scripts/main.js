@@ -32,16 +32,16 @@ class Application {
             this.patternManager = new PatternManager(this.automaton);
             window.patternManager = this.patternManager;
 
-            // 6. Crear UI Controller (esto actualizará los textos dinámicos)
+            // 6. Crear UI Controller
             this.uiController = new UIController(this.automaton);
 
-            // Compartir _patternState con PatternManager para eliminar window.selectedPattern*
-            this.patternManager.setPatternState(this.uiController._patternState);
+            // Compartir el estado de patrón entre UIController y PatternManager
+            // usando la API pública en lugar del campo interno _patternState.
+            this.patternManager.setPatternState(this.uiController.getPatternState());
 
             // 7. Cleanup global
             this._setupGlobalCleanup();
 
-            console.debug('✅ Aplicación inicializada completamente');
             eventBus.emit('app:ready');
 
         } catch (error) {
@@ -82,13 +82,15 @@ class Application {
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new Application();
 
-    // Inicializar ResponsiveController después de que la app esté lista
+    // ResponsiveController recibe automaton y uiController directamente
+    // para evitar el acoplamiento a window.app dentro del controlador.
     eventBus.on('app:ready', () => {
         setTimeout(() => {
             if (!window.responsiveController) {
                 window.responsiveController = new ResponsiveController();
             }
-            window.responsiveController.init();
+            const {automaton, uiController} = window.app;
+            window.responsiveController.init(automaton, uiController);
         }, 50);
     });
 });

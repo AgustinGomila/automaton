@@ -49,6 +49,16 @@ class UIController {
         );
     }
 
+    /**
+     * Devuelve la referencia compartida del estado de patrón activo.
+     * Usado por main.js para sincronizarlo con PatternManager sin acceder
+     * a campos internos (_patternState).
+     * @returns {{ pattern: Object|null, key: string|null, rotation: number }}
+     */
+    getPatternState() {
+        return this._patternState;
+    }
+
     _onLocaleChanged() {
         this._displayController.updateHeaderInfo();
         this.updateSpeedDisplay();
@@ -63,7 +73,6 @@ class UIController {
     }
 
     async _waitForRulesAndInit() {
-        console.debug('UIController: Esperando reglas...');
 
         let attempts = 0;
         while ((!window.RULES || Object.keys(window.RULES).length === 0) && attempts < 100) {
@@ -71,7 +80,6 @@ class UIController {
             attempts++;
         }
 
-        console.debug(`✅ UIController: ${Object.keys(window.RULES).length} reglas disponibles`);
 
         this._init().then()
     }
@@ -532,7 +540,6 @@ class UIController {
         }
 
         if (this.automaton.undo()) {
-            console.debug('↶ Undo ejecutado');
             this._showNotification(t('notif.undo'), 'info', 1000);
         }
     }
@@ -547,7 +554,6 @@ class UIController {
         }
 
         if (this.automaton.redo()) {
-            console.debug('↷ Redo ejecutado');
             this._showNotification(t('notif.redo'), 'info', 1000);
         }
     }
@@ -646,7 +652,7 @@ class UIController {
 
     toggleGrid() {
         // Funciona para ambos modos (estándar y triangular)
-        const newState = this.automaton.renderer.toggleGrid();
+        const newState = this.automaton.toggleGrid();
 
         // Actualizar visual del botón
         const gridToggle = document.getElementById('gridToggle');
@@ -917,6 +923,11 @@ class UIController {
                 });
             }
         }
+
+        // Quitar el foco del selector para que las teclas de letra (S, R, A, C, etc.)
+        // sigan disparando los atajos de teclado del simulador en lugar de navegar
+        // entre opciones del <select>.
+        selector.blur();
     }
 
     applyCustomRule() {
@@ -945,7 +956,6 @@ class UIController {
                     rule: window.RULES.custom.ruleString
                 });
 
-                console.debug(`✅ Regla personalizada aplicada: ${window.RULES.custom.ruleString}`);
             }
 
         } catch (error) {
@@ -1121,15 +1131,12 @@ class UIController {
         // Escuchar eventos DEL EVENTBUS
         this._cleanups.push(
             eventBus.on('pattern:selected', () => {
-                console.debug('UIController: Evento pattern:selected recibido');
                 this._displayController.updateDrawModeIndicator();
             }),
             eventBus.on('pattern:updated', () => {
-                console.debug('UIController: Evento pattern:updated recibido');
                 this._displayController.updateDrawModeIndicator();
             }),
             eventBus.on('pattern:cleared', () => {
-                console.debug('UIController: Evento pattern:cleared recibido');
                 this._displayController.updateDrawModeIndicator();
             })
         );
