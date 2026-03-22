@@ -392,10 +392,6 @@ class EditCoordinator {
             'automaton:redo'
         );
     }
-
-    downloadPattern(filename) {
-        return this._a.stateManager.downloadPattern(filename);
-    }
 }
 
 window.EditCoordinator = EditCoordinator;

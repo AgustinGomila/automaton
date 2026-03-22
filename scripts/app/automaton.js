@@ -510,7 +510,7 @@ class CellularAutomaton {
         const renderMs = tRender > tStep ? tRender - tStep : null;
         const totalMs = renderMs !== null ? tRender - t0 : stepMs;
 
-        const α = 0.15;
+        const alpha = 0.15;
         if (!this._perf) {
             this._perf = {
                 stepMs: stepMs,
@@ -519,10 +519,10 @@ class CellularAutomaton {
                 lastSecond: tRender, lastGenSnapshot: this.generation, genPerSec: 0, mode
             };
         } else {
-            this._perf.stepMs = α * stepMs + (1 - α) * this._perf.stepMs;
+            this._perf.stepMs = alpha * stepMs + (1 - alpha) * this._perf.stepMs;
             if (renderMs !== null) {
-                this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
-                this._perf.totalMs = α * totalMs + (1 - α) * this._perf.totalMs;
+                this._perf.renderMs = alpha * renderMs + (1 - alpha) * this._perf.renderMs;
+                this._perf.totalMs = alpha * totalMs + (1 - alpha) * this._perf.totalMs;
             }
             this._perf.mode = mode;
         }
@@ -811,10 +811,6 @@ class CellularAutomaton {
 
     redo() {
         return this._editor.redo();
-    }
-
-    downloadPattern(filename) {
-        return this._editor.downloadPattern(filename);
     }
 
     // =========================================
