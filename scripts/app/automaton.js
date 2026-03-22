@@ -505,14 +505,45 @@ class CellularAutomaton {
     }
 
     _debugTiming(mode, t0, tStep, tRender) {
-        const now = tRender;
-        if (!this._lastDebugLog || now - this._lastDebugLog >= 2000) {
-            this._lastDebugLog = now;
+        const stepMs = tStep - t0;
+        const renderMs = tRender - tStep;
+        const totalMs = tRender - t0;
+
+        // Acumular métricas con EMA (α = 0.15 → ventana ~6 muestras)
+        const α = 0.15;
+        if (!this._perf) {
+            this._perf = {
+                stepMs: stepMs, renderMs: renderMs, totalMs: totalMs,
+                genCount: 0, lastSecond: tRender, genPerSec: 0, mode
+            };
+        } else {
+            this._perf.stepMs = α * stepMs + (1 - α) * this._perf.stepMs;
+            this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
+            this._perf.totalMs = α * totalMs + (1 - α) * this._perf.totalMs;
+            this._perf.mode = mode;
+        }
+
+        // Contar gen/s en ventana de 1 segundo
+        this._perf.genCount++;
+        if (tRender - this._perf.lastSecond >= 1000) {
+            this._perf.genPerSec = this._perf.genCount;
+            this._perf.genCount = 0;
+            this._perf.lastSecond = tRender;
+        }
+
+        // Emitir solo si el overlay está visible (evita trabajo innecesario)
+        if (this._perfVisible) {
+            eventBus.emit('perf:update', this._perf);
+        }
+
+        // Log de consola cada 2 s (solo en desarrollo)
+        if (!this._lastDebugLog || tRender - this._lastDebugLog >= 2000) {
+            this._lastDebugLog = tRender;
             console.debug(
                 `⏱ [${mode}] Gen ${this.generation} | ` +
-                `step: ${(tStep - t0).toFixed(2)}ms | ` +
-                `render: ${(tRender - tStep).toFixed(2)}ms | ` +
-                `total: ${(tRender - t0).toFixed(2)}ms`
+                `step: ${stepMs.toFixed(2)}ms | ` +
+                `render: ${renderMs.toFixed(2)}ms | ` +
+                `total: ${totalMs.toFixed(2)}ms`
             );
         }
     }
@@ -678,6 +709,12 @@ class CellularAutomaton {
         this.render();
         eventBus.emit('automaton:showActivityEffectChanged', {enabled});
         return enabled;
+    }
+
+    /** Activa o desactiva la recolección y emisión de métricas de rendimiento. */
+    setPerfVisible(visible) {
+        this._perfVisible = visible;
+        if (!visible) this._perf = null;
     }
 
     // =========================================

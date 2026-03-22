@@ -371,6 +371,47 @@ canvas {
     z-index: 5;
 }
 
+.perf-overlay {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.7;
+    color: var(--light-text);
+    min-width: 140px;
+}
+
+.perf-overlay .perf-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.perf-overlay .perf-label {
+    color: var(--gray-text);
+}
+
+.perf-overlay .perf-value {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.perf-overlay .perf-value.warn {
+    color: var(--warning);
+}
+
+.perf-overlay .perf-value.slow {
+    color: var(--danger);
+}
+
 .coords {
     font-family: 'Courier New', monospace;
     font-size: 0.9rem;

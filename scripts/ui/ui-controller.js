@@ -313,6 +313,15 @@ class UIController {
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
+        // Toggle de rendimiento
+        const perfToggle = document.getElementById('perfToggle');
+        if (perfToggle) {
+            this._addEventListener(perfToggle, 'click', () => this._togglePerf());
+        }
+        this._cleanups.push(
+            eventBus.on('perf:update', (perf) => this._updatePerfOverlay(perf))
+        );
+
         this._specialModeController.bindEvents();
     }
 
@@ -665,6 +674,51 @@ class UIController {
         this.automaton.render();
 
         return newState;
+    }
+
+    _togglePerf() {
+        const btn = document.getElementById('perfToggle');
+        const overlay = document.getElementById('perfOverlay');
+        if (!btn || !overlay) return;
+
+        const active = btn.classList.toggle('active');
+        overlay.style.display = active ? 'block' : 'none';
+        this.automaton.setPerfVisible(active);
+    }
+
+    _updatePerfOverlay(perf) {
+        const overlay = document.getElementById('perfOverlay');
+        if (!overlay || overlay.style.display === 'none') return;
+
+        const stepMs = perf.stepMs.toFixed(1);
+        const renderMs = perf.renderMs.toFixed(1);
+        const totalMs = perf.totalMs.toFixed(1);
+        const gps = perf.genPerSec;
+
+        // Colorear según rendimiento: <16ms verde, <33ms amarillo, >33ms rojo
+        const cls = (ms) => ms < 16 ? '' : ms < 33 ? 'warn' : 'slow';
+
+        overlay.innerHTML = `
+            <div class="perf-row">
+                <span class="perf-label">gen/s</span>
+                <span class="perf-value">${gps}</span>
+            </div>
+            <div class="perf-row">
+                <span class="perf-label">step</span>
+                <span class="perf-value ${cls(perf.stepMs)}">${stepMs}ms</span>
+            </div>
+            <div class="perf-row">
+                <span class="perf-label">render</span>
+                <span class="perf-value ${cls(perf.renderMs)}">${renderMs}ms</span>
+            </div>
+            <div class="perf-row">
+                <span class="perf-label">total</span>
+                <span class="perf-value ${cls(perf.totalMs)}">${totalMs}ms</span>
+            </div>
+            <div class="perf-row">
+                <span class="perf-label">modo</span>
+                <span class="perf-value" style="color:var(--gray-text)">${perf.mode}</span>
+            </div>`;
     }
 
     toggleInfluenceArea() {
