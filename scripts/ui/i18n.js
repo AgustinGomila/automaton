@@ -93,6 +93,7 @@ class I18n {
                 'tooltip.patterns.order': 'Ordenar por células/alfabético',
                 'tooltip.patterns.compact': 'Vista compacta',
                 'tooltip.bucket': 'Bote de pintura',
+                'tooltip.perf': 'Rendimiento',
 
                 // Configuración
                 'config.title': 'Configuración',
@@ -357,6 +358,7 @@ class I18n {
                 'tooltip.patterns.order': 'Order by cellular amount/alphabetic',
                 'tooltip.patterns.compact': 'Compact view',
                 'tooltip.bucket': 'Paint bucket',
+                'tooltip.perf': 'Performance',
 
                 // Configuración
                 'config.title': 'Configuration',

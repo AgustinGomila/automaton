@@ -42,6 +42,10 @@
                             data-i18n-attr="title" title="Área de Influencia" style="color: var(--secondary);">
                         <i class="fas fa-bullseye"></i>
                     </button>
+                    <button id="perfToggle" class="btn-toggle" data-i18n="tooltip.perf" data-i18n-attr="title"
+                            title="Rendimiento">
+                        <i class="fas fa-tachometer-alt"></i>
+                    </button>
                     <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
                             title="Exportar Patrón">
                         <i class="fas fa-download"></i>
@@ -654,6 +658,7 @@
                     <div id="canvas-container">
                         <div class="canvas-overlay" id="patternPreview"></div>
                         <div class="canvas-overlay" id="influenceArea"></div>
+                        <div id="perfOverlay" class="perf-overlay" style="display:none;"></div>
                         <canvas id="canvas"></canvas>
                     </div>
                 </div>
