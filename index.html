@@ -119,7 +119,22 @@
                                     <option value="neumann" data-i18n="config.neighborhood.neumann">Neumann (4
                                         vecinos)
                                     </option>
+                                    <option value="custom" data-i18n="config.neighborhood.custom">Personalizada
+                                    </option>
                                 </select>
+                            </div>
+
+                            <!-- Grilla visual de vecindad personalizada -->
+                            <div class="config-group" id="neighborhoodGridGroup">
+                                <label>
+                                    <i class="fas fa-th"></i>
+                                    <span data-i18n="config.neighborhood.grid.label">Vecinos activos:</span>
+                                    <span class="value-display" id="customNeighborCount">0</span>
+                                </label>
+                                <div id="neighborhoodGrid" class="neighborhood-grid"></div>
+                                <div class="neighborhood-grid-hint" data-i18n="config.neighborhood.grid.hint">
+                                    Clic para activar/desactivar celdas
+                                </div>
                             </div>
 
                             <div class="config-group">
@@ -826,10 +841,10 @@
 <script src="scripts/config/pattern-loader.js"></script>
 
 <!-- Aplicación: AnimationLoop y SimulationLimiter ANTES de automaton.js -->
-<script src="scripts/app/edit-coordinator.js"></script>
 <script src="scripts/app/automaton-loop.js"></script>
 <script src="scripts/app/simulator-limiter.js"></script>
 <script src="scripts/app/state-manager.js"></script>
+<script src="scripts/app/edit-coordinator.js"></script>
 <script src="scripts/app/automaton.js"></script>
 
 <!-- UI -->

@@ -1011,7 +1011,14 @@ class UIController {
     }
 
     changeNeighborhoodType(type) {
-        this.automaton.setNeighborhoodType(type);
+        if (type === 'custom') {
+            // Aplicar la selección visual actual sin cambiar offsets
+            this._applyCustomNeighborhood();
+        } else {
+            this.automaton.setNeighborhoodType(type);
+        }
+        // Sincronizar la grilla visual con el nuevo tipo
+        this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
         this._displayController.updateHeaderInfo();
     }
 
@@ -1020,6 +1027,158 @@ class UIController {
         this._displayController.updateHeaderInfo();
         const radiusValue = document.getElementById('radiusValue');
         if (radiusValue) radiusValue.textContent = radius;
+        // Reconstruir la grilla con el nuevo radio
+        this._renderNeighborhoodGrid(radius);
+    }
+
+    /**
+     * Construye (o reconstruye) la grilla visual de (2R+1)×(2R+1) celdas.
+     *
+     * Estado inicial de las celdas:
+     *   - moore   → todas activas
+     *   - neumann → solo las del diamante (|dx|+|dy| ≤ R)
+     *   - custom  → la selección existente, filtrada al nuevo radio
+     * @param {number} radius
+     */
+    _renderNeighborhoodGrid(radius) {
+        const container = document.getElementById('neighborhoodGrid');
+        if (!container) return;
+
+        const side = 2 * radius + 1;
+        container.style.gridTemplateColumns = `repeat(${side}, 26px)`;
+        container.innerHTML = '';
+
+        const currentType = this.automaton.neighborhoodType;
+        let activeSet;
+
+        if (currentType === 'moore') {
+            activeSet = new Set();
+            for (let dx = -radius; dx <= radius; dx++)
+                for (let dy = -radius; dy <= radius; dy++)
+                    if (dx !== 0 || dy !== 0) activeSet.add(`${dx},${dy}`);
+        } else if (currentType === 'neumann') {
+            activeSet = new Set();
+            for (let dx = -radius; dx <= radius; dx++)
+                for (let dy = -radius; dy <= radius; dy++)
+                    if ((dx !== 0 || dy !== 0) && Math.abs(dx) + Math.abs(dy) <= radius)
+                        activeSet.add(`${dx},${dy}`);
+        } else {
+            // custom: conservar selección existente recortada al nuevo radio
+            activeSet = new Set(
+                this.automaton.core.neighborhood.offsets
+                    .filter(o => Math.abs(o.dx) <= radius && Math.abs(o.dy) <= radius)
+                    .map(o => `${o.dx},${o.dy}`)
+            );
+        }
+
+        for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                const isCenter = dx === 0 && dy === 0;
+                const cell = document.createElement('div');
+                cell.className = 'neighborhood-cell' + (isCenter ? ' center' : '');
+                cell.dataset.dx = dx;
+                cell.dataset.dy = dy;
+
+                if (isCenter) {
+                    cell.textContent = '●';
+                } else if (activeSet.has(`${dx},${dy}`)) {
+                    cell.classList.add('active');
+                }
+
+                if (!isCenter) {
+                    this._addEventListener(cell, 'click', () => {
+                        cell.classList.toggle('active');
+                        this._onNeighborhoodCellToggled();
+                    });
+                }
+
+                container.appendChild(cell);
+            }
+        }
+
+        this._updateCustomNeighborCount();
+    }
+
+    /**
+     * Llamado cada vez que el usuario activa/desactiva una celda manualmente.
+     * Detecta si la selección resultante coincide con Moore o Neumann para
+     * actualizar el selector de tipo; si no, marca 'custom'.
+     */
+    _onNeighborhoodCellToggled() {
+        const radius = this.automaton.neighborhoodRadius;
+        const detected = this._detectPresetType(radius);
+
+        if (detected === 'moore' || detected === 'neumann') {
+            this.automaton.setNeighborhoodType(detected);
+        } else {
+            this._applyCustomNeighborhood();
+        }
+
+        const typeSelect = document.getElementById('neighborhoodType');
+        if (typeSelect) typeSelect.value = detected;
+
+        this._updateCustomNeighborCount();
+        this._displayController.updateHeaderInfo();
+    }
+
+    /**
+     * Compara la selección visual actual con los patrones Moore y Neumann.
+     * @param {number} radius
+     * @returns {'moore' | 'neumann' | 'custom'}
+     */
+    _detectPresetType(radius) {
+        const container = document.getElementById('neighborhoodGrid');
+        if (!container) return 'custom';
+
+        const active = new Set();
+        container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
+            if (cell.classList.contains('active')) active.add(`${cell.dataset.dx},${cell.dataset.dy}`);
+        });
+
+        const mooreSet = new Set();
+        const neumannSet = new Set();
+        for (let dx = -radius; dx <= radius; dx++) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                if (dx === 0 && dy === 0) continue;
+                const key = `${dx},${dy}`;
+                mooreSet.add(key);
+                if (Math.abs(dx) + Math.abs(dy) <= radius) neumannSet.add(key);
+            }
+        }
+
+        const eq = (a, b) => a.size === b.size && [...a].every(k => b.has(k));
+        if (eq(active, mooreSet)) return 'moore';
+        if (eq(active, neumannSet)) return 'neumann';
+        return 'custom';
+    }
+
+    /**
+     * Lee el estado visual y lo aplica al autómata como vecindad custom.
+     */
+    _applyCustomNeighborhood() {
+        const container = document.getElementById('neighborhoodGrid');
+        if (!container) return;
+
+        const offsets = [];
+        container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
+            if (cell.classList.contains('active')) {
+                offsets.push({dx: parseInt(cell.dataset.dx), dy: parseInt(cell.dataset.dy)});
+            }
+        });
+
+        this.automaton.core.setNeighborhood({offsets});
+        this._updateCustomNeighborCount();
+        this._displayController.updateNeighborhoodInfo();
+    }
+
+    /**
+     * Actualiza el contador de vecinos activos en la etiqueta.
+     */
+    _updateCustomNeighborCount() {
+        const countEl = document.getElementById('customNeighborCount');
+        if (!countEl) return;
+        const active = document.querySelectorAll('#neighborhoodGrid .neighborhood-cell.active').length;
+        countEl.textContent = active;
     }
 
     _bindNeighborhoodEvents() {
@@ -1037,6 +1196,9 @@ class UIController {
                 if (radiusValue) radiusValue.textContent = e.target.value;
             });
         }
+
+        // Render inicial: la grilla siempre visible al cargar
+        this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
     }
 
     _bindPatternsControls() {

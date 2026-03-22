@@ -125,7 +125,8 @@ class DisplayController {
         this._setTitle(`${t('app.title')} - ${rule.name} ${rule.ruleString}`);
         this._setH1('fas fa-cogs', t('header.title', {ruleName: rule.name}));
 
-        const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
+        const nType = this.automaton.neighborhoodType;
+        const type = nType === 'moore' ? 'Moore' : nType === 'neumann' ? 'Neumann' : t('config.neighborhood.custom.short');
         const radius = this.automaton.neighborhoodRadius;
         const wrap = this.automaton.wrapEdges ? '∞' : '■';
         this._setNeighborhoodText(t('header.neighborhood', {type, radius, wrap}));
@@ -148,6 +149,9 @@ class DisplayController {
         const mode = this.automaton.specialMode;
         if (templates[mode]) {
             el.innerHTML = templates[mode];
+        } else if (this.automaton.neighborhoodType === 'custom') {
+            const n = this.automaton.core?.neighborhood?.getInfo()?.neighborCount ?? 0;
+            el.innerHTML = `<i class="fas fa-th"></i> ${t('header.neighborhood.custom', {n, wrap})}`;
         } else {
             const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
             const radius = this.automaton.neighborhoodRadius;

@@ -1,13 +1,18 @@
 /**
  * NeighborhoodCalculator — Cálculo de vecindad para autómatas celulares.
  *
- * Responsabilidad: calcular vecinos según tipo (Moore/Neumann) y radio.
+ * Tipos soportados:
+ *   'moore'   — cuadrado completo de (2R+1)² − 1 celdas
+ *   'neumann' — diamante (|dx|+|dy| ≤ R)
+ *   'custom'  — lista arbitraria de offsets [{dx,dy}] definida por el usuario
+ *
+ * Responsabilidad: calcular vecinos según tipo y radio.
  * Sin dependencias de estado del grid, solo cálculos geométricos.
  */
 class NeighborhoodCalculator {
     /**
      * @param {Object}  options
-     * @param {string}  options.type        — 'moore' | 'neumann'
+     * @param {string}  options.type        — 'moore' | 'neumann' | 'custom'
      * @param {number}  options.radius      — 1..10 (default 1)
      * @param {boolean} options.wrapEdges   — modo toroidal (default true)
      * @param {number}  options.gridSize
@@ -23,21 +28,19 @@ class NeighborhoodCalculator {
 
     /**
      * true cuando se puede usar el fastpath Moore radio-1 de RuleEngine.
-     * Condición: tipo Moore, radio 1. El wrapEdges lo maneja el fastpath
-     * con dos ramas separadas (wrap / bounded).
+     * Excluye 'custom' aunque tenga los mismos 8 offsets, para garantizar
+     * que la lista exacta sea la esperada por el fastpath.
      */
     get isFastPath() {
         return this.type === 'moore' && this.radius === 1;
     }
 
     /**
-     * Versión estática — instancia temporal solo para el conteo.
-     * No usar en hot paths; existe únicamente para tests o utilidades.
+     * Copia de los offsets activos. Uso: UI, worker, serialización.
+     * @returns {Array<{dx:number,dy:number}>}
      */
-    static count(x, y, grid, type = 'moore', radius = 1, wrap = true) {
-        const size = grid.length;
-        const calc = new NeighborhoodCalculator({type, radius, wrapEdges: wrap, gridSize: size});
-        return calc.countNeighbors(x, y, (nx, ny) => grid[nx]?.[ny] || 0);
+    get offsets() {
+        return this._offsets.slice();
     }
 
     _computeOffsets() {
@@ -52,12 +55,44 @@ class NeighborhoodCalculator {
         return offsets;
     }
 
+    /**
+     * Reconfigura la vecindad.
+     *
+     * Para presets (moore/neumann): pasar type y/o radius; los offsets se
+     * recalculan automáticamente.
+     *
+     * Para vecindad personalizada: pasar offsets como array [{dx,dy}].
+     * El tipo se establece a 'custom'; el radio NO cambia (la UI lo controla
+     * para determinar el tamaño de la grilla visual).
+     *
+     * @param {Object}  options
+     * @param {string}  [options.type]
+     * @param {number}  [options.radius]
+     * @param {boolean} [options.wrapEdges]
+     * @param {number}  [options.gridSize]
+     * @param {Array<{dx:number,dy:number}>} [options.offsets]  — activa tipo 'custom'
+     */
     configure(options) {
+        if (options.offsets !== undefined) {
+            // Path de vecindad personalizada: offsets directos desde la UI.
+            // Solo actualizamos type y _offsets; el radius lo conservamos
+            // para que la grilla visual siga mostrando el tamaño correcto.
+            this._offsets = options.offsets.map(o => ({dx: o.dx | 0, dy: o.dy | 0}));
+            this.type = 'custom';
+            if (options.wrapEdges !== undefined) this.wrapEdges = options.wrapEdges;
+            if (options.gridSize !== undefined) this.gridSize = options.gridSize;
+            return;
+        }
+
         if (options.type !== undefined) this.type = options.type;
         if (options.radius !== undefined) this.radius = Math.max(1, Math.min(options.radius, 10));
         if (options.wrapEdges !== undefined) this.wrapEdges = options.wrapEdges;
         if (options.gridSize !== undefined) this.gridSize = options.gridSize;
-        this._offsets = this._computeOffsets();
+
+        // Recalcular para presets (moore / neumann)
+        if (this.type !== 'custom') {
+            this._offsets = this._computeOffsets();
+        }
     }
 
     countNeighbors(x, y, getCell) {
