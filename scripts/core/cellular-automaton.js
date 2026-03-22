@@ -54,7 +54,7 @@ class CellularAutomatonCore {
         const outGrid = this.gridManager.getBackGrid();
 
         const result = this.neighborhood.isFastPath
-            ? this.ruleEngine.nextGenerationMoore1(
+            ? this.ruleEngine.nextGenerationMoore(
                 this.gridManager.grid, outGrid, this.neighborhood.wrapEdges)
             : this.ruleEngine.nextGeneration(
                 this.gridManager.grid,
