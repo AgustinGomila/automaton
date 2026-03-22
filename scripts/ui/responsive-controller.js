@@ -45,7 +45,7 @@ class ResponsiveController {
     adjustForMobile(automaton, uiController) {
         if (!this.isMobile || !automaton) return;
 
-        const defaultGridSize = 400;
+        const defaultGridSize = 200;
         const defaultCellSize = 2;
 
         const gridSizeInput = document.getElementById('gridSize');
@@ -71,11 +71,6 @@ class ResponsiveController {
         const container = document.getElementById('patternsContainer');
         if (container) {
             container.classList.remove('two-rows', 'compact-view');
-
-            const controls = document.querySelector('.patterns-controls');
-            if (controls && window.innerWidth < 480) {
-                controls.style.display = 'none';
-            }
         }
     }
 

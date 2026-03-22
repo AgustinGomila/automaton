@@ -966,11 +966,10 @@ h1 i.fa-border-style {
     padding: 8px 4px;
     scrollbar-width: thin;
     scrollbar-color: var(--primary) transparent;
-    max-height: 160px;
 }
 
 .patterns-grid-container.two-rows {
-    max-height: 300px;
+    max-height: 188px;
 }
 
 .patterns-grid-container.compact-view {
@@ -1002,7 +1001,7 @@ h1 i.fa-border-style {
     border-radius: 8px;
     cursor: pointer;
     width: 70px;
-    min-height: 70px;
+    height: 80px;
     transition: all 0.2s ease;
 }
 
@@ -1020,7 +1019,7 @@ h1 i.fa-border-style {
 
 .pattern-btn-horizontal.compact {
     width: 60px;
-    min-height: 60px;
+    height: 60px;
     padding: 6px 4px;
 }
 
@@ -1284,18 +1283,18 @@ h1 i.fa-border-style {
 /* ===== RESPONSIVE ===== */
 
 @media screen and (max-width: 1024px) {
-    .patterns-grid-container {
-        max-height: 140px;
+    .patterns-grid-container.two-rows {
+        max-height: 176px;
     }
 
     .pattern-btn-horizontal {
         width: 65px;
-        min-height: 65px;
+        height: 72px;
     }
 
     .pattern-btn-horizontal.compact {
         width: 55px;
-        min-height: 55px;
+        height: 60px;
     }
 }
 
@@ -1314,24 +1313,18 @@ h1 i.fa-border-style {
         align-self: flex-end;
     }
 
-    .patterns-grid-container {
-        max-height: 130px;
-        grid-template-rows: repeat(1, 1fr); /* En móviles, mantener 1 fila */
-    }
-
     .patterns-grid-container.two-rows {
-        grid-template-rows: repeat(2, 1fr);
-        max-height: 140px;
+        max-height: 144px;
     }
 
     .pattern-btn-horizontal {
         width: 60px;
-        min-height: 60px;
+        height: 64px;
     }
 
     .pattern-btn-horizontal.compact {
         width: 50px;
-        min-height: 50px;
+        height: 54px;
     }
 
     .pattern-thumb-horizontal {
@@ -1375,19 +1368,19 @@ h1 i.fa-border-style {
 }
 
 @media screen and (max-width: 480px) {
-    .patterns-grid-container {
-        max-height: 120px;
+    .patterns-grid-container.two-rows {
+        max-height: 126px;
     }
 
     .pattern-btn-horizontal {
         width: 55px;
-        min-height: 55px;
+        height: 57px;
         padding: 8px 4px;
     }
 
     .pattern-btn-horizontal.compact {
         width: 45px;
-        min-height: 45px;
+        height: 47px;
     }
 
     .pattern-label-horizontal {
@@ -1403,12 +1396,8 @@ h1 i.fa-border-style {
 
 /* Orientación horizontal en móviles */
 @media screen and (max-width: 768px) and (orientation: landscape) {
-    .patterns-grid-container {
-        max-height: 100px;
-    }
-
     .patterns-grid-container.two-rows {
-        max-height: 110px;
+        max-height: 144px;
     }
 }
 
@@ -2298,7 +2287,7 @@ h1 i.fa-border-style {
 
     .pattern-btn-horizontal {
         width: 60px;
-        min-height: 65px;
+        height: 65px;
     }
 
     .pattern-canvas-horizontal {
@@ -2356,7 +2345,7 @@ h1 i.fa-border-style {
 
     .pattern-btn-horizontal {
         width: 55px;
-        min-height: 60px;
+        height: 57px;
         padding: 8px 4px;
     }
 
