@@ -271,6 +271,7 @@ class UIController {
         this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
         this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
         this._addEventListener(document.getElementById('activityEffectToggle'), 'change', () => this.toggleActivityEffect());
+        this._bindActivityColorPickers();
 
         const wrapToggle = document.getElementById('wrapToggle');
         if (wrapToggle) {
@@ -690,10 +691,36 @@ class UIController {
         const toggle = document.getElementById('activityEffectToggle');
         this.showActivityEffect = toggle.checked;
 
-        // Forzar re-renderizado inmediato
+        // Mostrar u ocultar el bloque de selectores de color
+        const colorsBlock = document.getElementById('activityColors');
+        if (colorsBlock) colorsBlock.style.display = this.showActivityEffect ? '' : 'none';
+
         this.automaton.setShowActivityEffect(this.showActivityEffect);
         this.automaton._markAllDirty();
         this.automaton.render();
+    }
+
+    _bindActivityColorPickers() {
+        const map = [
+            {id: 'colorDead', swatchId: 'swatchDead', prop: 'colorDead'},
+            {id: 'colorBorn', swatchId: 'swatchBorn', prop: 'colorBorn'},
+            {id: 'colorAlive', swatchId: 'swatchAlive', prop: 'colorAlive'},
+            {id: 'colorDying', swatchId: 'swatchDying', prop: 'colorDying'},
+        ];
+
+        for (const {id, swatchId, prop} of map) {
+            const input = document.getElementById(id);
+            const swatch = document.getElementById(swatchId);
+            if (!input || !swatch) continue;
+
+            this._addEventListener(input, 'input', () => {
+                const color = input.value;
+                swatch.style.setProperty('--swatch-color', color);
+                this.automaton.renderer[prop] = color;
+                this.automaton._markAllDirty();
+                this.automaton.render();
+            });
+        }
     }
 
     exportPattern() {

@@ -49,15 +49,26 @@ class GridRenderer {
         this._fullDirtyPending = false;   // reemplaza markAllDirty O(n²)
 
         // Efecto de actividad
+        // _activityAges : cooldown para 0→1 (nacimiento, amarillo)
+        // _dyingAges    : cooldown para 1→0 (muerte, rojo)
         this._coolingCells = new Set();
-        this._activityAges = new Uint8Array(this.config.gridSize * this.config.gridSize);
+        this._dyingCells = new Set();
         this._activityCooldown = 3;
+        const _totalCells = this.config.gridSize * this.config.gridSize;
+        this._activityAges = new Uint8Array(_totalCells).fill(this._activityCooldown);
+        this._dyingAges = new Uint8Array(_totalCells).fill(this._activityCooldown);
 
         // Grilla sutil offscreen (cellSize=2)
         this._subtleGridCache = null;
 
         // Proveedor de color personalizado (LangtonEngine multi-color)
         this._colorProvider = null;
+
+        // Colores configurables por estado
+        this.colorDead = '#0f172a';  // 0→0
+        this.colorBorn = '#b9b610';  // 0→1
+        this.colorAlive = '#059669';  // 1→1
+        this.colorDying = '#ef4444';  // 1→0
 
         this._resizeCanvas();
     }
@@ -164,9 +175,11 @@ class GridRenderer {
         this.config.cellSize = Math.max(1, Math.min(cellSize, 20));
 
         const totalCells = this.config.gridSize * this.config.gridSize;
-        this._activityAges = new Uint8Array(totalCells);
+        this._activityAges = new Uint8Array(totalCells).fill(this._activityCooldown);
+        this._dyingAges = new Uint8Array(totalCells).fill(this._activityCooldown);
         this._dirtyCells.clear();
         this._coolingCells.clear();
+        this._dyingCells.clear();
         this._fullDirtyPending = false;
         this._subtleGridCache = null;
 
@@ -179,12 +192,12 @@ class GridRenderer {
     // =========================================
 
     /**
-     * Avanza los contadores de actividad (efecto "recién nacida").
+     * Avanza los contadores de actividad.
+     *   0→1 (nacimiento): _activityAges[i] = 0  → se pinta amarillo durante cooldown frames
+     *   1→0 (muerte):     _dyingAges[i]    = 0  → se pinta rojo   durante cooldown frames
      *
      * @param {Uint32Array|Array} changedBuffer — índices planos (x*size+y)
-     * @param {number}            [changedCount] — si se omite se usa changedBuffer.length.
-     *   Pasar el count explícito cuando changedBuffer es un Uint32Array reutilizable
-     *   (RuleEngine._changedBuf) cuya longitud lógica es menor que su capacidad.
+     * @param {number}            [changedCount]
      */
     updateActivityAges(changedBuffer, changedCount) {
         const cooldown = this._activityCooldown;
@@ -196,14 +209,23 @@ class GridRenderer {
             const x = (index / size) | 0;
             const y = index % size;
             if (this._getCell(x, y)) {
+                // 0→1: nació
                 this._activityAges[index] = 0;
                 this._coolingCells.add(index);
+                // Limpiar dying por si la celda renació en el mismo spot
+                this._dyingAges[index] = cooldown;
+                this._dyingCells.delete(index);
             } else {
+                // 1→0: murió
+                this._dyingAges[index] = 0;
+                this._dyingCells.add(index);
+                // Limpiar born
                 this._activityAges[index] = cooldown;
                 this._coolingCells.delete(index);
             }
         }
 
+        // Avanzar cooldown de nacimientos
         for (const index of this._coolingCells) {
             this._activityAges[index]++;
             if (this._activityAges[index] >= cooldown) {
@@ -211,11 +233,22 @@ class GridRenderer {
                 if (!this._fullDirtyPending) this._dirtyCells.add(index);
             }
         }
+
+        // Avanzar cooldown de muertes
+        for (const index of this._dyingCells) {
+            this._dyingAges[index]++;
+            if (this._dyingAges[index] >= cooldown) {
+                this._dyingCells.delete(index);
+                if (!this._fullDirtyPending) this._dirtyCells.add(index);
+            }
+        }
     }
 
     resetActivity() {
         this._coolingCells.clear();
+        this._dyingCells.clear();
         this._activityAges.fill(this._activityCooldown);
+        this._dyingAges.fill(this._activityCooldown);
         this.markAllDirty();
     }
 
@@ -253,8 +286,10 @@ class GridRenderer {
     destroy() {
         this._dirtyCells.clear();
         this._coolingCells.clear();
+        this._dyingCells.clear();
         this._subtleGridCache = null;
         this._activityAges = null;
+        this._dyingAges = null;
         this._fullDirtyPending = false;
         this.ctx = null;
         this.canvas = null;
@@ -312,20 +347,43 @@ class GridRenderer {
         }
     }
 
+    // =========================================
+    // COLOR DE CELDA
+    // =========================================
+
+    /**
+     * Devuelve el color CSS para una celda según su estado y actividad.
+     *   isAlive + naciendo  → amarillo (#b9b610)
+     *   isAlive estable     → verde   (#059669)
+     *   !isAlive + muriendo → rojo    (#ef4444)
+     *   !isAlive estable    → null    (usar fondo)
+     *
+     * @param {number}  cellIndex
+     * @param {boolean} isAlive
+     * @returns {string|null}
+     */
+    _getCellColor(cellIndex, isAlive) {
+        if (!this.config.showActivityEffect) return isAlive ? this.colorAlive : null;
+        const cooldown = this._activityCooldown;
+        if (isAlive) {
+            return this._activityAges[cellIndex] < cooldown ? this.colorBorn : this.colorAlive;
+        }
+        return this._dyingAges[cellIndex] < cooldown ? this.colorDying : null;
+    }
+
     _renderSmallCell(x, y, cellIndex, isAlive) {
         const cellSize = this.config.cellSize;
         const xPos = x * cellSize;
         const yPos = y * cellSize;
 
-        if (isAlive) {
-            const customColor = this._colorProvider?.(cellIndex);
-            const isRecentlyActive = this._activityAges[cellIndex] < this._activityCooldown;
-            this.ctx.fillStyle = customColor
-                ? customColor
-                : (isRecentlyActive && this.config.showActivityEffect ? '#b9b610' : '#059669');
+        const customColor = isAlive ? this._colorProvider?.(cellIndex) : null;
+        const actColor = customColor ?? this._getCellColor(cellIndex, isAlive);
+
+        if (actColor) {
+            this.ctx.fillStyle = actColor;
             this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
         } else {
-            this.ctx.fillStyle = '#0f172a';
+            this.ctx.fillStyle = this.colorDead;
             this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
             if (this.config.showGrid && cellSize === 2) {
                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
@@ -338,8 +396,19 @@ class GridRenderer {
     _renderLargeCell(x, y, cellIndex, isAlive) {
         const cellSize = this.config.cellSize;
         const innerSize = cellSize - 2;
-        this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
-        if (isAlive) this._drawSingleCell(x, y);
+
+        if (isAlive) {
+            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+            this._drawSingleCell(x, y);
+        } else {
+            const dyingColor = this.config.showActivityEffect && this._dyingAges[cellIndex] < this._activityCooldown
+                ? this.colorDying : null;
+            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+            if (dyingColor) {
+                this.ctx.fillStyle = dyingColor;
+                this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+            }
+        }
     }
 
     _drawSingleCell(x, y) {
@@ -349,7 +418,9 @@ class GridRenderer {
         const cellIndex = x * this.config.gridSize + y;
 
         const customColor = this._colorProvider?.(cellIndex);
-        const isRecentlyActive = this._activityAges[cellIndex] < this._activityCooldown;
+        const baseColor = customColor ?? this._getCellColor(cellIndex, true);
+        const isBorn = !customColor && this.config.showActivityEffect
+            && this._activityAges[cellIndex] < this._activityCooldown;
         const drawSize = Math.max(1, cellSize - (cellSize > 2 ? 2 : 1));
         const offset = cellSize > 2 ? 1 : 0;
 
@@ -359,23 +430,22 @@ class GridRenderer {
             const gradient = this.ctx.createRadialGradient(
                 centerX, centerY, 0, centerX, centerY, cellSize / 2
             );
-            if (isRecentlyActive && this.config.showActivityEffect) {
-                gradient.addColorStop(0, '#b9b610');
-                gradient.addColorStop(0.7, '#059669');
-                gradient.addColorStop(1, 'rgba(5, 150, 105, 0.8)');
+            if (isBorn) {
+                gradient.addColorStop(0, this.colorBorn);
+                gradient.addColorStop(0.7, this.colorAlive);
+                gradient.addColorStop(1, this.colorAlive + 'cc');
             } else {
-                gradient.addColorStop(0, '#059669');
-                gradient.addColorStop(1, '#059669');
+                gradient.addColorStop(0, this.colorAlive);
+                gradient.addColorStop(1, this.colorAlive);
             }
             this.ctx.fillStyle = gradient;
         } else {
-            this.ctx.fillStyle = isRecentlyActive && this.config.showActivityEffect
-                ? '#b9b610' : '#059669';
+            this.ctx.fillStyle = baseColor;
         }
 
         this.ctx.fillRect(x * cellSize + offset, y * cellSize + offset, drawSize, drawSize);
 
-        if (!customColor && isRecentlyActive && this.config.showActivityEffect && cellSize >= 4) {
+        if (!customColor && isBorn && cellSize >= 4) {
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
             this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
         }
@@ -422,15 +492,14 @@ class GridRenderer {
         const {gridSize, cellSize} = this.config;
         for (let x = 0; x < gridSize; x++) {
             for (let y = 0; y < gridSize; y++) {
-                if (!predicate(x, y)) continue;
+                const isAlive = predicate(x, y);
                 const cellIndex = x * gridSize + y;
-                const customColor = this._colorProvider?.(cellIndex);
-                const isRecentlyActive = this._activityAges[cellIndex] < this._activityCooldown;
+                const customColor = isAlive ? this._colorProvider?.(cellIndex) : null;
+                const color = customColor ?? this._getCellColor(cellIndex, isAlive);
 
-                this.ctx.fillStyle = customColor
-                    ? customColor
-                    : (isRecentlyActive && this.config.showActivityEffect ? '#b9b610' : '#059669');
+                if (!color) continue; // muerta y sin actividad reciente
 
+                this.ctx.fillStyle = color;
                 if (cellSize <= 2) {
                     this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
                 } else {

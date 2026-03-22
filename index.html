@@ -247,6 +247,48 @@
                                 </div>
                             </div>
 
+                            <!-- Selectores de color por estado -->
+                            <div class="config-group activity-colors" id="activityColors">
+                                <label>
+                                    <i class="fas fa-swatchbook"></i>
+                                    <span data-i18n="config.activity.colors">Colores por estado</span>
+                                </label>
+                                <div class="activity-color-swatches">
+                                    <div class="activity-swatch-item">
+                                        <div class="activity-swatch" id="swatchDead" data-state="dead"
+                                             style="--swatch-color:#0f172a" title="Muerto (0→0)">
+                                            <input type="color" value="#0f172a" id="colorDead">
+                                        </div>
+                                        <span class="activity-swatch-label"
+                                              data-i18n="config.activity.dead">Muerto</span>
+                                    </div>
+                                    <div class="activity-swatch-item">
+                                        <div class="activity-swatch" id="swatchBorn" data-state="born"
+                                             style="--swatch-color:#b9b610" title="Naciendo (0→1)">
+                                            <input type="color" value="#b9b610" id="colorBorn">
+                                        </div>
+                                        <span class="activity-swatch-label"
+                                              data-i18n="config.activity.born">Naciendo</span>
+                                    </div>
+                                    <div class="activity-swatch-item">
+                                        <div class="activity-swatch" id="swatchAlive" data-state="alive"
+                                             style="--swatch-color:#059669" title="Vivo (1→1)">
+                                            <input type="color" value="#059669" id="colorAlive">
+                                        </div>
+                                        <span class="activity-swatch-label"
+                                              data-i18n="config.activity.alive">Vivo</span>
+                                    </div>
+                                    <div class="activity-swatch-item">
+                                        <div class="activity-swatch" id="swatchDying" data-state="dying"
+                                             style="--swatch-color:#ef4444" title="Muriendo (1→0)">
+                                            <input type="color" value="#ef4444" id="colorDying">
+                                        </div>
+                                        <span class="activity-swatch-label"
+                                              data-i18n="config.activity.dying">Muriendo</span>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="config-group">
                                 <label for="limitType">
                                     <i class="fas fa-stopwatch"></i> <span data-i18n="config.limit">Límite:</span>
