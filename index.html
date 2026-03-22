@@ -70,6 +70,13 @@
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content">
+                            <div class="toggle-switch" style="margin-bottom: 10px;">
+                                <input type="checkbox" id="standardToggle" class="toggle-checkbox" checked>
+                                <label for="standardToggle" class="toggle-label">
+                                    <span data-i18n="standard.enable">Modo 2D Estándar</span>
+                                    <span class="toggle-switch-slider"></span>
+                                </label>
+                            </div>
                             <div class="config-group">
                                 <label for="ruleSelector">
                                     <i class="fas fa-chess-board"></i> <span data-i18n="config.rule">Regla:</span>
@@ -329,7 +336,7 @@
                                     <i class="fas fa-dice"></i> <span data-i18n="controls.random">Aleatorio</span>
                                 </button>
 
-                                <div class="random-percentage-control" style="margin-top: 10px;">
+                                <div class="random-percentage-control">
                                     <div class="slider-header">
                                         <label for="randomPercentage" data-i18n="config.density">Densidad</label>
                                         <span id="randomPercentageDisplay" class="value-display">35%</span>

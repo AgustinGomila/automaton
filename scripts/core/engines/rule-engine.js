@@ -106,7 +106,7 @@ class RuleEngine {
      * @param {boolean}      wrap         — true = toroidal
      * @returns {{ newGrid, changedCells: Uint32Array, changedCount, generationStats }}
      */
-    nextGenerationMoore1(currentGrid, outGrid, wrap) {
+    nextGenerationMoore(currentGrid, outGrid, wrap) {
         const size = currentGrid.length;
         const buf = this._ensureChangedBuf(size);
         let changedCount = 0, births = 0, deaths = 0;

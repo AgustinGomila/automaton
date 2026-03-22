@@ -136,6 +136,7 @@ class I18n {
                 'config.speed.normal': 'Normal',
                 'config.speed.fast': 'Rápido',
                 'config.special.title': 'Especial',
+                'standard.enable': 'Modo 2D Estándar',
                 'config.language': 'Idioma:',
 
                 // Límites
@@ -399,6 +400,7 @@ class I18n {
                 'config.speed.normal': 'Normal',
                 'config.speed.fast': 'Fast',
                 'config.special.title': 'Special',
+                'standard.enable': 'Standard 2D Mode',
                 'config.language': 'Language:',
 
                 // Límites

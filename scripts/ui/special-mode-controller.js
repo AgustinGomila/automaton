@@ -24,6 +24,19 @@ class SpecialModeController {
     }
 
     bindEvents() {
+        // Toggle Modo Estándar — desactiva todos los modos especiales
+        const standardToggle = document.getElementById('standardToggle');
+        if (standardToggle) {
+            this._addEventListener(standardToggle, 'change', () => {
+                if (standardToggle.checked) {
+                    this._returnToStandard();
+                } else {
+                    // Desmarcar sin acción: el usuario debe activar un modo especial
+                    standardToggle.checked = true;
+                }
+            });
+        }
+
         // Toggle RD-2D
         const rd2dToggle = document.getElementById('rd2dToggle');
         if (rd2dToggle) {
@@ -414,6 +427,12 @@ class SpecialModeController {
         if (rulesHeader) {
             const isSpecial = mode !== SpecialEngineManager.MODES.STANDARD;
             rulesHeader.classList.toggle('active', !isSpecial);
+        }
+
+        // Sincronizar el toggle de modo estándar
+        const standardToggle = document.getElementById('standardToggle');
+        if (standardToggle) {
+            standardToggle.checked = mode === SpecialEngineManager.MODES.STANDARD;
         }
 
         // Colapsar los acordeones de los otros motores especiales; expandir solo el activo.
