@@ -25,6 +25,7 @@ class RD2DEngine {
         this.gridSize = 0;
         // Grid de estados 0-15, separado del grid binario del automaton
         this.stateGrid = null;
+        this._backStateGrid = null;
         this.generation = 0;
         this.initialized = false;
         this._forceReinit = false;
@@ -82,7 +83,7 @@ class RD2DEngine {
         this.initialized = false;
         this._forceReinit = false;
 
-        // Inicializar grid de estados
+        // Doble buffer: pre-alocar ambos grids para evitar allocaciones por generación
         this._initStateGrid();
 
         return this;
@@ -94,18 +95,24 @@ class RD2DEngine {
     deactivate() {
         this.isActive = false;
         this.stateGrid = null;
+        this._backStateGrid = null;
         this.initialized = false;
     }
 
     /**
-     * Inicializa el grid de estados con arrays Uint8
+     * Inicializa los dos buffers de estado con Uint8Array.
      * @private
      */
     _initStateGrid() {
-        this.stateGrid = new Array(this.gridSize);
-        for (let x = 0; x < this.gridSize; x++) {
-            this.stateGrid[x] = new Uint8Array(this.gridSize);
-        }
+        this.stateGrid = this._allocGrid(this.gridSize);
+        this._backStateGrid = this._allocGrid(this.gridSize);
+    }
+
+    /** @private */
+    _allocGrid(size) {
+        const g = new Array(size);
+        for (let x = 0; x < size; x++) g[x] = new Uint8Array(size);
+        return g;
     }
 
     /**
@@ -269,12 +276,9 @@ class RD2DEngine {
             return true;
         }
 
-        // Calcular siguiente generación
+        // Calcular siguiente generación con doble buffer (sin allocaciones por paso)
         const size = this.gridSize;
-        const newStateGrid = new Array(size);
-        for (let x = 0; x < size; x++) {
-            newStateGrid[x] = new Uint8Array(size);
-        }
+        const back = this._backStateGrid;
 
         let changed = false;
         // Limpiar array de celdas cambiadas (reutilizar)
@@ -289,7 +293,7 @@ class RD2DEngine {
                 const west = this._getState(x - 1, y);
 
                 const newState = north ^ south ^ east ^ west;
-                newStateGrid[x][y] = newState;
+                back[x][y] = newState;
 
                 if (newState !== this.stateGrid[x][y]) {
                     changed = true;
@@ -298,17 +302,15 @@ class RD2DEngine {
             }
         }
 
-        this.stateGrid = newStateGrid;
+        // Swap de buffers — sin allocaciones
+        this._backStateGrid = this.stateGrid;
+        this.stateGrid = back;
         this.generation++;
 
         // Sincronizar visualización
         this._syncToAutomatonGrid();
 
-        if (!changed) {
-            return false;
-        }
-
-        return true;
+        return changed;
     }
 
     // Getter para acceder a celdas cambiadas
@@ -389,19 +391,21 @@ class RD2DEngine {
         if (!this.stateGrid) return;
         const size = this.gridSize;
         const src = this.stateGrid;
-        const dst = new Array(size);
+        const dst = this._backStateGrid;
+
         for (let x = 0; x < size; x++) {
             const srcX = ((x - dx) % size + size) % size;
-            dst[x] = new Uint8Array(size);
+            const srcCol = src[srcX];
+            const dstCol = dst[x];
             for (let y = 0; y < size; y++) {
-                dst[x][y] = src[srcX][((y - dy) % size + size) % size];
+                dstCol[y] = srcCol[((y - dy) % size + size) % size];
             }
         }
+
+        this._backStateGrid = src;
         this.stateGrid = dst;
     }
 }
-
-// Exportar global
 
 // Exportar global
 window.RD2DEngine = RD2DEngine;

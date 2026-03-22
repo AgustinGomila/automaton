@@ -516,7 +516,7 @@ class CellularAutomaton {
                 stepMs: stepMs,
                 renderMs: renderMs ?? 0,
                 totalMs: totalMs,
-                genCount: 0, lastSecond: tRender, genPerSec: 0, mode
+                lastSecond: tRender, lastGenSnapshot: this.generation, genPerSec: 0, mode
             };
         } else {
             this._perf.stepMs = α * stepMs + (1 - α) * this._perf.stepMs;
@@ -527,11 +527,13 @@ class CellularAutomaton {
             this._perf.mode = mode;
         }
 
-        // Contar gen/s en ventana de 1 segundo
-        this._perf.genCount++;
+        // gen/s: diferencia real de generaciones entre snapshots de 1 segundo
+        if (!this._perf.lastGenSnapshot) {
+            this._perf.lastGenSnapshot = this.generation;
+        }
         if (tRender - this._perf.lastSecond >= 1000) {
-            this._perf.genPerSec = this._perf.genCount;
-            this._perf.genCount = 0;
+            this._perf.genPerSec = this.generation - this._perf.lastGenSnapshot;
+            this._perf.lastGenSnapshot = this.generation;
             this._perf.lastSecond = tRender;
         }
 
@@ -564,27 +566,11 @@ class CellularAutomaton {
             this.nextGeneration();
             return;
         }
-        // Modo síncrono: medir render separado del cálculo
-        let stepsRun = 0;
         for (let i = 0; i < stepsPerFrame; i++) {
             if (!this.isRunning) break;
             if (this.nextGeneration() === 0) break;
-            stepsRun++;
         }
-        if (stepsRun > 0) {
-            const tRenderStart = performance.now();
-            this.render();
-            const tRenderEnd = performance.now();
-            // Actualizar renderMs en el EMA con la medición real
-            if (this._perf) {
-                const α = 0.15;
-                const renderMs = tRenderEnd - tRenderStart;
-                this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
-                this._perf.totalMs = this._perf.stepMs + this._perf.renderMs;
-                // Sumar pasos adicionales al contador (nextGeneration ya sumó 1)
-                if (stepsRun > 1) this._perf.genCount += stepsRun - 1;
-            }
-        }
+        this.render();
     }
 
     // =========================================
