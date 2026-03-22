@@ -454,11 +454,11 @@ class CellularAutomaton {
 
     /** Paso en modo estándar: core síncrono o worker. */
     _stepStandardMode(t0) {
-        const tStep = performance.now();
         const result = (this.worker && this.gridSize >= this.workerThreshold)
             ? this._nextGenerationWorker()
             : this._nextGenerationCore();
-        this._debugTiming('Standard', t0, tStep, performance.now());
+        const tStep = performance.now();
+        this._debugTiming('Standard', t0, tStep, tStep); // render se mide en _step
         return result;
     }
 
@@ -506,20 +506,24 @@ class CellularAutomaton {
 
     _debugTiming(mode, t0, tStep, tRender) {
         const stepMs = tStep - t0;
-        const renderMs = tRender - tStep;
-        const totalMs = tRender - t0;
+        // Si tRender == tStep el render aún no ocurrió (se mide en _step para modo síncrono)
+        const renderMs = tRender > tStep ? tRender - tStep : null;
+        const totalMs = renderMs !== null ? tRender - t0 : stepMs;
 
-        // Acumular métricas con EMA (α = 0.15 → ventana ~6 muestras)
         const α = 0.15;
         if (!this._perf) {
             this._perf = {
-                stepMs: stepMs, renderMs: renderMs, totalMs: totalMs,
+                stepMs: stepMs,
+                renderMs: renderMs ?? 0,
+                totalMs: totalMs,
                 genCount: 0, lastSecond: tRender, genPerSec: 0, mode
             };
         } else {
             this._perf.stepMs = α * stepMs + (1 - α) * this._perf.stepMs;
-            this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
-            this._perf.totalMs = α * totalMs + (1 - α) * this._perf.totalMs;
+            if (renderMs !== null) {
+                this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
+                this._perf.totalMs = α * totalMs + (1 - α) * this._perf.totalMs;
+            }
             this._perf.mode = mode;
         }
 
@@ -531,18 +535,16 @@ class CellularAutomaton {
             this._perf.lastSecond = tRender;
         }
 
-        // Emitir solo si el overlay está visible (evita trabajo innecesario)
         if (this._perfVisible) {
             eventBus.emit('perf:update', this._perf);
         }
 
-        // Log de consola cada 2 s (solo en desarrollo)
         if (!this._lastDebugLog || tRender - this._lastDebugLog >= 2000) {
             this._lastDebugLog = tRender;
             console.debug(
                 `⏱ [${mode}] Gen ${this.generation} | ` +
                 `step: ${stepMs.toFixed(2)}ms | ` +
-                `render: ${renderMs.toFixed(2)}ms | ` +
+                (renderMs !== null ? `render: ${renderMs.toFixed(2)}ms | ` : '') +
                 `total: ${totalMs.toFixed(2)}ms`
             );
         }
@@ -562,11 +564,27 @@ class CellularAutomaton {
             this.nextGeneration();
             return;
         }
+        // Modo síncrono: medir render separado del cálculo
+        let stepsRun = 0;
         for (let i = 0; i < stepsPerFrame; i++) {
             if (!this.isRunning) break;
             if (this.nextGeneration() === 0) break;
+            stepsRun++;
         }
-        this.render();
+        if (stepsRun > 0) {
+            const tRenderStart = performance.now();
+            this.render();
+            const tRenderEnd = performance.now();
+            // Actualizar renderMs en el EMA con la medición real
+            if (this._perf) {
+                const α = 0.15;
+                const renderMs = tRenderEnd - tRenderStart;
+                this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
+                this._perf.totalMs = this._perf.stepMs + this._perf.renderMs;
+                // Sumar pasos adicionales al contador (nextGeneration ya sumó 1)
+                if (stepsRun > 1) this._perf.genCount += stepsRun - 1;
+            }
+        }
     }
 
     // =========================================
