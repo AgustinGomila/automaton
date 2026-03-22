@@ -692,7 +692,7 @@ class UIController {
 
         const stepMs = perf.stepMs.toFixed(1);
         const renderMs = perf.renderMs.toFixed(1);
-        const totalMs = perf.totalMs.toFixed(1);
+        const totalMs = (perf.stepMs + perf.renderMs).toFixed(1);
         const gps = perf.genPerSec;
 
         // Colorear según rendimiento: <16ms verde, <33ms amarillo, >33ms rojo
@@ -713,7 +713,7 @@ class UIController {
             </div>
             <div class="perf-row">
                 <span class="perf-label">total</span>
-                <span class="perf-value ${cls(perf.totalMs)}">${totalMs}ms</span>
+                <span class="perf-value ${cls(perf.stepMs + perf.renderMs)}">${totalMs}ms</span>
             </div>
             <div class="perf-row">
                 <span class="perf-label">modo</span>
