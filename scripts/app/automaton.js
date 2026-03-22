@@ -457,8 +457,10 @@ class CellularAutomaton {
         const result = (this.worker && this.gridSize >= this.workerThreshold)
             ? this._nextGenerationWorker()
             : this._nextGenerationCore();
-        const tStep = performance.now();
-        this._debugTiming('Standard', t0, tStep, tStep); // render se mide en _step
+        // El render ocurre en _step() después de nextGeneration(). Guardamos t0 y
+        // tStep para que _step() los use al medir el render y llame a _debugTiming.
+        this._pendingStepT0 = t0;
+        this._pendingStepTime = performance.now();
         return result;
     }
 
@@ -506,31 +508,26 @@ class CellularAutomaton {
 
     _debugTiming(mode, t0, tStep, tRender) {
         const stepMs = tStep - t0;
-        // Si tRender == tStep el render aún no ocurrió (se mide en _step para modo síncrono)
-        const renderMs = tRender > tStep ? tRender - tStep : null;
-        const totalMs = renderMs !== null ? tRender - t0 : stepMs;
+        const renderMs = tRender - tStep;
+        const totalMs = tRender - t0;
 
-        const alpha = 0.15;
-        if (!this._perf) {
+        const α = 0.15;
+        if (!this._perf || this._perf.mode !== mode) {
+            // Inicialización o cambio de modo: resetear EMA para no arrastrar
+            // valores del modo anterior (especialmente renderMs).
             this._perf = {
-                stepMs: stepMs,
-                renderMs: renderMs ?? 0,
-                totalMs: totalMs,
-                lastSecond: tRender, lastGenSnapshot: this.generation, genPerSec: 0, mode
+                stepMs, renderMs, totalMs,
+                lastSecond: tRender, lastGenSnapshot: this.generation,
+                genPerSec: 0, mode
             };
         } else {
-            this._perf.stepMs = alpha * stepMs + (1 - alpha) * this._perf.stepMs;
-            if (renderMs !== null) {
-                this._perf.renderMs = alpha * renderMs + (1 - alpha) * this._perf.renderMs;
-                this._perf.totalMs = alpha * totalMs + (1 - alpha) * this._perf.totalMs;
-            }
+            this._perf.stepMs = α * stepMs + (1 - α) * this._perf.stepMs;
+            this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
+            this._perf.totalMs = α * totalMs + (1 - α) * this._perf.totalMs;
             this._perf.mode = mode;
         }
 
         // gen/s: diferencia real de generaciones entre snapshots de 1 segundo
-        if (!this._perf.lastGenSnapshot) {
-            this._perf.lastGenSnapshot = this.generation;
-        }
         if (tRender - this._perf.lastSecond >= 1000) {
             this._perf.genPerSec = this.generation - this._perf.lastGenSnapshot;
             this._perf.lastGenSnapshot = this.generation;
@@ -546,7 +543,7 @@ class CellularAutomaton {
             console.debug(
                 `⏱ [${mode}] Gen ${this.generation} | ` +
                 `step: ${stepMs.toFixed(2)}ms | ` +
-                (renderMs !== null ? `render: ${renderMs.toFixed(2)}ms | ` : '') +
+                `render: ${renderMs.toFixed(2)}ms | ` +
                 `total: ${totalMs.toFixed(2)}ms`
             );
         }
@@ -571,6 +568,12 @@ class CellularAutomaton {
             if (this.nextGeneration() === 0) break;
         }
         this.render();
+        // Medir render para modo estándar síncrono: _stepStandardMode dejó los
+        // timestamps pendientes; ahora que render() terminó podemos calcular tRender.
+        if (this._pendingStepTime !== undefined) {
+            this._debugTiming('Standard', this._pendingStepT0, this._pendingStepTime, performance.now());
+            this._pendingStepT0 = this._pendingStepTime = undefined;
+        }
     }
 
     // =========================================
@@ -812,6 +815,7 @@ class CellularAutomaton {
     redo() {
         return this._editor.redo();
     }
+
 
     // =========================================
     // MOTORES ESPECIALES
