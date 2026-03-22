@@ -20,6 +20,7 @@ class UlamWarburtonEngine {
         this.isActive = false;
         this.generation = 0;
         this.gridSize = 0;
+        this.initialized = false;
 
         // Índices planos (x*size + y) de las celdas nacidas en el último paso
         this._changedCells = [];
@@ -28,17 +29,17 @@ class UlamWarburtonEngine {
     // ─── Ciclo de vida ──────────────────────────────────────────
 
     /**
-     * Activa el motor: sincroniza tamaño, limpia el grid y coloca
-     * la semilla central.
+     * Activa el motor. Si el grid ya tiene celdas vivas las respeta como semilla;
+     * si está vacío coloca una única celda central en el primer step().
      * @returns {UlamWarburtonEngine} this
      */
     activate() {
         this.gridSize = this.automaton.gridSize;
         this.isActive = true;
         this.generation = 0;
+        this.initialized = false;
         this._changedCells.length = 0;
 
-        this._initializeSeed();
         console.debug(`🔷 Ulam-Warburton activado, tamaño ${this.gridSize}`);
         return this;
     }
@@ -55,6 +56,7 @@ class UlamWarburtonEngine {
      */
     reset() {
         this.generation = 0;
+        this.initialized = false;
         this._changedCells.length = 0;
     }
 
@@ -83,6 +85,16 @@ class UlamWarburtonEngine {
      */
     step() {
         if (!this.isActive) return false;
+
+        // Primera ejecución: respetar dibujo del usuario o colocar semilla central.
+        if (!this.initialized) {
+            if (!this._checkUserSeed()) {
+                this._initializeSeed();
+            }
+            this.initialized = true;
+            this.generation = 0;
+            return true;
+        }
 
         const size = this.gridSize;
         const grid = this.automaton.grid;
@@ -131,6 +143,21 @@ class UlamWarburtonEngine {
     }
 
     // ─── Privados ────────────────────────────────────────────────
+
+    /**
+     * Verifica si el grid tiene alguna celda viva dibujada por el usuario.
+     * @returns {boolean}
+     * @private
+     */
+    _checkUserSeed() {
+        const size = this.gridSize;
+        for (let x = 0; x < size; x++) {
+            for (let y = 0; y < size; y++) {
+                if (this.automaton.grid[x][y]) return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * Limpia el grid y coloca una única celda viva en el centro.
