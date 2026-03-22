@@ -85,6 +85,8 @@ class EditCoordinator {
         this._a.render();
         if (full && this._a.gridSize >= this._a.workerThreshold) {
             this._a._initWorker();
+        } else {
+            this._a._syncWorkerGrid();
         }
     }
 
@@ -101,6 +103,7 @@ class EditCoordinator {
         this._a.renderer.markAllDirty();
         this._a.updateStats();
         this._a.render();
+        this._a._syncWorkerGrid();
         eventBus.emit(eventName, {generation: this._a.generation});
         return true;
     }
@@ -365,6 +368,7 @@ class EditCoordinator {
         // Resetear actividad: las celdas cambiaron de posición, el estado de highlight
         // amarillo quedaría huérfano en las posiciones originales.
         this._a.renderer.resetActivity();
+        this._a._syncWorkerGrid();
         this._a.render();
     }
 

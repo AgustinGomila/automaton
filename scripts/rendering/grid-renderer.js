@@ -41,7 +41,7 @@ class GridRenderer {
             showGrid: options.showGrid !== false,
             showActivityEffect: options.showActivityEffect !== false,
             cellSize: Math.max(1, Math.min(options.cellSize || 4, 20)),
-            gridSize: Math.max(20, Math.min(options.gridSize || 200, 400))
+            gridSize: Math.max(20, Math.min(options.gridSize || 200, 500))
         };
 
         // Dirty rendering
