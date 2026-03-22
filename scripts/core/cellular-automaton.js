@@ -17,7 +17,7 @@ class CellularAutomatonCore {
      * @param {boolean} options.wrapEdges
      */
     constructor(options = {}) {
-        this.size = Math.min(Math.max(options.size || 400, 20), 1000);
+        this.size = Math.min(Math.max(options.size || 500, 20), 1000);
 
         this.gridManager = new GridManager(this.size);
         this.neighborhood = new NeighborhoodCalculator({

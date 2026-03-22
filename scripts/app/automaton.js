@@ -15,7 +15,7 @@
  *   EditCoordinator       — operaciones de edición del grid
  */
 class CellularAutomaton {
-    constructor(gridSize = 400, cellSize = 2) {
+    constructor(gridSize = 500, cellSize = 2) {
         this.gridSize = Math.min(Math.max(gridSize, 20), 1000);
         this.cellSize = Math.min(Math.max(cellSize, 1), 20);
 
@@ -68,28 +68,24 @@ class CellularAutomaton {
         // === WORKERS ===
         this._workerManager = new GridWorkerManager({
             workerPath: 'scripts/infrastructure/workers/automaton-worker.js',
-            threshold: 100,
+            threshold: 600,
             getGridSize: () => this.gridSize,
             getCore: () => this.core,
-            onResult: ({generation, population, changedCells, size}) => {
+            onResult: ({generation, population, changedCells, changedCount}) => {
                 this.generation = generation;
                 this.stateManager.recordPopulation(population);
 
-                if (Array.isArray(changedCells)) {
-                    // markDirtyIndex evita la decodificación x/y: el índice plano
-                    // ya es el formato interno del renderer.
-                    for (let i = 0; i < changedCells.length; i++) {
+                if (changedCount > 0) {
+                    for (let i = 0; i < changedCount; i++) {
                         this.renderer.markDirtyIndex(changedCells[i]);
                     }
                 } else {
                     this.renderer.markAllDirty();
                 }
 
-                // Pasar population directamente: ya viene calculado del worker,
-                // evita un segundo countPopulation() O(n²) en updateStats().
                 this.updateStats(population);
                 this.checkLimits();
-                this.renderer.updateActivityAges(changedCells || []);
+                this.renderer.updateActivityAges(changedCells, changedCount);
                 this.render();
             },
             onError: () => {
@@ -402,6 +398,11 @@ class CellularAutomaton {
         this._workerManager.init();
     }
 
+    /** Sincroniza el grid del worker tras cualquier edición manual. */
+    _syncWorkerGrid() {
+        this._workerManager.syncGrid();
+    }
+
     _cleanupWorker() {
         this._workerManager.cleanup();
     }
@@ -499,7 +500,7 @@ class CellularAutomaton {
     }
 
     _nextGenerationWorker() {
-        this._workerManager.requestNextGeneration(this.generation);
+        this._workerManager.requestNextGeneration();
         return 0;
     }
 
