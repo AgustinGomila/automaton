@@ -138,6 +138,7 @@ class EditCoordinator {
         this._a.generation = 0;
         this._a._limiter.isLimitReached = false;
         this._a._engineManager.resetAllEngines();
+        this._a.renderer.setColorProvider(null);
         this._a.renderer.markAllDirty();
         this._a.updateStats(stats.population);
         this._a.render();
@@ -192,8 +193,37 @@ class EditCoordinator {
     // OPERACIONES DE ÁREA
     // =========================================
 
+    /**
+     * Copia un área del grid incluyendo los estados extendidos del engine activo.
+     * El objeto devuelto incluye `engineStates` con los valores 0..C-1 cuando
+     * el motor activo tiene stateGrid (Generations, WireWorld, Langton).
+     */
     copyArea(minX, minY, maxX, maxY) {
-        return this._a.stateManager.copyArea(minX, minY, maxX, maxY);
+        const area = this._a.stateManager.copyArea(minX, minY, maxX, maxY);
+
+        // Capturar estados extendidos del engine activo si existe stateGrid
+        const stateGrid = this._getEngineStateGrid();
+        if (stateGrid) {
+            const {width, height} = area;
+            const engineStates = Array.from({length: width}, () => new Array(height).fill(0));
+            const size = this._a.gridSize;
+            for (let x = 0; x < width; x++) {
+                const gx = minX + x;
+                if (gx < 0 || gx >= size) continue;
+                for (let y = 0; y < height; y++) {
+                    const gy = minY + y;
+                    if (gy < 0 || gy >= size) continue;
+                    const s = stateGrid[gx]?.[gy] ?? 0;
+                    engineStates[x][y] = s;
+                    // Marcar como "viva" en el grid binario cualquier celda con estado >0
+                    // para que pasteArea no la omita (estados 2..C-1 tienen grid[][]=0)
+                    if (s > 0) area.grid[x][y] = true;
+                }
+            }
+            area.engineStates = engineStates;
+        }
+
+        return area;
     }
 
     async pasteArea(area, offsetX, offsetY) {
@@ -205,6 +235,26 @@ class EditCoordinator {
         });
 
         if (result.changedCells.length > 0) {
+            // Restaurar estados extendidos del engine si el área los tenía capturados
+            const stateGrid = this._getEngineStateGrid();
+            if (stateGrid && area.engineStates) {
+                const size = this._a.gridSize;
+                const grid = this._a.grid;
+                for (let x = 0; x < area.width; x++) {
+                    const gx = offsetX + x;
+                    if (gx < 0 || gx >= size) continue;
+                    for (let y = 0; y < area.height; y++) {
+                        const gy = offsetY + y;
+                        if (gy < 0 || gy >= size) continue;
+                        const s = area.engineStates[x]?.[y] ?? 0;
+                        if (s > 0) {
+                            stateGrid[gx][gy] = s;
+                            // grid[][] debe reflejar vivo solo para estado 1
+                            grid[gx][gy] = s === 1 ? 1 : 0;
+                        }
+                    }
+                }
+            }
             this._commitCells(result.changedCells);
         }
 
@@ -220,8 +270,42 @@ class EditCoordinator {
             generation: this._a.generation
         });
 
+        // Borrar estados extendidos del engine para TODAS las celdas del área capturada,
+        // no solo las que tenían grid[][]=1. Las células moribundas (2..C-1) tienen
+        // grid[][]=0 y por eso clearPatternCells no las registra en changedCells,
+        // pero sí deben limpiarse de stateGrid para evitar estados fantasma.
+        const stateGrid = this._getEngineStateGrid();
+        if (stateGrid && area.engineStates) {
+            const size = this._a.gridSize;
+            for (let x = 0; x < area.width; x++) {
+                const gx = offsetX + x;
+                if (gx < 0 || gx >= size) continue;
+                for (let y = 0; y < area.height; y++) {
+                    const s = area.engineStates[x]?.[y] ?? 0;
+                    if (s <= 0) continue; // celda muerta en el área — no tocar
+                    const gy = offsetY + y;
+                    if (gy < 0 || gy >= size) continue;
+                    stateGrid[gx][gy] = 0;
+                    this._a.renderer.markDirty(gx, gy);
+                }
+            }
+        } else if (stateGrid && result.changedCells.length > 0) {
+            // Fallback sin engineStates: borrar por changedCells binario
+            const size = this._a.gridSize;
+            for (const {x, y} of result.changedCells) {
+                if (x >= 0 && x < size && y >= 0 && y < size) {
+                    stateGrid[x][y] = 0;
+                }
+            }
+        }
+
         if (result.changedCells.length > 0) {
             this._commitCells(result.changedCells, {full: false});
+        } else {
+            // Si solo había células moribundas (sin cambios en grid binario), renderizar igual
+            if (stateGrid && area.engineStates) {
+                this._a.render();
+            }
         }
 
         this._restartIfWasRunning(wasRunning);
@@ -285,8 +369,14 @@ class EditCoordinator {
                 this._a.render();
 
             } else if (specialMode === SpecialEngineManager.MODES.GENERATIONS && generationsEngine?.isActive) {
-                generationsEngine.syncFromGrid();
-                result.changedCells.forEach(cell => renderer.markDirty(cell.x, cell.y));
+                // NO llamar syncFromGrid() — eso destruiría todos los estados moribundos.
+                // Solo actualizar stateGrid para las celdas recién escritas (estado 1).
+                result.changedCells.forEach(cell => {
+                    if (generationsEngine.stateGrid?.[cell.x]) {
+                        generationsEngine.stateGrid[cell.x][cell.y] = 1;
+                    }
+                    renderer.markDirty(cell.x, cell.y);
+                });
                 this._a.updateStats();
                 renderer.markAllDirty();
                 this._a.render();
@@ -398,6 +488,30 @@ class EditCoordinator {
             this._a.stateManager.redo(this._a.generation),
             'automaton:redo'
         );
+    }
+
+    // =========================================
+    // HELPERS PRIVADOS
+    // =========================================
+
+    /**
+     * Devuelve el stateGrid del motor especial activo si tiene estados extendidos,
+     * o null si el modo activo es binario (standard, wolfram, triangle, UW).
+     * Centraliza el acceso para copyArea, pasteArea y clearPatternCells.
+     * @returns {Array|null}
+     */
+    _getEngineStateGrid() {
+        const {specialMode} = this._a;
+        const M = SpecialEngineManager.MODES;
+        if (specialMode === M.GENERATIONS && this._a.generationsEngine?.isActive)
+            return this._a.generationsEngine.stateGrid;
+        if (specialMode === M.WIREWORLD && this._a.wireworldEngine?.isActive)
+            return this._a.wireworldEngine.stateGrid;
+        if (specialMode === M.LANGTON && this._a.langtonEngine?.isActive)
+            return this._a.langtonEngine.stateGrid;
+        if (specialMode === M.RD2D && this._a.rd2dEngine?.isActive)
+            return this._a.rd2dEngine.stateGrid;
+        return null;
     }
 }
 

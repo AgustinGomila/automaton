@@ -749,10 +749,21 @@ class UIController {
 
     toggleActivityEffect() {
         const toggle = document.getElementById('activityEffectToggle');
-        this.showActivityEffect = toggle.checked;
+        const activityEffect = toggle.checked;
+        this._toggleActivityEffect(activityEffect);
+    }
+
+    _toggleActivityEffect(checked) {
+        this.showActivityEffect = checked;
         this.automaton.setShowActivityEffect(this.showActivityEffect);
         this.automaton._markAllDirty();
         this.automaton.render();
+        this.toggleActivityEffectCheckbox()
+    }
+
+    toggleActivityEffectCheckbox() {
+        const toggle = document.getElementById('activityEffectToggle');
+        if (toggle) toggle.checked = this.showActivityEffect;
     }
 
     /**

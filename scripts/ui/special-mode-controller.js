@@ -435,6 +435,7 @@ class SpecialModeController {
         } catch (e) {
             this._onShowNotification(`Error en regla: ${e.message}`, 'warning', 3000);
         }
+        window.app?.uiController?._toggleActivityEffect(false);
     }
 
     async activateGenerationsMode(birth, survival, numStates) {
@@ -466,11 +467,12 @@ class SpecialModeController {
         this._returnToStandard();
         // Restaurar swatches binarios y respetar estado del toggle de actividad
         window.app?.uiController?._syncActivityColorsBlock(false);
-        const actToggle = document.getElementById('activityEffectToggle');
-        const colorsBlock = document.getElementById('activityColors');
-        if (colorsBlock && actToggle) {
-            colorsBlock.style.display = actToggle.checked ? '' : 'none';
-        }
+        window.app?.uiController?._toggleActivityEffect(true);
+
+        // Limpiar el color provider del renderer al volver a modo estándar
+        this.automaton.renderer?.setColorProvider?.(null);
+        this.automaton._markAllDirty();
+        this.automaton.render();
     }
 
     async activateUWMode() {
@@ -492,36 +494,56 @@ class SpecialModeController {
     }
 
     _updateModeIndicator(mode) {
-        // Emitir SIEMPRE, antes del guard del DOM.
-        eventBus.emit('automaton:filterChanged', {mode, rule: null});
-
-        // Generations vive dentro del acordeón "rules" (no tiene sub-acordeón propio
-        // en Modos Especiales), así que no colapsa ese acordeón ni afecta standardToggle.
         const isGenerations = mode === SpecialEngineManager.MODES.GENERATIONS;
+        const isStandard = mode === SpecialEngineManager.MODES.STANDARD;
+        const isStandardLike = isStandard || isGenerations;
 
-        if (!isGenerations) {
-            // Colapsar el acordeón de reglas estándar al entrar en modo especial, expandir al salir.
+        // Emitir evento, pero con cuidado con la regla para Generations
+        // Generations NO debe afectar el selector de reglas estándar
+        if (isGenerations) {
+            // Para Generations: no emitimos rule para no tocar el selector estándar
+            // o emitimos un flag que indique "no tocar la UI de reglas estándar"
+            eventBus.emit('automaton:filterChanged', {
+                mode,
+                rule: undefined, // undefined = no modificar selector estándar
+                skipStandardRuleUpdate: true // flag explícito opcional
+            });
+        } else {
+            eventBus.emit('automaton:filterChanged', {mode, rule: null});
+        }
+
+        // 1. Manejo del acordeón "rules"
+        if (!isStandardLike) {
             const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
             if (rulesHeader) {
-                const isSpecial = mode !== SpecialEngineManager.MODES.STANDARD;
-                rulesHeader.classList.toggle('active', !isSpecial);
+                rulesHeader.classList.remove('active');
             }
-
-            // Sincronizar el toggle de modo estándar
-            const standardToggle = document.getElementById('standardToggle');
-            if (standardToggle) {
-                standardToggle.checked = mode === SpecialEngineManager.MODES.STANDARD;
-            }
-
-            // Colapsar los acordeones de los otros motores especiales; expandir solo el activo.
-            for (const engineMode of Object.values(SpecialEngineManager.MODES)) {
-                if (engineMode === SpecialEngineManager.MODES.STANDARD) continue;
-                if (engineMode === SpecialEngineManager.MODES.GENERATIONS) continue;
-                const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
-                if (header) header.classList.toggle('active', engineMode === mode);
+        } else {
+            const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
+            if (rulesHeader) {
+                rulesHeader.classList.add('active');
             }
         }
 
+        // 2. Sincronizar el toggle de modo estándar
+        const standardToggle = document.getElementById('standardToggle');
+        if (standardToggle) {
+            standardToggle.checked = isStandardLike;
+        }
+
+        // 3. Manejo de acordeones de motores especiales
+        for (const engineMode of Object.values(SpecialEngineManager.MODES)) {
+            if (engineMode === SpecialEngineManager.MODES.STANDARD) continue;
+            if (engineMode === SpecialEngineManager.MODES.GENERATIONS) continue;
+
+            const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
+            if (header) {
+                const shouldBeActive = engineMode === mode;
+                header.classList.toggle('active', shouldBeActive);
+            }
+        }
+
+        // 4. Actualizar indicador visual
         const indicator = document.getElementById('modeIndicator');
         if (!indicator) return;
 
@@ -645,15 +667,49 @@ class SpecialModeController {
         this._stopIfRunning();
         this._deactivateAllModes(SpecialEngineManager.MODES.STANDARD);
 
-        // Limpiar el modo especial DESPUÉS de desactivar todos los engines,
-        // para que nextGeneration() no vuelva a entrar en la rama de motor especial.
+        // Limpiar el modo especial DESPUÉS de desactivar todos los engines
         this.automaton.specialMode = null;
 
         this.automaton._reGrid();
         this.automaton.render();
-        this._updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
+
+        // Determinar si debemos mostrar Standard o Generations basado en el slider de estados
+        const numStates = parseInt(document.getElementById('generationsStates')?.value) || 2;
+        const isEffectivelyGenerations = numStates > 2;
+
+        if (isEffectivelyGenerations) {
+            // Reactivar Generations con los valores actuales del DOM
+            const birthVal = document.getElementById('birthInput')?.value || '3';
+            const survivalVal = document.getElementById('survivalInput')?.value || '23';
+            try {
+                const parsed = parseCustomRule(birthVal, survivalVal);
+                this._prepareEngine(SpecialEngineManager.MODES.GENERATIONS);
+                this.automaton.generationsEngine.activate({
+                    birth: parsed.birth,
+                    survival: parsed.survival,
+                    numStates
+                });
+                this._updateModeIndicator(SpecialEngineManager.MODES.GENERATIONS);
+
+                // Notificación de Generations (no Standard)
+                const ruleString = `B${parsed.birth.join('')}/S${parsed.survival.join('')}/C${numStates}`;
+                this._onShowNotification(
+                    t('notif.generations.enabled', {rule: ruleString}),
+                    'info',
+                    2000
+                );
+            } catch (e) {
+                // Si falla el parseo, caer a Standard normal
+                this._updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
+                this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
+            }
+        } else {
+            // Standard puro
+            this._updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
+            this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
+        }
+
         this._onUpdateHeader();
-        this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
         this._onSyncPlayButton();
     }
 
@@ -737,6 +793,16 @@ class SpecialModeController {
         this._suppressToggleEvents = true;
         for (const mode of modes) {
             if (mode.name === exceptMode) continue;
+
+            // NO desactivar el toggle de Standard si vamos a Generations
+            // (ambos son "Standard-like" y comparten el mismo toggle visual)
+            const isStandardLike = exceptMode === SpecialEngineManager.MODES.GENERATIONS ||
+                exceptMode === SpecialEngineManager.MODES.STANDARD;
+            const isCurrentStandardLike = mode.name === SpecialEngineManager.MODES.GENERATIONS ||
+                mode.name === SpecialEngineManager.MODES.STANDARD;
+
+            if (isStandardLike && isCurrentStandardLike) continue;
+
             const toggle = document.getElementById(mode.toggleId);
             if (toggle) toggle.checked = false;
             mode.hideControls();

@@ -885,11 +885,13 @@ class CanvasController {
         const size = this.automaton.gridSize;
         const langton = this.automaton.specialMode === SpecialEngineManager.MODES.LANGTON && this.automaton.langtonEngine?.isActive;
         const rd2d = this.automaton.specialMode === SpecialEngineManager.MODES.RD2D && this.automaton.rd2dEngine?.isActive;
+        const generations = this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.automaton.generationsEngine?.isActive;
 
         // En RD2D la fuente de verdad visual es stateGrid. grid[][] está sincronizado
         // con stateGrid para detectar paredes, así que se usa igual que modo normal.
         // La diferencia es solo en la escritura: hay que actualizar también stateGrid.
         const rd2dStateGrid = rd2d ? this.automaton.rd2dEngine.stateGrid : null;
+        const genStateGrid = generations ? this.automaton.generationsEngine.stateGrid : null;
 
         const getState = (gx, gy) => this.automaton.grid[gx]?.[gy] ?? 0;
 
@@ -909,6 +911,9 @@ class CanvasController {
 
             if (rd2d) {
                 rd2dStateGrid[x][y] = fillState === 1 ? 15 : 0;
+                this.automaton.grid[x][y] = fillState;
+            } else if (generations) {
+                genStateGrid[x][y] = fillState ? 1 : 0;
                 this.automaton.grid[x][y] = fillState;
             } else {
                 this.automaton.grid[x][y] = fillState;
@@ -961,6 +966,7 @@ class CanvasController {
 
         if (head > 0) {
             this.automaton.updateStats();
+            this.automaton.syncEngineAfterEdit();
             this.automaton.render();
         }
     }

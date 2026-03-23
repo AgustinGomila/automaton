@@ -962,7 +962,9 @@ class CellularAutomaton {
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
-        if (specialMode === SpecialEngineManager.MODES.GENERATIONS && generationsEngine?.isActive) generationsEngine.syncFromGrid();
+        // Generations NO usa syncFromGrid aquí: los estados 2..C-1 se gestionan
+        // puntualmente en EditCoordinator (copyArea/pasteArea/clearPatternCells).
+        // syncFromGrid destruiría todos los estados moribundos al convertirlos a 0.
     }
 
     /**
