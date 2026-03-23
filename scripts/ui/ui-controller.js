@@ -336,11 +336,17 @@ class UIController {
 
                 const isActive = header.classList.contains('active');
 
-                // Toggle clase active en el header
                 if (isActive) {
                     header.classList.remove('active');
                 } else {
                     header.classList.add('active');
+                    // Al abrir el acordeón de Vecindad, re-renderizar la grilla
+                    // con el ancho real disponible (que era 0 mientras estaba cerrado).
+                    if (header.dataset.accordion === 'neighborhood') {
+                        requestAnimationFrame(() => {
+                            this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
+                        });
+                    }
                 }
             });
         });
@@ -744,14 +750,113 @@ class UIController {
     toggleActivityEffect() {
         const toggle = document.getElementById('activityEffectToggle');
         this.showActivityEffect = toggle.checked;
-
-        // Mostrar u ocultar el bloque de selectores de color
-        const colorsBlock = document.getElementById('activityColors');
-        if (colorsBlock) colorsBlock.style.display = this.showActivityEffect ? '' : 'none';
-
         this.automaton.setShowActivityEffect(this.showActivityEffect);
         this.automaton._markAllDirty();
         this.automaton.render();
+    }
+
+    /**
+     * Conmuta el bloque activityColors entre sus dos modos:
+     *  - Binario (default): 4 swatches fijos dead/born/alive/dying
+     *  - Generations: N swatches dinámicos (uno por estado del engine)
+     *
+     * Llamado por SpecialModeController al activar/desactivar Generations.
+     * @param {boolean} generationsActive
+     */
+    _syncActivityColorsBlock(generationsActive) {
+        const block = document.getElementById('activityColors');
+        if (!block) return;
+
+        const swatchesContainer = block.querySelector('.activity-color-swatches');
+        if (!swatchesContainer) return;
+
+        if (!generationsActive) {
+            // Restaurar swatches binarios originales
+            swatchesContainer.innerHTML = `
+                <div class="activity-swatch-item">
+                    <div class="activity-swatch" id="swatchDead" data-state="dead" style="--swatch-color:#0f172a" title="Muerto (0→0)">
+                        <span class="activity-swatch-label">0</span>
+                        <input type="color" value="#0f172a" id="colorDead">
+                    </div>
+                </div>
+                <div class="activity-swatch-item">
+                    <div class="activity-swatch" id="swatchBorn" data-state="born" style="--swatch-color:#b9b610" title="Naciendo (0→1)">
+                        <span class="activity-swatch-label">+1</span>
+                        <input type="color" value="#b9b610" id="colorBorn">
+                    </div>
+                </div>
+                <div class="activity-swatch-item">
+                    <div class="activity-swatch" id="swatchAlive" data-state="alive" style="--swatch-color:#059669" title="Vivo (1→1)">
+                        <span class="activity-swatch-label">1</span>
+                        <input type="color" value="#059669" id="colorAlive">
+                    </div>
+                </div>
+                <div class="activity-swatch-item">
+                    <div class="activity-swatch" id="swatchDying" data-state="dying" style="--swatch-color:#ef4444" title="Muriendo (1→0)">
+                        <span class="activity-swatch-label">−1</span>
+                        <input type="color" value="#ef4444" id="colorDying">
+                    </div>
+                </div>`;
+            this._bindActivityColorPickers();
+            return;
+        }
+
+        // Modo Generations: swatches dinámicos por estado
+        const engine = this.automaton.generationsEngine;
+        if (!engine?.isActive) return;
+
+        const C = engine.numStates;
+        const stateLabels = [t('config.activity.dead')];
+        stateLabels.push(t('config.activity.alive')); // estado 1 = vivo
+        for (let i = 2; i < C; i++) {
+            stateLabels.push(`${t('generations.states.label')} ${i}`);
+        }
+
+        swatchesContainer.innerHTML = engine._palette.map((color, i) => {
+            const safeColor = color ?? '#0f172a';
+            const label = i === 0 ? '0' : String(i);
+            const title = i === 0 ? 'Muerto' : i === 1 ? 'Vivo' : `Estado ${i}`;
+            return `
+                <div class="activity-swatch-item">
+                    <div class="activity-swatch" id="genSwatch${i}" style="--swatch-color:${safeColor}" title="${title}">
+                        <span class="activity-swatch-label">${label}</span>
+                        <input type="color" value="${this._cssToHex(safeColor)}" id="genColor${i}" data-state-index="${i}">
+                    </div>
+                </div>`;
+        }).join('');
+
+        // Bind de cada picker al índice de estado correspondiente
+        for (let i = 0; i < C; i++) {
+            const input = document.getElementById(`genColor${i}`);
+            const swatch = document.getElementById(`genSwatch${i}`);
+            if (!input || !swatch) continue;
+            this._addEventListener(input, 'input', () => {
+                const color = input.value;
+                swatch.style.setProperty('--swatch-color', color);
+                engine._palette[i] = i === 0 ? null : color;
+                this.automaton._markAllDirty();
+                this.automaton.render();
+            });
+        }
+    }
+
+    /**
+     * Convierte un color CSS (hsl, hex, rgb) a hex #rrggbb para el input[type=color].
+     * Para hsl usa el canvas como intermediario; para hex retorna directamente.
+     * @param {string} css
+     * @returns {string} hex
+     */
+    _cssToHex(css) {
+        if (!css || css === 'null') return '#000000';
+        if (/^#[0-9a-f]{6}$/i.test(css)) return css;
+        // Usar canvas para resolver cualquier formato CSS
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = css;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+        return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
     }
 
     _bindActivityColorPickers() {
@@ -987,58 +1092,76 @@ class UIController {
 
     changeRule() {
         const selector = document.getElementById('ruleSelector');
-        const customRuleGroup = document.getElementById('customRuleGroup');
 
         if (selector.value === 'custom') {
-            customRuleGroup.style.display = 'block';
+            // Popula los inputs con la regla custom actual
             document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
             document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');
-        } else {
-            customRuleGroup.style.display = 'none';
-            if (window.RULES?.[selector.value]) {
-                this.automaton.setRule(window.RULES[selector.value].survival, window.RULES[selector.value].birth);
+        } else if (window.RULES?.[selector.value]) {
+            const rule = window.RULES[selector.value];
+            // Popula los inputs con la regla predefinida seleccionada
+            document.getElementById('birthInput').value = rule.birth.join(',');
+            document.getElementById('survivalInput').value = rule.survival.join(',');
+
+            if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
+                // En modo Generations: re-activar con la nueva B/S manteniendo C actual
+                const numStates = parseInt(document.getElementById('generationsStates')?.value) || 3;
+                this._specialModeController.activateGenerationsMode(rule.birth, rule.survival, numStates);
+            } else {
+                // Resetear slider C a 2 al cambiar a regla predefinida en modo estándar
+                const statesSlider = document.getElementById('generationsStates');
+                const statesDisplay = document.getElementById('generationsStatesDisplay');
+                if (statesSlider) statesSlider.value = '2';
+                if (statesDisplay) statesDisplay.textContent = '2';
+
+                this.automaton.setRule(rule.survival, rule.birth);
                 this._displayController.updateHeaderInfo();
                 eventBus.emit('automaton:filterChanged', {
                     mode: SpecialEngineManager.MODES.STANDARD,
-                    rule: window.RULES[selector.value].ruleString
+                    rule: rule.ruleString
                 });
             }
         }
 
-        // Quitar el foco del selector para que las teclas de letra (S, R, A, C, etc.)
-        // sigan disparando los atajos de teclado del simulador en lugar de navegar
-        // entre opciones del <select>.
         selector.blur();
     }
 
     applyCustomRule() {
         const birthInput = document.getElementById('birthInput').value;
         const survivalInput = document.getElementById('survivalInput').value;
+        const numStates = parseInt(document.getElementById('generationsStates')?.value) || 2;
 
         try {
             const customRule = parseCustomRule(birthInput, survivalInput);
+
+            if (numStates > 2) {
+                // Modo Generaciones
+                this._specialModeController.activateGenerationsMode(customRule.birth, customRule.survival, numStates);
+                return;
+            }
+
+            // Modo estándar binario — desactivar Generations si estaba activo
+            if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
+                this._specialModeController.deactivateGenerationsMode();
+            }
+
             this.automaton.setRule(customRule.survival, customRule.birth);
 
-            // ACTUALIZAR EL OBJETO RULES.CUSTOM
             if (window.RULES?.custom) {
                 window.RULES.custom.survival = customRule.survival;
                 window.RULES.custom.birth = customRule.birth;
                 window.RULES.custom.ruleString = `B${customRule.birth.join('')}/S${customRule.survival.join('')}`;
 
-                // ACTUALIZAR EL SELECTOR VISUALMENTE
                 const selector = document.getElementById('ruleSelector');
                 const selectedOption = selector.options[selector.selectedIndex];
                 selectedOption.textContent = `${t('config.rule.custom')} (${window.RULES.custom.ruleString})`;
 
-                // ACTUALIZAR EL HEADER INMEDIATAMENTE
                 this._displayController.updateRuleInfo(window.RULES.custom);
                 eventBus.emit('automaton:filterChanged', {
                     mode: SpecialEngineManager.MODES.STANDARD,
                     rule: window.RULES.custom.ruleString
                 });
-
             }
-
         } catch (error) {
             alert(`Error: ${error.message}`);
         }
@@ -1126,7 +1249,26 @@ class UIController {
         if (!container) return;
 
         const side = 2 * radius + 1;
-        container.style.gridTemplateColumns = `repeat(${side}, 26px)`;
+
+        // Calcular el tamaño máximo de celda que cabe en el ancho disponible.
+        // El contenedor puede tener clientWidth=0 si el acordeón está cerrado;
+        // en ese caso se usa el ancho del panel lateral o un valor fijo de referencia.
+        const availableWidth =
+            container.parentElement?.clientWidth ||
+            document.getElementById('leftPanel')?.clientWidth ||
+            document.querySelector('.config-section')?.clientWidth ||
+            240;
+        const parentWidth = availableWidth - 16; // descontar padding del accordion-content
+        const gap = 3;
+        const maxCellSize = Math.floor((parentWidth - gap * (side - 1)) / side);
+        // Acotar entre 8px (mínimo legible) y 26px (tamaño cómodo para R pequeños)
+        const cellSize = Math.max(8, Math.min(26, maxCellSize));
+
+        container.style.gridTemplateColumns = `repeat(${side}, ${cellSize}px)`;
+        container.style.gap = `${gap}px`;
+
+        // Propagar el tamaño calculado a las celdas via CSS custom property
+        container.style.setProperty('--nc-size', `${cellSize}px`);
         container.innerHTML = '';
 
         const currentType = this.automaton.neighborhoodType;
@@ -1152,6 +1294,15 @@ class UIController {
             );
         }
 
+        // Estado de arrastre: se inicializa en mousedown y se usa en mouseenter
+        let _dragging = false;
+        let _paintActive = false; // true = activar, false = desactivar
+
+        const stopDrag = () => {
+            _dragging = false;
+        };
+        this._addEventListener(document, 'mouseup', stopDrag);
+
         for (let dy = -radius; dy <= radius; dy++) {
             for (let dx = -radius; dx <= radius; dx++) {
                 const isCenter = dx === 0 && dy === 0;
@@ -1167,9 +1318,21 @@ class UIController {
                 }
 
                 if (!isCenter) {
-                    this._addEventListener(cell, 'click', () => {
-                        cell.classList.toggle('active');
+                    this._addEventListener(cell, 'mousedown', (e) => {
+                        e.preventDefault();
+                        _dragging = true;
+                        // El estado destino es el opuesto al estado actual de la celda inicial
+                        _paintActive = !cell.classList.contains('active');
+                        cell.classList.toggle('active', _paintActive);
                         this._onNeighborhoodCellToggled();
+                    });
+
+                    this._addEventListener(cell, 'mouseenter', () => {
+                        if (!_dragging) return;
+                        if (cell.classList.contains('active') !== _paintActive) {
+                            cell.classList.toggle('active', _paintActive);
+                            this._onNeighborhoodCellToggled();
+                        }
                     });
                 }
 

@@ -267,6 +267,14 @@ class CellularAutomaton {
         this._engineManager.wireworldEngine = v;
     }
 
+    get generationsEngine() {
+        return this._engineManager.generationsEngine;
+    }
+
+    set generationsEngine(v) {
+        this._engineManager.generationsEngine = v;
+    }
+
     get _originalRenderer() {
         return this._engineManager._originalRenderer;
     }
@@ -604,6 +612,12 @@ class CellularAutomaton {
                     this.rd2dEngine.stateGrid[x][y] = state
                         ? (this.rd2dEngine._inferStateFromNeighbors(x, y) || 15)
                         : 0;
+                }
+            }
+
+            if (this.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.generationsEngine?.isActive) {
+                if (this.generationsEngine.stateGrid?.[x]) {
+                    this.generationsEngine.stateGrid[x][y] = state ? 1 : 0;
                 }
             }
         }
@@ -944,10 +958,11 @@ class CellularAutomaton {
      */
     syncEngineAfterEdit() {
         this.renderer.resetActivity();
-        const {specialMode, langtonEngine, rd2dEngine, wireworldEngine} = this;
+        const {specialMode, langtonEngine, rd2dEngine, wireworldEngine, generationsEngine} = this;
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
+        if (specialMode === SpecialEngineManager.MODES.GENERATIONS && generationsEngine?.isActive) generationsEngine.syncFromGrid();
     }
 
     /**

@@ -283,6 +283,14 @@ class I18n {
                 'app.title.wireworld': 'Autómata Celular — WireWorld',
                 'notif.wireworld.enabled': 'WireWorld activado',
                 'notif.wireworld.error': 'Error al cargar el motor WireWorld',
+
+                // Generations
+                'generations.enable': 'Modo Generaciones (C>2)',
+                'generations.states.label': 'Estados',
+                'generations.states.hint': 'Generaciones',
+                'app.title.generations': 'Autómata Celular — Generations {rule}',
+                'notif.generations.enabled': 'Generaciones activado: {rule}',
+                'notif.generations.error': 'Error al cargar el motor Generaciones',
                 'langton.rule': 'Regla (L/R/N/U):',
                 'langton.presets': 'Presets:',
                 'langton.antCount': 'Hormigas:',
@@ -549,6 +557,14 @@ class I18n {
                 'app.title.wireworld': 'Cellular Automaton — WireWorld',
                 'notif.wireworld.enabled': 'WireWorld activated',
                 'notif.wireworld.error': 'Error loading WireWorld engine',
+
+                // Generations
+                'generations.enable': 'Generations Mode (C>2)',
+                'generations.states.label': 'States',
+                'generations.states.hint': 'Generations',
+                'app.title.generations': 'Cellular Automaton — Generations {rule}',
+                'notif.generations.enabled': 'Generations activated: {rule}',
+                'notif.generations.error': 'Error loading Generations engine',
                 'langton.rule': 'Rule (L/R/N/U):',
                 'langton.presets': 'Presets:',
                 'langton.antCount': 'Ants:',

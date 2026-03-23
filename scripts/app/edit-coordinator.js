@@ -257,7 +257,7 @@ class EditCoordinator {
         });
 
         if (result.changedCells.length > 0) {
-            const {specialMode, langtonEngine, rd2dEngine, wireworldEngine, renderer} = this._a;
+            const {specialMode, langtonEngine, rd2dEngine, wireworldEngine, generationsEngine, renderer} = this._a;
 
             if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) {
                 result.changedCells.forEach(cell => {
@@ -279,6 +279,13 @@ class EditCoordinator {
 
             } else if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) {
                 wireworldEngine.syncFromGrid();
+                result.changedCells.forEach(cell => renderer.markDirty(cell.x, cell.y));
+                this._a.updateStats();
+                renderer.markAllDirty();
+                this._a.render();
+
+            } else if (specialMode === SpecialEngineManager.MODES.GENERATIONS && generationsEngine?.isActive) {
+                generationsEngine.syncFromGrid();
                 result.changedCells.forEach(cell => renderer.markDirty(cell.x, cell.y));
                 this._a.updateStats();
                 renderer.markAllDirty();

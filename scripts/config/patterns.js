@@ -86,8 +86,22 @@ class PatternManager {
      * @param {string|null} rule — cadena B/S (ej. 'B3/S23') o null
      */
     setFilter(mode, rule) {
-        const resolvedRule = rule !== null ? this._normalizeRule(rule) : this._resolveCurrentRule();
-        this._filter = {mode, rule: resolvedRule};
+        // Generations trata los patrones igual que el modo standard (cualquier patrón
+        // es válido como semilla) y no filtra por regla — la B/S es personalizable.
+        const effectiveMode = mode === SpecialEngineManager.MODES.GENERATIONS
+            ? SpecialEngineManager.MODES.STANDARD
+            : mode;
+
+        let resolvedRule;
+        if (mode === SpecialEngineManager.MODES.GENERATIONS) {
+            resolvedRule = null;
+        } else if (rule !== null) {
+            resolvedRule = this._normalizeRule(rule);
+        } else {
+            resolvedRule = this._resolveCurrentRule();
+        }
+
+        this._filter = {mode: effectiveMode, rule: resolvedRule};
         this.renderPatterns(this._sortByCount);
     }
 
@@ -253,9 +267,20 @@ class PatternManager {
             container.appendChild(patternBtn);
         });
 
-        this._patternState.key = null;
-        this._patternState.pattern = null;
-        this._patternState.rotation = 0;
+        // Si había un patrón seleccionado antes del re-render, restaurarlo.
+        // De lo contrario limpiar el estado (el patrón ya no está visible).
+        const prevKey = this._patternState.key;
+        const prevRotation = this._patternState.rotation;
+        if (prevKey && window.PATTERNS[prevKey] && this._isPatternVisible(window.PATTERNS[prevKey])) {
+            // Marcar el botón como activo de nuevo
+            const btn = container.querySelector(`[data-pattern-key="${prevKey}"]`);
+            if (btn) btn.classList.add('active');
+            this._patternState.pattern = getPatternWithRotation(prevKey, prevRotation);
+        } else {
+            this._patternState.key = null;
+            this._patternState.pattern = null;
+            this._patternState.rotation = 0;
+        }
         this._updatePatternInfo();
     }
 

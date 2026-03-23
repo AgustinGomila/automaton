@@ -41,6 +41,7 @@ class SpecialModeController {
         const rd2dToggle = document.getElementById('rd2dToggle');
         if (rd2dToggle) {
             this._addEventListener(rd2dToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
                 if (rd2dToggle.checked) {
                     this.activateRD2DMode();
                 } else {
@@ -53,6 +54,7 @@ class SpecialModeController {
         const wolframToggle = document.getElementById('wolframToggle');
         if (wolframToggle) {
             this._addEventListener(wolframToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
                 if (wolframToggle.checked) {
                     const rule = parseInt(document.getElementById('wolframRule')?.value) || 30;
                     const direction = document.getElementById('wolframDirection')?.value || 'vertical';
@@ -67,6 +69,7 @@ class SpecialModeController {
         const triangleToggle = document.getElementById('triangleToggle');
         if (triangleToggle) {
             this._addEventListener(triangleToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
                 if (triangleToggle.checked) {
                     const rule = parseInt(document.getElementById('triangleRule')?.value) || 50;
                     this.activateTriangleMode(rule);
@@ -80,6 +83,7 @@ class SpecialModeController {
         const langtonToggle = document.getElementById('langtonToggle');
         if (langtonToggle) {
             this._addEventListener(langtonToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
                 if (langtonToggle.checked) {
                     const rule = document.getElementById('langtonRule')?.value || 'RL';
                     const antCount = parseInt(document.getElementById('langtonAntCount')?.value) || 0;
@@ -94,6 +98,7 @@ class SpecialModeController {
         const wireworldToggle = document.getElementById('wireworldToggle');
         if (wireworldToggle) {
             this._addEventListener(wireworldToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
                 if (wireworldToggle.checked) {
                     this.activateWireworldMode();
                 } else {
@@ -102,7 +107,23 @@ class SpecialModeController {
             });
         }
 
-        // Regla Langton (input text)
+        // Slider de estados: C=2 → modo estándar, C>2 → Generations automático
+        const generationsStates = document.getElementById('generationsStates');
+        if (generationsStates) {
+            this._addEventListener(generationsStates, 'input', () => {
+                const v = parseInt(generationsStates.value);
+                const display = document.getElementById('generationsStatesDisplay');
+                if (display) display.textContent = v;
+                if (v > 2) {
+                    // Marcar "Personalizada" en el selector sin disparar changeRule
+                    const sel = document.getElementById('ruleSelector');
+                    if (sel && sel.value !== 'custom') sel.value = 'custom';
+                    this._activateGenerationsFromUI();
+                } else if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
+                    this.deactivateGenerationsMode();
+                }
+            });
+        }
         const langtonRuleInput = document.getElementById('langtonRule');
         if (langtonRuleInput) {
             this._addEventListener(langtonRuleInput, 'change', () => {
@@ -143,6 +164,7 @@ class SpecialModeController {
         const uwToggle = document.getElementById('uwToggle');
         if (uwToggle) {
             this._addEventListener(uwToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
                 if (uwToggle.checked) {
                     this.activateUWMode();
                 } else {
@@ -398,6 +420,59 @@ class SpecialModeController {
         eventBus.emit('automaton:modeChanged', {mode: SpecialEngineManager.MODES.STANDARD});
     }
 
+    /**
+     * Lee B, S y C del DOM y activa el motor de Generaciones.
+     * Llamado tanto desde el slider (C>2) como desde applyCustomRule.
+     * @private
+     */
+    _activateGenerationsFromUI() {
+        const birthVal = document.getElementById('birthInput')?.value || '3';
+        const survivalVal = document.getElementById('survivalInput')?.value || '23';
+        const numStates = parseInt(document.getElementById('generationsStates')?.value) || 3;
+        try {
+            const parsed = parseCustomRule(birthVal, survivalVal);
+            this.activateGenerationsMode(parsed.birth, parsed.survival, numStates);
+        } catch (e) {
+            this._onShowNotification(`Error en regla: ${e.message}`, 'warning', 3000);
+        }
+    }
+
+    async activateGenerationsMode(birth, survival, numStates) {
+        try {
+            await this._prepareEngine(SpecialEngineManager.MODES.GENERATIONS);
+
+            // En Generations el ruleSelector permanece habilitado: permite cambiar
+            // la regla B/S base seleccionando una predefinida del dropdown.
+            this._setModeSelectors(true);
+            document.getElementById('ruleSelector').disabled = false;
+
+            this.automaton.generationsEngine.activate({birth, survival, numStates});
+            this._finalizeActivation(
+                SpecialEngineManager.MODES.GENERATIONS,
+                t('notif.generations.enabled', {rule: `B${birth.join('')}/S${survival.join('')}/C${numStates}`})
+            );
+            // Mostrar siempre el bloque de colores (independiente del toggle de actividad)
+            // y conmutar sus swatches al modo Generations
+            const colorsBlock = document.getElementById('activityColors');
+            if (colorsBlock) colorsBlock.style.display = '';
+            window.app?.uiController?._syncActivityColorsBlock(true);
+        } catch (error) {
+            console.error('Error cargando GenerationsEngine:', error);
+            this._onShowNotification(t('notif.generations.error'), 'warning', 3000);
+        }
+    }
+
+    deactivateGenerationsMode() {
+        this._returnToStandard();
+        // Restaurar swatches binarios y respetar estado del toggle de actividad
+        window.app?.uiController?._syncActivityColorsBlock(false);
+        const actToggle = document.getElementById('activityEffectToggle');
+        const colorsBlock = document.getElementById('activityColors');
+        if (colorsBlock && actToggle) {
+            colorsBlock.style.display = actToggle.checked ? '' : 'none';
+        }
+    }
+
     async activateUWMode() {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.ULAM_WARBURTON);
@@ -418,29 +493,33 @@ class SpecialModeController {
 
     _updateModeIndicator(mode) {
         // Emitir SIEMPRE, antes del guard del DOM.
-        // Modo estándar: rule=null → PatternManager resolverá la regla activa del selector.
-        // Modos especiales: rule=null (no aplica filtro B/S).
         eventBus.emit('automaton:filterChanged', {mode, rule: null});
 
-        // Colapsar el acordeón de reglas estándar al entrar en modo especial, expandir al salir.
-        const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
-        if (rulesHeader) {
-            const isSpecial = mode !== SpecialEngineManager.MODES.STANDARD;
-            rulesHeader.classList.toggle('active', !isSpecial);
-        }
+        // Generations vive dentro del acordeón "rules" (no tiene sub-acordeón propio
+        // en Modos Especiales), así que no colapsa ese acordeón ni afecta standardToggle.
+        const isGenerations = mode === SpecialEngineManager.MODES.GENERATIONS;
 
-        // Sincronizar el toggle de modo estándar
-        const standardToggle = document.getElementById('standardToggle');
-        if (standardToggle) {
-            standardToggle.checked = mode === SpecialEngineManager.MODES.STANDARD;
-        }
+        if (!isGenerations) {
+            // Colapsar el acordeón de reglas estándar al entrar en modo especial, expandir al salir.
+            const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
+            if (rulesHeader) {
+                const isSpecial = mode !== SpecialEngineManager.MODES.STANDARD;
+                rulesHeader.classList.toggle('active', !isSpecial);
+            }
 
-        // Colapsar los acordeones de los otros motores especiales; expandir solo el activo.
-        // Los data-accordion coinciden exactamente con los valores de MODES, sin mapeo extra.
-        for (const engineMode of Object.values(SpecialEngineManager.MODES)) {
-            if (engineMode === SpecialEngineManager.MODES.STANDARD) continue;
-            const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
-            if (header) header.classList.toggle('active', engineMode === mode);
+            // Sincronizar el toggle de modo estándar
+            const standardToggle = document.getElementById('standardToggle');
+            if (standardToggle) {
+                standardToggle.checked = mode === SpecialEngineManager.MODES.STANDARD;
+            }
+
+            // Colapsar los acordeones de los otros motores especiales; expandir solo el activo.
+            for (const engineMode of Object.values(SpecialEngineManager.MODES)) {
+                if (engineMode === SpecialEngineManager.MODES.STANDARD) continue;
+                if (engineMode === SpecialEngineManager.MODES.GENERATIONS) continue;
+                const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
+                if (header) header.classList.toggle('active', engineMode === mode);
+            }
         }
 
         const indicator = document.getElementById('modeIndicator');
@@ -465,6 +544,10 @@ class SpecialModeController {
         } else if (mode === SpecialEngineManager.MODES.ULAM_WARBURTON) {
             indicator.className = 'mode-indicator uw-mode';
             indicator.innerHTML = `<i class="fas fa-snowflake"></i> Ulam-Warburton`;
+        } else if (mode === SpecialEngineManager.MODES.GENERATIONS) {
+            const info = this.automaton.generationsEngine?.getInfo();
+            indicator.className = 'mode-indicator generations-mode';
+            indicator.innerHTML = `<i class="fas fa-layer-group"></i> Generations ${info?.ruleString ?? ''}`;
         } else {
             indicator.className = 'mode-indicator standard-mode';
             indicator.innerHTML = `<i class="fas fa-th"></i> 2D Cellular`;
@@ -639,9 +722,19 @@ class SpecialModeController {
                 toggleId: 'wireworldToggle',
                 hideControls: () => this._toggleWireworldControls(false),
                 deactivate: () => this.automaton.wireworldEngine?.deactivate()
+            },
+            {
+                name: SpecialEngineManager.MODES.GENERATIONS,
+                toggleId: null,   // sin toggle en el DOM
+                hideControls: () => {
+                },
+                deactivate: () => this.automaton.generationsEngine?.deactivate()
             }
         ];
 
+        // Suprimir eventos change durante el desmarcado programático para evitar
+        // que los listeners de toggle disparen deactivateXMode() en cascada.
+        this._suppressToggleEvents = true;
         for (const mode of modes) {
             if (mode.name === exceptMode) continue;
             const toggle = document.getElementById(mode.toggleId);
@@ -649,6 +742,7 @@ class SpecialModeController {
             mode.hideControls();
             mode.deactivate();
         }
+        this._suppressToggleEvents = false;
 
         // Restaurar selectores compartidos al estado neutro.
         // El modo entrante los reconfigurará según sus necesidades.

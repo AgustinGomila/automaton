@@ -376,7 +376,9 @@ class GridRenderer {
         const xPos = x * cellSize;
         const yPos = y * cellSize;
 
-        const customColor = isAlive ? this._colorProvider?.(cellIndex) : null;
+        // Si hay colorProvider (Generations, Langton multi-color) consultarlo siempre,
+        // no solo para celdas vivas — las células moribundas tienen grid=0 pero color propio.
+        const customColor = this._colorProvider?.(cellIndex) ?? null;
         const actColor = customColor ?? this._getCellColor(cellIndex, isAlive);
 
         if (actColor) {
@@ -396,6 +398,17 @@ class GridRenderer {
     _renderLargeCell(x, y, cellIndex, isAlive) {
         const cellSize = this.config.cellSize;
         const innerSize = cellSize - 2;
+
+        // Si hay colorProvider activo, usarlo también para celdas "muertas" (moribundas)
+        if (this._colorProvider) {
+            const customColor = this._colorProvider(cellIndex);
+            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+            if (customColor) {
+                this.ctx.fillStyle = customColor;
+                this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+            }
+            return;
+        }
 
         if (isAlive) {
             this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
@@ -494,7 +507,9 @@ class GridRenderer {
             for (let y = 0; y < gridSize; y++) {
                 const isAlive = predicate(x, y);
                 const cellIndex = x * gridSize + y;
-                const customColor = isAlive ? this._colorProvider?.(cellIndex) : null;
+                // Si hay colorProvider (Generations, Langton) consultarlo siempre:
+                // las células moribundas tienen isAlive=false pero color propio.
+                const customColor = this._colorProvider?.(cellIndex) ?? null;
                 const color = customColor ?? this._getCellColor(cellIndex, isAlive);
 
                 if (!color) continue; // muerta y sin actividad reciente

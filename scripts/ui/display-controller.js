@@ -102,6 +102,23 @@ class DisplayController {
                 this._setNeighborhoodText(t('uw.neighborhood', {wrap}));
                 break;
 
+            case M.GENERATIONS: {
+                const gi = info;
+                this._setTitle(t('app.title.generations', {rule: gi.ruleString}));
+                this._setH1('fas fa-layer-group', t('header.title', {ruleName: `Generations ${gi.ruleString}`}));
+                this._setRulesSpecific(`
+                    <p><span class="birth"><i class="fas fa-seedling"></i> ${t('header.rules.birth')}</span> ${gi.birth.join(', ')} ${t('header.rules.neighbors')}</p>
+                    <p><span class="survival"><i class="fas fa-heart"></i> ${t('header.rules.survival')}</span> ${gi.survival.join(', ')} ${t('header.rules.neighbors')}</p>
+                    <p class="notation">${t('header.rules.notation')} <span class="highlight">${gi.ruleString}</span></p>
+                `);
+                this._setNeighborhoodText(t('header.neighborhood', {
+                    type: this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann',
+                    radius: this.automaton.neighborhoodRadius,
+                    wrap
+                }));
+                break;
+            }
+
             default: { // STANDARD
                 const selector = document.getElementById('ruleSelector');
                 if (!selector) break;
