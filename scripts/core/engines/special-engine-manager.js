@@ -25,7 +25,8 @@ class SpecialEngineManager {
         TRIANGLE: 'triangle',
         ULAM_WARBURTON: 'ulam-warburton',
         LANGTON: 'langton',
-        WIREWORLD: 'wireworld'
+        WIREWORLD: 'wireworld',
+        GENERATIONS: 'generations'
     });
 
     constructor({getRenderer, setRenderer, getCore, setCore, getGridSize, getCellSize, getAutomaton}) {
@@ -46,6 +47,7 @@ class SpecialEngineManager {
         this.uwEngine = null;
         this.langtonEngine = null;
         this.wireworldEngine = null;
+        this.generationsEngine = null;
 
         this._originalRenderer = null;
         this._originalCore = null;
@@ -90,6 +92,11 @@ class SpecialEngineManager {
                 return this._describeStep(this.langtonEngine, {label: 'Langton'});
             case SpecialEngineManager.MODES.WIREWORLD:
                 return this._describeStep(this.wireworldEngine, {label: 'WireWorld'});
+            case SpecialEngineManager.MODES.GENERATIONS:
+                return this._describeStep(this.generationsEngine, {
+                    label: 'Generations',
+                    skipActivity: true
+                });
             case SpecialEngineManager.MODES.TRIANGLE:
                 return this._describeTriangleStep();
             default:
@@ -104,7 +111,7 @@ class SpecialEngineManager {
      * @param {string|null} [stopMessage]
      * @returns {EngineStepDescriptor}
      */
-    _describeStep(engine, {label, stopMessage = null}) {
+    _describeStep(engine, {label, stopMessage = null, skipActivity = false}) {
         const continued = engine.step();
         return {
             continued,
@@ -113,7 +120,8 @@ class SpecialEngineManager {
             generation: engine.generation,
             changedCells: engine.getChangedCells(),
             population: null,
-            markDirtyFromCells: false
+            markDirtyFromCells: false,
+            skipActivity
         };
     }
 
@@ -170,6 +178,8 @@ class SpecialEngineManager {
                 return {mode, info: this.triangleEngine?.getInfo() ?? null};
             case SpecialEngineManager.MODES.LANGTON:
                 return {mode, info: this.langtonEngine?.getInfo() ?? null};
+            case SpecialEngineManager.MODES.GENERATIONS:
+                return {mode, info: this.generationsEngine?.getInfo() ?? null};
             default:
                 return {mode, info: null};
         }
@@ -190,6 +200,7 @@ class SpecialEngineManager {
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
         this.wireworldEngine?.deactivate?.();
+        this.generationsEngine?.deactivate?.();
         this._restoreOriginals();
 
         if (engineName === SpecialEngineManager.MODES.RD2D) {
@@ -226,6 +237,15 @@ class SpecialEngineManager {
             }
             this.wireworldEngine = new WireWorldEngine(this._buildWireworldContext());
             this.specialMode = SpecialEngineManager.MODES.WIREWORLD;
+
+        } else if (engineName === SpecialEngineManager.MODES.GENERATIONS) {
+            if (typeof GenerationsEngine === 'undefined') {
+                await this._loadScript('scripts/core/engines/generations-engine.js');
+            }
+            // Las opciones (birth/survival/numStates) se pasan vía activate()
+            // desde SpecialModeController después de construir el engine.
+            this.generationsEngine = new GenerationsEngine(this._buildGenerationsContext());
+            this.specialMode = SpecialEngineManager.MODES.GENERATIONS;
 
         } else if (engineName === SpecialEngineManager.MODES.TRIANGLE) {
             if (typeof TriangleGridManager === 'undefined') {
@@ -283,6 +303,7 @@ class SpecialEngineManager {
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
         this.wireworldEngine?.deactivate?.();
+        this.generationsEngine?.deactivate?.();
 
         this.wolframEngine = null;
         this.rd2dEngine = null;
@@ -290,6 +311,7 @@ class SpecialEngineManager {
         this.uwEngine = null;
         this.langtonEngine = null;
         this.wireworldEngine = null;
+        this.generationsEngine = null;
 
         this._originalRenderer = null;
         this._originalCore = null;
@@ -331,6 +353,10 @@ class SpecialEngineManager {
                 this.wireworldEngine?.reset();
                 return true;
 
+            case SpecialEngineManager.MODES.GENERATIONS:
+                this.generationsEngine?.reset();
+                return true;
+
             default:
                 return false;
         }
@@ -366,6 +392,11 @@ class SpecialEngineManager {
             return {handled: true, population: null, resetLimit: false};
         }
 
+        if (this.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.generationsEngine?.isActive) {
+            this.generationsEngine.randomize(density);
+            return {handled: true, population: null, resetLimit: false};
+        }
+
         return {handled: false};
     }
 
@@ -375,6 +406,7 @@ class SpecialEngineManager {
         this.uwEngine?.reset?.();
         this.langtonEngine?.reset?.();
         this.wireworldEngine?.reset?.();
+        this.generationsEngine?.reset?.();
     }
 
     resetActiveEngine() {
@@ -497,6 +529,25 @@ class SpecialEngineManager {
     }
 
     _buildWireworldContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        return {
+            get grid() {
+                return automaton.grid;
+            },
+            get gridSize() {
+                return self._getGridSize();
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            get wrapEdges() {
+                return automaton.wrapEdges;
+            }
+        };
+    }
+
+    _buildGenerationsContext() {
         const self = this;
         const automaton = self._getAutomaton();
         return {
