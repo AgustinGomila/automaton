@@ -91,6 +91,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const {automaton, uiController} = window.app;
             window.responsiveController.init(automaton, uiController);
+
+            // Mostrar cartel de bienvenida la primera vez
+            new WelcomeModal().show();
         }, 50);
     });
 });

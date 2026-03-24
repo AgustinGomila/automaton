@@ -83,6 +83,7 @@ ES/EN.
 | Z         | Deshacer                 |
 | Shift + Z | Rehacer                  |
 | A         | Aleatorio                |
+| I         | Performance              |
 | C         | Limpiar                  |
 | G         | Mostrar / Ocultar grilla |
 | H / ?     | Ayuda                    |

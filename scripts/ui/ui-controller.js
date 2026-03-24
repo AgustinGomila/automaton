@@ -453,6 +453,9 @@ class UIController {
             case 'h':
                 this.toggleGrid();
                 break;
+            case 'i':
+                this._togglePerf();
+                break;
             case '?':
                 e.preventDefault();
                 document.getElementById('instructionsModal').classList.add('show');

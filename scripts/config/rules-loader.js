@@ -38,15 +38,6 @@ class RulesLoader {
                 survival: [],
                 birth: []
             },
-            kauffman: {
-                name: "Kauffman",
-                ruleString: "B37/S4567",
-                description: "Regla de Kauffman",
-                descriptionLong: "Regla basada en el trabajo sobre autopoiesis de Francisco Varela",
-                author: "Louis Kauffman",
-                survival: [4, 5, 6, 7],
-                birth: [3, 7]
-            },
             conway: {
                 name: "Conway's Life",
                 ruleString: "B3/S23",
@@ -55,6 +46,15 @@ class RulesLoader {
                 author: "John Conway",
                 survival: [2, 3],
                 birth: [3]
+            },
+            kauffman: {
+                name: "Kauffman",
+                ruleString: "B37/S4567",
+                description: "Regla de Kauffman",
+                descriptionLong: "Regla basada en el trabajo sobre autopoiesis de Francisco Varela",
+                author: "Louis Kauffman",
+                survival: [4, 5, 6, 7],
+                birth: [3, 7]
             },
         };
         this.isLoaded = true;

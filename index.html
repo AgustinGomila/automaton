@@ -96,18 +96,19 @@
                                     <label for="birthInput">
                                         <i class="fas fa-seedling"></i> B (<span data-i18n="header.rules.birth">Nacimiento</span>):
                                     </label>
-                                    <input id="birthInput" placeholder="Ej: 3,6,8" type="text" value="3,7">
+                                    <input id="birthInput" placeholder="Ej: 3,7" type="text" value="3">
                                 </div>
                                 <div class="config-group">
                                     <label for="survivalInput">
                                         <i class="fas fa-heart"></i> S (<span data-i18n="header.rules.survival">Supervivencia</span>):
                                     </label>
-                                    <input id="survivalInput" placeholder="Ej: 2,3,4" type="text" value="4,5,6,7">
+                                    <input id="survivalInput" placeholder="Ej: 4,5,6,7" type="text" value="2,3">
                                 </div>
                                 <!-- Selector de estados: C=2 → modo estándar, C>2 → Generaciones -->
                                 <div class="config-group">
                                     <label for="generationsStates">
-                                        <i class="fas fa-layer-group"></i> C (<span data-i18n="generations.states.label">Estados</span>):
+                                        <i class="fas fa-layer-group"></i> C (<span
+                                            data-i18n="generations.states.label">Estados</span>):
                                         <span class="value-display" id="generationsStatesDisplay">2</span>
                                     </label>
                                     <input type="range" id="generationsStates" min="2" max="16" value="2" step="1"
@@ -278,25 +279,29 @@
                                 </label>
                                 <div class="activity-color-swatches">
                                     <div class="activity-swatch-item">
-                                        <div class="activity-swatch" id="swatchDead"   data-state="dead"   style="--swatch-color:#0f172a" title="Muerto (0→0)">
+                                        <div class="activity-swatch" id="swatchDead" data-state="dead"
+                                             style="--swatch-color:#0f172a" title="Muerto (0→0)">
                                             <span class="activity-swatch-label">0</span>
                                             <input type="color" value="#0f172a" id="colorDead">
                                         </div>
                                     </div>
                                     <div class="activity-swatch-item">
-                                        <div class="activity-swatch" id="swatchBorn"   data-state="born"   style="--swatch-color:#b9b610" title="Naciendo (0→1)">
+                                        <div class="activity-swatch" id="swatchBorn" data-state="born"
+                                             style="--swatch-color:#b9b610" title="Naciendo (0→1)">
                                             <span class="activity-swatch-label">+1</span>
                                             <input type="color" value="#b9b610" id="colorBorn">
                                         </div>
                                     </div>
                                     <div class="activity-swatch-item">
-                                        <div class="activity-swatch" id="swatchAlive"  data-state="alive"  style="--swatch-color:#059669" title="Vivo (1→1)">
+                                        <div class="activity-swatch" id="swatchAlive" data-state="alive"
+                                             style="--swatch-color:#059669" title="Vivo (1→1)">
                                             <span class="activity-swatch-label">1</span>
                                             <input type="color" value="#059669" id="colorAlive">
                                         </div>
                                     </div>
                                     <div class="activity-swatch-item">
-                                        <div class="activity-swatch" id="swatchDying"  data-state="dying"  style="--swatch-color:#ef4444" title="Muriendo (1→0)">
+                                        <div class="activity-swatch" id="swatchDying" data-state="dying"
+                                             style="--swatch-color:#ef4444" title="Muriendo (1→0)">
                                             <span class="activity-swatch-label">−1</span>
                                             <input type="color" value="#ef4444" id="colorDying">
                                         </div>
@@ -655,6 +660,7 @@
                         <span class="stat-label"><i class="fas fa-percentage"></i> <span data-i18n="stats.density">Densidad</span></span>
                         <span class="stat-value density" id="density">0.0%</span>
                     </div>
+                    <div id="perfOverlay" class="perf-overlay" style="display:none;"></div>
                 </div>
 
                 <!-- Área del Canvas -->
@@ -662,12 +668,38 @@
                     <div id="canvas-container">
                         <div class="canvas-overlay" id="patternPreview"></div>
                         <div class="canvas-overlay" id="influenceArea"></div>
-                        <div id="perfOverlay" class="perf-overlay" style="display:none;"></div>
                         <canvas id="canvas"></canvas>
                     </div>
                 </div>
+            </div>
+        </div>
+    </main>
 
-                <!-- Controles principales -->
+    <!-- Patrones -->
+    <div class="patterns-horizontal-container">
+        <div class="patterns-header">
+            <div class="patterns-header-left">
+                <h3><i class="fas fa-shapes"></i> <span data-i18n="patterns.title">Patrones</span></h3>
+                <div class="pattern-info-expanded" id="patternInfoExpanded">
+                    <div class="pattern-info-main" id="patternNameMini" data-i18n="patterns.select">Selecciona un
+                        patrón
+                    </div>
+                    <div class="pattern-info-secondary" id="patternDetailsMini" data-i18n="patterns.details">Clic en un
+                        patrón para seleccionarlo
+                    </div>
+                    <div class="pattern-info-description" id="patternDescriptionMini" style="
+                        font-size: 0.75rem;
+                        color: var(--gray-text);
+                        font-style: italic;
+                        margin-top: 2px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;">
+                    </div>
+                </div>
+            </div>
+
+            <div class="patterns-center-controls">
                 <div class="controls">
                     <button class="btn-control btn-play" id="playBtn">
                         <i class="fas fa-play" id="playIcon"></i>
@@ -711,32 +743,7 @@
                     </button>
                 </div>
             </div>
-        </div>
-    </main>
 
-    <!-- Patrones -->
-    <div class="patterns-horizontal-container">
-        <div class="patterns-header">
-            <div class="patterns-header-left">
-                <h3><i class="fas fa-shapes"></i> <span data-i18n="patterns.title">Patrones</span></h3>
-                <div class="pattern-info-expanded" id="patternInfoExpanded">
-                    <div class="pattern-info-main" id="patternNameMini" data-i18n="patterns.select">Selecciona un
-                        patrón
-                    </div>
-                    <div class="pattern-info-secondary" id="patternDetailsMini" data-i18n="patterns.details">Clic en un
-                        patrón para seleccionarlo
-                    </div>
-                    <div class="pattern-info-description" id="patternDescriptionMini" style="
-                        font-size: 0.75rem;
-                        color: var(--gray-text);
-                        font-style: italic;
-                        margin-top: 2px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;">
-                    </div>
-                </div>
-            </div>
             <div class="patterns-controls">
                 <button class="btn-toggle" id="bucketToolBtn" data-i18n="tooltip.bucket"
                         data-i18n-attr="title" title="Bote de pintura (Ctrl: limpiar)">
@@ -768,19 +775,6 @@
             </div>
         </div>
     </div>
-
-    <footer class="footer">
-        <div class="footer-content">
-            <p class="footer-links">
-                <a href="https://github.com/AgustinGomila/automaton" target="_blank">
-                    <i class="fab fa-github"></i> <span data-i18n="footer.github">Código en GitHub</span>
-                </a>
-                <a href="#" id="configMobileBtn">
-                    <i class="fas fa-sliders-h"></i> <span data-i18n="footer.config">Configuración</span>
-                </a>
-            </p>
-        </div>
-    </footer>
 
     <div class="modal-overlay" id="instructionsModal">
         <div class="modal-content">
@@ -853,6 +847,7 @@
                         <li><strong>S</strong> - <span data-i18n="instructions.shortcut.s">Siguiente paso</span></li>
                         <li><strong>R</strong> - <span data-i18n="instructions.shortcut.r">Rotar patrón</span></li>
                         <li><strong>A</strong> - <span data-i18n="instructions.shortcut.a">Aleatorio</span></li>
+                        <li><strong>I</strong> - <span data-i18n="instructions.shortcut.i">Performance</span></li>
                         <li><strong>B</strong> - <span data-i18n="instructions.shortcut.b">Bote de pintura</span></li>
                         <li><strong>C</strong> - <span data-i18n="instructions.shortcut.c">Limpiar</span></li>
                         <li><strong>G</strong> - <span data-i18n="instructions.shortcut.h">Mostrar/Ocultar grilla</span>
@@ -864,6 +859,13 @@
                         </li>
                     </ul>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <a href="https://github.com/AgustinGomila/automaton" target="_blank" rel="noopener noreferrer"
+                   id="helpGithubLink">
+                    <i class="fab fa-github"></i>
+                    <span data-i18n="footer.github">Código en GitHub</span>
+                </a>
             </div>
         </div>
     </div>
@@ -912,8 +914,9 @@
 <script src="scripts/ui/mcl-codec.js"></script>
 <script src="scripts/ui/canvas-controller.js"></script>
 <script src="scripts/ui/special-mode-controller.js"></script>
-<script src="scripts/ui/responsive-controller.js"></script>
 <script src="scripts/ui/ui-controller.js"></script>
+<script src="scripts/ui/responsive-controller.js"></script>
+<script src="scripts/ui/welcome-modal.js"></script>
 <script src="scripts/main.js"></script>
 </body>
 </html>

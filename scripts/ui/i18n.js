@@ -93,7 +93,7 @@ class I18n {
                 'tooltip.patterns.order': 'Ordenar por células/alfabético',
                 'tooltip.patterns.compact': 'Vista compacta',
                 'tooltip.bucket': 'Bote de pintura',
-                'tooltip.perf': 'Rendimiento',
+                'tooltip.perf': 'Rendimiento (I)',
 
                 // Configuración
                 'config.title': 'Configuración',
@@ -231,6 +231,7 @@ class I18n {
                 'instructions.shortcut.s': 'Siguiente paso',
                 'instructions.shortcut.r': 'Rotar patrón',
                 'instructions.shortcut.a': 'Aleatorio',
+                'instructions.shortcut.i': 'Performance',
                 'instructions.shortcut.b': 'Bote de pintura',
                 'instructions.shortcut.c': 'Limpiar',
                 'instructions.shortcut.h': 'Mostrar/Ocultar grilla',
@@ -318,7 +319,6 @@ class I18n {
 
                 // Footer
                 'footer.github': 'Código en GitHub',
-                'footer.config': 'Configuración',
 
                 // Botones móviles
                 'mobile.close': 'Cerrar',
@@ -326,6 +326,20 @@ class I18n {
 
                 // Diálogos
                 'confirm.resize': 'Cambiar el tamaño detendrá la simulación. ¿Continuar?',
+
+                // Modal de bienvenida
+                'welcome.title': '¡Bienvenido al Autómata Celular!',
+                'welcome.subtitle': 'Un simulador interactivo de reglas de autómatas celulares en tiempo real.',
+                'welcome.section.header.title': 'Barra superior — Reglas y herramientas',
+                'welcome.section.header.text': 'Muestra la regla activa, información de vecindad y accesos directos para importar y exportar patrones.',
+                'welcome.section.panel.title': 'Panel izquierdo — Configuración',
+                'welcome.section.panel.text': 'Reglas, tipo de vecindad, velocidad, tamaño de la grilla, zoom y todos los modos especiales (Wolfram, WireWorld, Langton…).',
+                'welcome.section.patterns.title': 'Barra inferior — Patrones y controles',
+                'welcome.section.patterns.text': 'Biblioteca de patrones predefinidos, controles de ejecución (play / pausa / paso) y velocidad.',
+                'welcome.section.quickstart.title': 'Empezar rápido',
+                'welcome.section.quickstart.text': 'Dibujá algo en el tablero con el mouse, o presioná <kbd>A</kbd> para llenarlo al azar, y luego tocá <kbd>Espacio</kbd> para ver cómo evoluciona.',
+                'welcome.dontshow': 'No volver a mostrar',
+                'welcome.close': 'Comenzar',
             },
 
             en: {
@@ -366,7 +380,7 @@ class I18n {
                 'tooltip.patterns.order': 'Order by cellular amount/alphabetic',
                 'tooltip.patterns.compact': 'Compact view',
                 'tooltip.bucket': 'Paint bucket',
-                'tooltip.perf': 'Performance',
+                'tooltip.perf': 'Performance (I)',
 
                 // Configuración
                 'config.title': 'Configuration',
@@ -504,6 +518,7 @@ class I18n {
                 'instructions.shortcut.s': 'Next step',
                 'instructions.shortcut.r': 'Rotate pattern',
                 'instructions.shortcut.a': 'Random',
+                'instructions.shortcut.i': 'Performance',
                 'instructions.shortcut.b': 'Bucket fill tool',
                 'instructions.shortcut.c': 'Clear',
                 'instructions.shortcut.h': 'Toggle grid',
@@ -591,7 +606,6 @@ class I18n {
 
                 // Footer
                 'footer.github': 'Code on GitHub',
-                'footer.config': 'Settings',
 
                 // Botones móviles
                 'mobile.close': 'Close',
@@ -599,6 +613,20 @@ class I18n {
 
                 // Diálogos
                 'confirm.resize': 'Changing the size will stop the simulation. Continue?',
+
+                // Welcome modal
+                'welcome.title': 'Welcome to Cellular Automaton',
+                'welcome.subtitle': 'An interactive simulator of cellular automata rules running in real time.',
+                'welcome.section.header.title': 'Top bar — Rules & Tools',
+                'welcome.section.header.text': 'Shows the active rule, neighborhood info, and quick buttons to import/export patterns.',
+                'welcome.section.panel.title': 'Left panel — Settings',
+                'welcome.section.panel.text': 'Rules, neighborhood type, speed, grid size, zoom, and all special automaton modes (Wolfram, WireWorld, Langton…).',
+                'welcome.section.patterns.title': 'Bottom bar — Patterns & Controls',
+                'welcome.section.patterns.text': 'A library of predefined patterns, play/pause/step controls, and speed buttons.',
+                'welcome.section.quickstart.title': 'Quick start',
+                'welcome.section.quickstart.text': 'Draw on the grid with your mouse, or press <kbd>A</kbd> to fill it randomly, then hit <kbd>Space</kbd> to watch it evolve.',
+                'welcome.dontshow': "Don't show again",
+                'welcome.close': 'Start',
             }
         };
     }
