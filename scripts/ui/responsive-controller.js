@@ -14,6 +14,8 @@ class ResponsiveController {
         this.isPanelOpen = false;
         this.isRulesOpen = false;
         this._initialized = false;
+        this.automaton = null;
+        this.uiController = null;
     }
 
     /**
@@ -25,10 +27,13 @@ class ResponsiveController {
         if (this._initialized) return;
         this._initialized = true;
 
+        this.automaton = automaton;
+        this.uiController = uiController;
+
         this.bindEvents();
 
         if (this.isMobile) {
-            this.adjustForMobile(automaton, uiController);
+            this.adjustForMobile();
         }
 
         window.addEventListener('resize', () => this.handleResize());
@@ -42,8 +47,8 @@ class ResponsiveController {
      * Si automaton/uiController no están listos todavía, el caller debe
      * invocar este método cuando lo estén (ver main.js).
      */
-    adjustForMobile(automaton, uiController) {
-        if (!this.isMobile || !automaton) return;
+    adjustForMobile() {
+        if (!this.isMobile || !this.automaton) return;
 
         const defaultGridSize = 200;
         const defaultCellSize = 2;
@@ -54,24 +59,19 @@ class ResponsiveController {
         const currentGridSize = parseInt(gridSizeInput?.value) || 0;
         if (currentGridSize !== defaultGridSize) {
             if (gridSizeInput) gridSizeInput.value = String(defaultGridSize);
-            uiController?.updateGridSizeDisplay();
-            automaton.resizeGrid(defaultGridSize);
+            this.uiController?.updateGridSizeDisplay();
+            this.automaton.resizeGrid(defaultGridSize);
         }
 
         const currentCellSize = parseInt(cellSizeInput?.value) || 0;
         if (currentCellSize !== defaultCellSize) {
             if (cellSizeInput) cellSizeInput.value = String(defaultCellSize);
-            uiController?.updateCellSizeDisplay();
-            automaton.setCellSize(defaultCellSize);
+            this.uiController?.updateCellSizeDisplay();
+            this.automaton.setCellSize(defaultCellSize);
         }
 
-        automaton._markAllDirty();
-        automaton.render();
-
-        const container = document.getElementById('patternsContainer');
-        if (container) {
-            container.classList.remove('two-rows', 'compact-view');
-        }
+        this.automaton._markAllDirty();
+        this.automaton.render();
     }
 
     bindEvents() {
@@ -79,16 +79,6 @@ class ResponsiveController {
         const menuBtn = document.getElementById('mobileMenuBtn');
         if (menuBtn) {
             menuBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.toggleLeftPanel();
-            });
-        }
-
-        // Botón de configuración en footer móvil
-        const configBtn = document.getElementById('configMobileBtn');
-        if (configBtn) {
-            configBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.toggleLeftPanel();
@@ -181,10 +171,16 @@ class ResponsiveController {
         const wasMobile = this.isMobile;
         this.isMobile = window.innerWidth <= 768;
 
-        if (wasMobile !== this.isMobile && !this.isMobile) {
-            this.closeLeftPanel();
-            this.closeRules();
-            document.body.style.overflow = '';
+        if (wasMobile !== this.isMobile) {
+            if (this.isMobile) {
+                // Ahora es móvil: aplica ajustes
+                this.adjustForMobile();
+            } else {
+                // Vuelve a escritorio: cierra paneles
+                this.closeLeftPanel();
+                this.closeRules();
+                document.body.style.overflow = '';
+            }
         }
 
         window.app?.automaton?.render();

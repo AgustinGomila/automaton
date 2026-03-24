@@ -82,6 +82,7 @@ Supports classic 2D B/S automata, six special engines, full grid editing, and ES
 | Z         | Undo             |
 | Shift + Z | Redo             |
 | A         | Random           |
+| I         | Performance      |
 | C         | Clear            |
 | G         | Show / Hide grid |
 | H / ?     | Help             |
