@@ -1,32 +1,36 @@
 /**
  * GridWorkerManager — Worker stateful con doble buffer.
  *
- * Protocolo (ver automaton-worker.js):
- *   init  → worker construye grid interno, responde 'ready'
- *   step  → worker calcula un paso, responde 'result' con changedCells transferible
- *   sync  → sincroniza el grid interno tras una edición manual en el hilo principal
+ * Soporta grids rectangulares: usa getGridWidth y getGridHeight en lugar
+ * del anterior getGridSize. La serialización/deserialización emplea el
+ * índice plano x * height + y (column-major).
  *
- * La diferencia clave respecto al worker anterior es que el grid NO viaja
- * de vuelta en cada respuesta: solo los índices de celdas cambiadas (array pequeño).
- * Esto elimina la serialización O(n²) en cada paso.
+ * Compatibilidad hacia atrás: si sólo se pasa getGridSize, se usa para
+ * ambas dimensiones.
  */
 class GridWorkerManager {
     /**
      * @param {Object}   options
      * @param {string}   options.workerPath
-     * @param {number}   options.threshold    — tamaño mínimo de grid para activar worker
-     * @param {Function} options.getGridSize  — () => number
-     * @param {Function} options.getCore      — () => CellularAutomatonCore
-     * @param {Function} options.onResult     — ({generation, population, changedCells, changedCount}) => void
-     * @param {Function} options.onError      — () => void
+     * @param {number}   options.threshold     — máx(width,height) mínimo para activar worker
+     * @param {Function} options.getGridWidth  — () => number
+     * @param {Function} options.getGridHeight — () => number
+     * @param {Function} [options.getGridSize] — legacy: alias cuadrado
+     * @param {Function} options.getCore       — () => CellularAutomatonCore
+     * @param {Function} options.onResult
+     * @param {Function} options.onError
      */
-    constructor({workerPath, threshold, getGridSize, getCore, onResult, onError}) {
+    constructor({workerPath, threshold, getGridWidth, getGridHeight, getGridSize, getCore, onResult, onError}) {
         this._workerPath = workerPath;
         this.threshold = threshold ?? 600;
-        this._getGridSize = getGridSize;
         this._getCore = getCore;
         this._onResult = onResult;
         this._onError = onError;
+
+        // Soporte para API legacy (sólo getGridSize)
+        const legacyFn = getGridSize || (() => 500);
+        this._getGridWidth = getGridWidth || legacyFn;
+        this._getGridHeight = getGridHeight || legacyFn;
 
         this._worker = null;
         this._handlerId = null;
@@ -42,15 +46,12 @@ class GridWorkerManager {
 
     // ── Ciclo de vida ──────────────────────────────────────────────────────────
 
-    /**
-     * Crea el worker y lo inicializa con el estado actual del grid.
-     * Si ya existía uno, lo termina primero.
-     */
     init() {
         this._terminate();
 
-        const size = this._getGridSize();
-        if (size < this.threshold || !window.Worker) return;
+        const w = this._getGridWidth();
+        const h = this._getGridHeight();
+        if (Math.max(w, h) < this.threshold || !window.Worker) return;
 
         try {
             this._worker = new Worker(this._workerPath);
@@ -69,14 +70,14 @@ class GridWorkerManager {
 
                 if (type === 'result') {
                     this.isProcessing = false;
-                    // Sincronizar grid del core con el resultado del worker
                     this._applyResult(e.data);
                     this._onResult({
                         generation: e.data.generation,
                         population: e.data.population,
                         changedCells: new Uint32Array(e.data.changedCells),
                         changedCount: e.data.changedCount,
-                        size: this._getGridSize()
+                        width: this._getGridWidth(),
+                        height: this._getGridHeight()
                     });
                     return;
                 }
@@ -97,7 +98,6 @@ class GridWorkerManager {
                 this._onError();
             };
 
-            // Enviar estado inicial al worker
             this._sendInit();
 
         } catch (err) {
@@ -106,10 +106,6 @@ class GridWorkerManager {
         }
     }
 
-    /**
-     * Solicita un paso al worker.
-     * @returns {boolean} true si el mensaje fue enviado
-     */
     requestNextGeneration() {
         if (!this.isAvailable) return false;
         this.isProcessing = true;
@@ -117,12 +113,6 @@ class GridWorkerManager {
         return true;
     }
 
-    /**
-     * Sincroniza el grid interno del worker tras una edición manual
-     * (clear, randomize, paste, undo, etc.).
-     * Llamar siempre que el hilo principal modifique el grid mientras
-     * el worker está activo.
-     */
     syncGrid() {
         if (!this._worker || !this._isReady) return;
         const gridFlat = this._serializeGrid();
@@ -138,21 +128,24 @@ class GridWorkerManager {
         this._onResult = null;
         this._onError = null;
         this._getCore = null;
-        this._getGridSize = null;
+        this._getGridWidth = null;
+        this._getGridHeight = null;
     }
 
     // ── Privado ────────────────────────────────────────────────────────────────
 
     _sendInit() {
         const core = this._getCore();
-        const size = this._getGridSize();
+        const w = this._getGridWidth();
+        const h = this._getGridHeight();
         const gridFlat = this._serializeGrid();
 
         this._worker.postMessage({
             type: 'init',
             data: {
                 gridFlat,
-                size,
+                width: w,
+                height: h,
                 rule: {
                     birth: core.ruleEngine.birth,
                     survival: core.ruleEngine.survival
@@ -165,17 +158,18 @@ class GridWorkerManager {
     }
 
     /**
-     * Serializa el grid column-major actual en un Uint8Array plano transferible.
-     * row-major (x * size + y) para compatibilidad con el worker.
+     * Serializa el grid column-major en un Uint8Array plano transferible.
+     * Índice plano: x * height + y
      */
     _serializeGrid() {
-        const size = this._getGridSize();
+        const w = this._getGridWidth();
+        const h = this._getGridHeight();
         const grid = this._getCore().gridManager.grid;
-        const flat = new Uint8Array(size * size);
-        for (let x = 0; x < size; x++) {
+        const flat = new Uint8Array(w * h);
+        for (let x = 0; x < w; x++) {
             const col = grid[x];
-            const base = x * size;
-            for (let y = 0; y < size; y++) {
+            const base = x * h;
+            for (let y = 0; y < h; y++) {
                 flat[base + y] = col[y];
             }
         }
@@ -185,20 +179,18 @@ class GridWorkerManager {
     /**
      * Aplica el resultado del paso al grid del core usando los índices
      * de celdas cambiadas — sin recibir el grid completo.
-     * El worker y el core comparten la misma función de paso, así que
-     * basta con invertir el estado en las posiciones indicadas.
+     * Índice plano: x * height + y
      */
     _applyResult(data) {
-        const size = this._getGridSize();
+        const h = this._getGridHeight();
         const grid = this._getCore().gridManager.grid;
         const changed = new Uint32Array(data.changedCells);
         const count = data.changedCount;
 
         for (let i = 0; i < count; i++) {
             const idx = changed[i];
-            const x = (idx / size) | 0;
-            const y = idx % size;
-            // El worker ya aplicó el paso: simplemente invertir el estado.
+            const x = (idx / h) | 0;
+            const y = idx % h;
             grid[x][y] = grid[x][y] ? 0 : 1;
         }
     }

@@ -1,27 +1,29 @@
 /**
  * CellularAutomaton — Coordinador del autómata celular.
  *
- * Responsabilidad: conectar y orquestar los subsistemas sin conocer sus
- * detalles internos.
- *
- * Subsistemas directos:
- *   CellularAutomatonCore — matemática pura (grid, vecindad, reglas)
- *   StateManager          — undo/redo, historial de población
- *   GridRenderer          — renderizado Canvas 2D con dirty rendering
- *   AnimationLoop         — timing RAF
- *   SimulationLimiter     — límites por generación / población
- *   GridWorkerManager     — Web Worker para grids grandes
- *   SpecialEngineManager  — motores alternativos (Wolfram, RD-2D, ...)
- *   EditCoordinator       — operaciones de edición del grid
+ * Actualizado para grids rectangulares (width × height).
+ * • gridWidth / gridHeight reemplazan a gridSize como fuente de verdad.
+ * • gridSize se mantiene como getter (Math.max) para compatibilidad legacy.
+ * • resizeGrid acepta (width, height) con height opcional (cuadrado por defecto).
+ * • Worker, renderer y engines especiales reciben dimensiones rectangulares.
  */
 class CellularAutomaton {
-    constructor(gridSize = 500, cellSize = 2) {
-        this.gridSize = Math.min(Math.max(gridSize, 20), 1000);
+    constructor(gridWidth = 500, gridHeight = gridWidth, cellSize = 2) {
+        // Soportar firma legacy: constructor(gridSize, cellSize)
+        // Si gridHeight parece un cellSize (1–20) y gridWidth es grande → API legacy
+        if (gridHeight >= 1 && gridHeight <= 20 && gridWidth > 20) {
+            cellSize = gridHeight;
+            gridHeight = gridWidth;
+        }
+
+        this.gridWidth = Math.min(Math.max(gridWidth, 20), 1000);
+        this.gridHeight = Math.min(Math.max(gridHeight, 20), 1000);
         this.cellSize = Math.min(Math.max(cellSize, 1), 20);
 
         // === CORE MATEMÁTICO ===
         this.core = new CellularAutomatonCore({
-            size: this.gridSize,
+            width: this.gridWidth,
+            height: this.gridHeight,
             rule: {birth: [3], survival: [2, 3]},
             neighborhoodType: 'moore',
             neighborhoodRadius: 1,
@@ -38,7 +40,6 @@ class CellularAutomaton {
             onStateChange: (event) => this._handleStateChange(event),
             onHistoryChange: (stats) => this._handleHistoryChange(stats)
         });
-
         this.stateManager.startTracking();
 
         this.core.on({
@@ -51,14 +52,16 @@ class CellularAutomaton {
         this.renderer = new GridRenderer({
             canvas: document.getElementById('canvas'),
             container: document.getElementById('canvas-container'),
-            gridSize: this.gridSize,
+            gridWidth: this.gridWidth,
+            gridHeight: this.gridHeight,
             cellSize: this.cellSize,
             showGrid: true,
             showActivityEffect: true,
             getCell: (x, y) => this.core.getCell(x, y),
             getRD2DState: (x, y) => this.rd2dEngine?.stateGrid?.[x]?.[y],
             isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
-            getGridSize: () => this.gridSize
+            getGridWidth: () => this.gridWidth,
+            getGridHeight: () => this.gridHeight
         });
 
         // === ESTADO DE EJECUCIÓN ===
@@ -69,7 +72,8 @@ class CellularAutomaton {
         this._workerManager = new GridWorkerManager({
             workerPath: 'scripts/infrastructure/workers/automaton-worker.js',
             threshold: 600,
-            getGridSize: () => this.gridSize,
+            getGridWidth: () => this.gridWidth,
+            getGridHeight: () => this.gridHeight,
             getCore: () => this.core,
             onResult: ({generation, population, changedCells, changedCount}) => {
                 this.generation = generation;
@@ -105,6 +109,8 @@ class CellularAutomaton {
             setCore: (c) => {
                 this.core = c;
             },
+            getGridWidth: () => this.gridWidth,
+            getGridHeight: () => this.gridHeight,
             getGridSize: () => this.gridSize,
             getCellSize: () => this.cellSize,
             getAutomaton: () => this
@@ -154,6 +160,11 @@ class CellularAutomaton {
 
     set grid(value) {
         if (this.core?.gridManager) this.core.gridManager.grid = value;
+    }
+
+    /** Alias legacy: dimensión mayor del grid. */
+    get gridSize() {
+        return Math.max(this.gridWidth, this.gridHeight);
     }
 
     get limitType() {
@@ -303,9 +314,8 @@ class CellularAutomaton {
         return this._loop.isRunning;
     }
 
-    // Asignaciones directas (this.isRunning = false) son no-ops por compatibilidad.
     set isRunning(_) {
-    }
+    }  // no-op para compatibilidad
 
     // =========================================
     // INICIALIZACIÓN
@@ -354,7 +364,8 @@ class CellularAutomaton {
                 this.renderer.markAllDirty();
                 break;
             case 'resize':
-                this.gridSize = event.size;
+                this.gridWidth = event.width ?? this.gridWidth;
+                this.gridHeight = event.height ?? this.gridHeight;
                 this.renderer.markAllDirty();
                 break;
             case 'ruleChange':
@@ -403,11 +414,9 @@ class CellularAutomaton {
     // =========================================
 
     _initWorker() {
-        this._cleanupWorker();
         this._workerManager.init();
     }
 
-    /** Sincroniza el grid del worker tras cualquier edición manual. */
     _syncWorkerGrid() {
         this._workerManager.syncGrid();
     }
@@ -428,10 +437,6 @@ class CellularAutomaton {
             : this._stepStandardMode(t0);
     }
 
-    /**
-     * Paso en modo motor especial: obtiene el descriptor del engine activo
-     * y ejecuta la lógica común (stop, stats, activity, render, timing).
-     */
     _stepEngineMode(t0) {
         const desc = this._engineManager.stepActive();
         if (!desc) return 0;
@@ -446,9 +451,7 @@ class CellularAutomaton {
         this.updateStats(desc.population);
 
         const cc = desc.changedCells;
-        if (!desc.skipActivity) {
-            this.renderer.updateActivityAges(cc);
-        }
+        if (!desc.skipActivity) this.renderer.updateActivityAges(cc);
         if (desc.markDirtyFromCells) {
             for (let i = 0; i < cc.length; i++) {
                 this.renderer.markDirty(cc[i] >>> 16, cc[i] & 0xFFFF);
@@ -461,21 +464,17 @@ class CellularAutomaton {
         return 1;
     }
 
-    /** Paso en modo estándar: core síncrono o worker. */
     _stepStandardMode(t0) {
         const result = (this.worker && this.gridSize >= this.workerThreshold)
             ? this._nextGenerationWorker()
             : this._nextGenerationCore();
-        // El render ocurre en _step() después de nextGeneration(). Guardamos t0 y
-        // tStep para que _step() los use al medir el render y llame a _debugTiming.
         this._pendingStepT0 = t0;
         this._pendingStepTime = performance.now();
         return result;
     }
 
     // =========================================
-    // WRAPPERS DE RENDERER — para SpecialModeController
-    // Evitan que el controller UI acceda directamente a this.renderer.
+    // WRAPPERS DE RENDERER
     // =========================================
 
     _resetRendererCanvas() {
@@ -486,25 +485,34 @@ class CellularAutomaton {
         this.renderer.reGrid();
     }
 
-    _resizeRenderer(gs, cs) {
-        this.renderer.resize(gs, cs);
+    /**
+     * Redimensiona el renderer para las dimensiones actuales del grid.
+     * @param {number} [gw]  — si se omite, usa this.gridWidth
+     * @param {number} [gh]  — si se omite, usa this.gridHeight
+     * @param {number} [cs]  — si se omite, usa this.cellSize
+     */
+    _resizeRenderer(gw, gh, cs) {
+        this.renderer.resize(
+            gw ?? this.gridWidth,
+            gh ?? this.gridHeight,
+            cs ?? this.cellSize
+        );
     }
 
-    /** Conecta el gridManager del motor triangular al renderer activo. */
     _setRendererGridManager(gm) {
         this.renderer.setGridManager?.(gm);
     }
 
+    // =========================================
+    // CORE — PASO
+    // =========================================
+
     _nextGenerationCore() {
         const stats = this.core.step();
-        // stats.changedCells es el Uint32Array interno de RuleEngine (reutilizado).
-        // Debe consumirse antes del próximo step(). Lo pasamos con el count lógico
-        // para evitar el spread [...Set] que creaba un Array de hasta 160k entradas.
         const changed = stats.births + stats.deaths;
-        if (changed > this.gridSize * this.gridSize * 0.1) {
+        if (changed > this.gridWidth * this.gridHeight * 0.1) {
             this.renderer.markAllDirty();
         }
-        // Population ya viene calculada en stats: evita un segundo countPopulation() O(n²).
         this._checkLimitsWithPop(stats.population);
         this.renderer.updateActivityAges(stats.changedCells, stats.changedCount);
         return changed;
@@ -519,11 +527,9 @@ class CellularAutomaton {
         const stepMs = tStep - t0;
         const renderMs = tRender - tStep;
         const totalMs = tRender - t0;
-
         const α = 0.15;
+
         if (!this._perf || this._perf.mode !== mode) {
-            // Inicialización o cambio de modo: resetear EMA para no arrastrar
-            // valores del modo anterior (especialmente renderMs).
             this._perf = {
                 stepMs, renderMs, totalMs,
                 lastSecond: tRender, lastGenSnapshot: this.generation,
@@ -536,23 +542,19 @@ class CellularAutomaton {
             this._perf.mode = mode;
         }
 
-        // gen/s: diferencia real de generaciones entre snapshots de 1 segundo
         if (tRender - this._perf.lastSecond >= 1000) {
             this._perf.genPerSec = this.generation - this._perf.lastGenSnapshot;
             this._perf.lastGenSnapshot = this.generation;
             this._perf.lastSecond = tRender;
         }
 
-        if (this._perfVisible) {
-            eventBus.emit('perf:update', this._perf);
-        }
+        if (this._perfVisible) eventBus.emit('perf:update', this._perf);
 
         if (!this._lastDebugLog || tRender - this._lastDebugLog >= 2000) {
             this._lastDebugLog = tRender;
             console.debug(
                 `⏱ [${mode}] Gen ${this.generation} | ` +
-                `step: ${stepMs.toFixed(2)}ms | ` +
-                `render: ${renderMs.toFixed(2)}ms | ` +
+                `step: ${stepMs.toFixed(2)}ms | render: ${renderMs.toFixed(2)}ms | ` +
                 `total: ${totalMs.toFixed(2)}ms`
             );
         }
@@ -572,13 +574,12 @@ class CellularAutomaton {
             this.nextGeneration();
             return;
         }
+
         for (let i = 0; i < stepsPerFrame; i++) {
             if (!this.isRunning) break;
             if (this.nextGeneration() === 0) break;
         }
         this.render();
-        // Medir render para modo estándar síncrono: _stepStandardMode dejó los
-        // timestamps pendientes; ahora que render() terminó podemos calcular tRender.
         if (this._pendingStepTime !== undefined) {
             this._debugTiming('Standard', this._pendingStepT0, this._pendingStepTime, performance.now());
             this._pendingStepT0 = this._pendingStepTime = undefined;
@@ -602,11 +603,10 @@ class CellularAutomaton {
         if (markDirty && this.stateManager?.isTracking) {
             this.stateManager.saveState(this.generation);
         }
-
         const changed = this.core.setCell(x, y, state);
-
         if (changed) {
             this.renderer.markDirty(x, y);
+
             if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
                 if (this.rd2dEngine.stateGrid?.[x]) {
                     this.rd2dEngine.stateGrid[x][y] = state
@@ -614,16 +614,10 @@ class CellularAutomaton {
                         : 0;
                 }
             }
-
             if (this.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.generationsEngine?.isActive) {
                 if (this.generationsEngine.stateGrid?.[x]) {
                     this.generationsEngine.stateGrid[x][y] = state ? 1 : 0;
                 }
-            }
-
-            // Sincronizar el worker si está activo
-            if (this.worker && this.gridSize >= this.workerThreshold) {
-                this._syncWorkerGrid();
             }
         }
         return changed;
@@ -644,50 +638,50 @@ class CellularAutomaton {
         return true;
     }
 
-    resizeGrid(newSize) {
-        const size = Math.min(Math.max(newSize, 20), 1000);
+    /**
+     * Redimensiona el grid.
+     * @param {number} newWidth
+     * @param {number} [newHeight=newWidth] — omitir para cuadrado
+     */
+    resizeGrid(newWidth, newHeight = newWidth) {
+        const w = Math.min(Math.max(newWidth, 20), 1000);
+        const h = Math.min(Math.max(newHeight, 20), 1000);
+
         if (this.isRunning) this.stop();
 
-        // 1. Limpiar el worker actual (si existe) y resetear estado
-        this._cleanupWorker();
+        this.core.resize(w, h);
+        this.gridWidth = this.core.gridManager.width;
+        this.gridHeight = this.core.gridManager.height;
 
-        // 2. Redimensionar el core
-        this.core.resize(size);
-        this.gridSize = this.core.gridManager.size;
-
-        // 3. Redimensionar el renderer (según modo especial)
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            this.triangleEngine.resize(size);
+            this.triangleEngine.resize(Math.max(w, h));
         } else {
-            this.renderer.resize(this.gridSize, this.cellSize);
+            this.renderer.resize(this.gridWidth, this.gridHeight, this.cellSize);
         }
 
-        // 4. Sincronizar motores especiales que mantienen estado propio
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
-            this.rd2dEngine.gridSize = this.gridSize;
+            this.rd2dEngine.gridWidth = this.gridWidth;
+            this.rd2dEngine.gridHeight = this.gridHeight;
+            this.rd2dEngine.gridSize = Math.max(this.gridWidth, this.gridHeight);
             this.rd2dEngine._initStateGrid();
             this.rd2dEngine.initialized = false;
         }
 
-        // 5. Forzar repintado completo
-        this.renderer.markAllDirty();
         this.updateStats();
         this.render();
 
-        // 6. Si el nuevo tamaño requiere worker, inicializarlo
-        if (size >= this.workerThreshold && this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
+        if (Math.max(w, h) >= this.workerThreshold &&
+            this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
             this._initWorker();
         }
 
-        eventBus.emit('automaton:resized', {size});
+        eventBus.emit('automaton:resized', {width: w, height: h});
     }
 
     setCellSize(size) {
         const newSize = Math.min(Math.max(size, 1), 20);
         this.cellSize = newSize;
-        this.renderer.resize(this.gridSize, newSize);
-        // Resetear actividad: el redimensionado del canvas invalida el estado
-        // visual anterior y dejaría todas las celdas pintadas de amarillo.
+        this.renderer.resize(this.gridWidth, this.gridHeight, newSize);
         this.renderer.resetActivity();
         this.render();
         eventBus.emit('automaton:zoomChanged', {zoom: newSize});
@@ -705,19 +699,15 @@ class CellularAutomaton {
         const population = populationOverride !== null
             ? populationOverride
             : this.core.gridManager.countPopulation();
-        const density = (population / (this.gridSize * this.gridSize) * 100).toFixed(1);
+        const density = (population / (this.gridWidth * this.gridHeight) * 100).toFixed(1);
         eventBus.emit('stats:updated', {generation: this.generation, population, density});
     }
 
     checkLimits() {
-        return this._limiter.check(this.generation, () => this.core.gridManager.countPopulation());
+        return this._limiter.check(this.generation,
+            () => this.core.gridManager.countPopulation());
     }
 
-    /**
-     * Igual que checkLimits() pero recibe la población ya calculada en este frame,
-     * evitando un segundo countPopulation() O(n²) en _nextGenerationCore().
-     * @param {number} population
-     */
     _checkLimitsWithPop(population) {
         return this._limiter.check(this.generation, () => population);
     }
@@ -745,7 +735,6 @@ class CellularAutomaton {
         return enabled;
     }
 
-    /** Activa o desactiva la recolección y emisión de métricas de rendimiento. */
     setPerfVisible(visible) {
         this._perfVisible = visible;
         if (!visible) this._perf = null;
@@ -771,8 +760,6 @@ class CellularAutomaton {
 
     start() {
         if (this._loop.isRunning) return;
-        // markAllDirty garantiza que el primer frame pinta el estado actual.
-        // Los motores especiales retoman incrementalmente y no necesitan esto.
         if (!this.specialMode) this.renderer.markAllDirty();
         this._loop.start();
     }
@@ -843,7 +830,6 @@ class CellularAutomaton {
         return this._editor.redo();
     }
 
-
     // =========================================
     // MOTORES ESPECIALES
     // =========================================
@@ -853,20 +839,9 @@ class CellularAutomaton {
     }
 
     // =========================================
-    // API DE DIBUJO — para CanvasController
-    // Centralizan el dispatch al motor activo,
-    // evitando que el controller conozca los engines.
+    // API DE DIBUJO
     // =========================================
 
-    /**
-     * Traduce coordenadas de cliente (pixels CSS) a coordenadas de celda del
-     * motor activo.
-     * - Modo Triangle: devuelve {q, r} del renderer triangular.
-     * - Resto: devuelve {x, y} del renderer estándar.
-     * @param {number} clientX
-     * @param {number} clientY
-     * @returns {{q?: number, r?: number, x?: number, y?: number} | null}
-     */
     getCellCoords(clientX, clientY) {
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             return this.renderer.getCellFromMouse(clientX, clientY);
@@ -874,15 +849,6 @@ class CellularAutomaton {
         return this.renderer.getCellFromMouse({clientX, clientY});
     }
 
-    /**
-     * Dibuja una celda usando el motor activo y actualiza el estado.
-     * - Triangle: acepta {q, r}.
-     * - Resto: acepta {x, y}.
-     * No aplica a Langton ni WireWorld (tienen APIs propias).
-     * @param {{ q: number, r: number } | { x: number, y: number }} coords
-     * @param {number} state — 0 o 1
-     * @returns {boolean} changed
-     */
     drawCellAt(coords, state) {
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             const changed = this.triangleEngine.gridManager.setCell(coords.q, coords.r, state);
@@ -901,10 +867,6 @@ class CellularAutomaton {
         return changed;
     }
 
-    /**
-     * Lee el estado de celda del motor especial activo.
-     * WireWorld: estados 0-3. Resto: estado binario del grid.
-     */
     getEngineStateAt(x, y) {
         if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
             return this.wireworldEngine.stateGrid[x]?.[y] ?? 0;
@@ -912,10 +874,6 @@ class CellularAutomaton {
         return this.core.getCell(x, y);
     }
 
-    /**
-     * Establece el estado de celda del motor especial activo y renderiza.
-     * WireWorld: estados 0-3 vía engine.setStateAt.
-     */
     setEngineStateAt(x, y, state) {
         if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
             const changed = this.wireworldEngine.setStateAt(x, y, state);
@@ -928,11 +886,6 @@ class CellularAutomaton {
         return this.setCell(x, y, state);
     }
 
-    /**
-     * Elimina el agente/celda del motor activo en (x, y) y renderiza.
-     * - Langton: quita hormiga y limpia stateGrid.
-     * - Resto: borra celda (state 0).
-     */
     eraseEngineAt(x, y) {
         if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
             this.langtonEngine.eraseAt(x, y);
@@ -947,13 +900,6 @@ class CellularAutomaton {
         }
     }
 
-    /**
-     * Añade un agente en (x, y) para el motor activo y renderiza.
-     * Langton: agrega hormiga. Resto: dibuja celda viva.
-     * @param {number} x
-     * @param {number} y
-     * @param {number} [dir=0] — dirección inicial (Langton: 0=N 1=E 2=S 3=W)
-     */
     addEngineAgentAt(x, y, dir = 0) {
         if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
             this.langtonEngine.addAnt(x, y, dir);
@@ -964,26 +910,14 @@ class CellularAutomaton {
         this.drawCellAt({x, y}, 1);
     }
 
-    /**
-     * Sincroniza el motor activo con el estado del grid tras una edición
-     * masiva (mover/pegar selección). Reemplaza los tres if/else de endDrag
-     * en CanvasController.
-     */
     syncEngineAfterEdit() {
         this.renderer.resetActivity();
         const {specialMode, langtonEngine, rd2dEngine, wireworldEngine, generationsEngine} = this;
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
-        // Generations NO usa syncFromGrid aquí: los estados 2..C-1 se gestionan
-        // puntualmente en EditCoordinator (copyArea/pasteArea/clearPatternCells).
-        // syncFromGrid destruiría todos los estados moribundos al convertirlos a 0.
     }
 
-    /**
-     * Retorna el modo activo y la info del engine para DisplayController.
-     * @returns {{ mode: string, info: Object|null }}
-     */
     getActiveEngineInfo() {
         return this._engineManager.getActiveInfo();
     }
@@ -994,41 +928,29 @@ class CellularAutomaton {
 
     destroy() {
         if (this._isDestroyed) return;
-
         this.stop();
 
-        if (this._cleanupResize) {
-            try {
-                this._cleanupResize();
-            } catch (e) {
-            }
-            this._cleanupResize = null;
+        try {
+            this._cleanupResize?.();
+        } catch (e) {
         }
+        this._cleanupResize = null;
 
         this._cleanupWorker();
-
         this.stateManager?.destroy();
         this.stateManager = null;
-
         this.renderer?.destroy();
         this.renderer = null;
-
         this.core?.destroy();
         this.core = null;
-
         this._loop?.destroy();
         this._loop = null;
-
         this._limiter?.destroy();
         this._limiter = null;
-
         this._engineManager?.destroy();
         this._engineManager = null;
-
         this._workerManager?.destroy();
         this._workerManager = null;
-
-        // EditCoordinator solo guarda una referencia, no tiene recursos propios
         this._editor = null;
 
         this._isDestroyed = true;

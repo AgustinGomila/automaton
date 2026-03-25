@@ -4,41 +4,43 @@
  * Tipos soportados:
  *   'moore'   — cuadrado completo de (2R+1)² − 1 celdas
  *   'neumann' — diamante (|dx|+|dy| ≤ R)
- *   'custom'  — lista arbitraria de offsets [{dx,dy}] definida por el usuario
+ *   'custom'  — lista arbitraria de offsets [{dx,dy}]
  *
- * Responsabilidad: calcular vecinos según tipo y radio.
- * Sin dependencias de estado del grid, solo cálculos geométricos.
+ * Soporta grids rectangulares: gridWidth para el eje X, gridHeight para Y.
+ * Compatibilidad hacia atrás: acepta `gridSize` como alias de ambos.
  */
 class NeighborhoodCalculator {
     /**
      * @param {Object}  options
-     * @param {string}  options.type        — 'moore' | 'neumann' | 'custom'
-     * @param {number}  options.radius      — 1..10 (default 1)
-     * @param {boolean} options.wrapEdges   — modo toroidal (default true)
-     * @param {number}  options.gridSize
+     * @param {string}  options.type          — 'moore' | 'neumann' | 'custom'
+     * @param {number}  options.radius        — 1..10 (default 1)
+     * @param {boolean} options.wrapEdges     — modo toroidal (default true)
+     * @param {number}  options.gridWidth     — ancho del grid
+     * @param {number}  options.gridHeight    — alto del grid
+     * @param {number}  [options.gridSize]    — alias legacy (cuadrado)
      */
     constructor(options = {}) {
         this.type = options.type || 'moore';
         this.radius = Math.max(1, Math.min(options.radius || 1, 10));
         this.wrapEdges = options.wrapEdges !== false;
-        this.gridSize = options.gridSize || 200;
+
+        // Dimensiones del grid: gridWidth/gridHeight tienen prioridad sobre gridSize
+        const legacySize = options.gridSize || 200;
+        this.gridWidth = options.gridWidth || legacySize;
+        this.gridHeight = options.gridHeight || legacySize;
 
         this._offsets = this._computeOffsets();
     }
 
     /**
      * true cuando se puede usar el fastpath Moore radio-1 de RuleEngine.
-     * Excluye 'custom' aunque tenga los mismos 8 offsets, para garantizar
-     * que la lista exacta sea la esperada por el fastpath.
+     * Excluye 'custom' aunque tenga los mismos 8 offsets.
      */
     get isFastPath() {
         return this.type === 'moore' && this.radius === 1;
     }
 
-    /**
-     * Copia de los offsets activos. Uso: UI, worker, serialización.
-     * @returns {Array<{dx:number,dy:number}>}
-     */
+    /** Copia de los offsets activos. */
     get offsets() {
         return this._offsets.slice();
     }
@@ -58,56 +60,55 @@ class NeighborhoodCalculator {
     /**
      * Reconfigura la vecindad.
      *
-     * Para presets (moore/neumann): pasar type y/o radius; los offsets se
-     * recalculan automáticamente.
+     * Para presets (moore/neumann): pasar type y/o radius.
+     * Para personalizada: pasar offsets como [{dx,dy}].
+     * gridWidth/gridHeight (o gridSize legacy) actualizan las dimensiones.
      *
-     * Para vecindad personalizada: pasar offsets como array [{dx,dy}].
-     * El tipo se establece a 'custom'; el radio NO cambia (la UI lo controla
-     * para determinar el tamaño de la grilla visual).
-     *
-     * @param {Object}  options
+     * @param {Object} options
      * @param {string}  [options.type]
      * @param {number}  [options.radius]
      * @param {boolean} [options.wrapEdges]
-     * @param {number}  [options.gridSize]
-     * @param {Array<{dx:number,dy:number}>} [options.offsets]  — activa tipo 'custom'
+     * @param {number}  [options.gridWidth]
+     * @param {number}  [options.gridHeight]
+     * @param {number}  [options.gridSize]   — alias legacy (cuadrado)
+     * @param {Array<{dx:number,dy:number}>} [options.offsets]
      */
     configure(options) {
+        // Actualizar dimensiones (gridWidth/gridHeight tienen prioridad)
+        if (options.gridWidth !== undefined) this.gridWidth = options.gridWidth;
+        if (options.gridHeight !== undefined) this.gridHeight = options.gridHeight;
+        if (options.gridSize !== undefined) {
+            this.gridWidth = this.gridWidth || options.gridSize;
+            this.gridHeight = this.gridHeight || options.gridSize;
+        }
+
         if (options.offsets !== undefined) {
-            // Path de vecindad personalizada: offsets directos desde la UI.
-            // Solo actualizamos type y _offsets; el radius lo conservamos
-            // para que la grilla visual siga mostrando el tamaño correcto.
+            // Vecindad personalizada: offsets directos desde la UI.
             this._offsets = options.offsets.map(o => ({dx: o.dx | 0, dy: o.dy | 0}));
             this.type = 'custom';
             if (options.wrapEdges !== undefined) this.wrapEdges = options.wrapEdges;
-            if (options.gridSize !== undefined) this.gridSize = options.gridSize;
             return;
         }
 
         if (options.type !== undefined) this.type = options.type;
         if (options.radius !== undefined) this.radius = Math.max(1, Math.min(options.radius, 10));
         if (options.wrapEdges !== undefined) this.wrapEdges = options.wrapEdges;
-        if (options.gridSize !== undefined) this.gridSize = options.gridSize;
 
-        // Recalcular para presets (moore / neumann)
-        if (this.type !== 'custom') {
-            this._offsets = this._computeOffsets();
-        }
+        if (this.type !== 'custom') this._offsets = this._computeOffsets();
     }
 
     countNeighbors(x, y, getCell) {
         let count = 0;
+        const {gridWidth, gridHeight, wrapEdges} = this;
         for (const {dx, dy} of this._offsets) {
             let nx = x + dx;
             let ny = y + dy;
-            if (this.wrapEdges) {
-                nx = ((nx % this.gridSize) + this.gridSize) % this.gridSize;
-                ny = ((ny % this.gridSize) + this.gridSize) % this.gridSize;
+            if (wrapEdges) {
+                nx = ((nx % gridWidth) + gridWidth) % gridWidth;
+                ny = ((ny % gridHeight) + gridHeight) % gridHeight;
                 count += getCell(nx, ny);
-            } else {
-                if (nx >= 0 && nx < this.gridSize && ny >= 0 && ny < this.gridSize) {
-                    count += getCell(nx, ny);
-                }
+            } else if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
+                count += getCell(nx, ny);
             }
         }
         return count;
@@ -115,14 +116,15 @@ class NeighborhoodCalculator {
 
     getNeighborCoordinates(x, y) {
         const neighbors = [];
+        const {gridWidth, gridHeight, wrapEdges} = this;
         for (const {dx, dy} of this._offsets) {
             let nx = x + dx;
             let ny = y + dy;
-            if (this.wrapEdges) {
-                nx = ((nx % this.gridSize) + this.gridSize) % this.gridSize;
-                ny = ((ny % this.gridSize) + this.gridSize) % this.gridSize;
+            if (wrapEdges) {
+                nx = ((nx % gridWidth) + gridWidth) % gridWidth;
+                ny = ((ny % gridHeight) + gridHeight) % gridHeight;
             }
-            if (nx >= 0 && nx < this.gridSize && ny >= 0 && ny < this.gridSize) {
+            if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
                 neighbors.push({x: nx, y: ny});
             }
         }

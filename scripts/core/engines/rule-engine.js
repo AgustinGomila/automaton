@@ -1,8 +1,9 @@
 /**
  * RuleEngine — Motor de reglas B/S para autómatas celulares tipo Life-like.
  *
- * Responsabilidad: aplicar reglas Birth/Survival de forma pura,
- * sin conocer el grid, la UI ni el renderizado.
+ * Soporta grids rectangulares: los métodos nextGeneration y
+ * nextGenerationMoore reciben width y height explícitos.
+ * El índice plano es x * height + y (column-major consistente).
  */
 class RuleEngine {
     static PRESETS = {
@@ -54,29 +55,37 @@ class RuleEngine {
             : (this._birthSet.has(neighborCount) ? 1 : 0);
     }
 
+    // =========================================
+    // PASO GENÉRICO — cualquier vecindad / radio
+    // =========================================
+
     /**
-     * Genera la siguiente generación usando el algoritmo general
-     * (cualquier vecindad / radio).
+     * Genera la siguiente generación usando el algoritmo general.
      *
-     * @param {Uint8Array[]} currentGrid
+     * @param {Uint8Array[]} currentGrid  — column-major, width columnas
      * @param {Function}     countNeighbors — (x, y) => number
-     * @param {Uint8Array[]|null} outGrid   — back buffer; si es null se crea uno nuevo
+     * @param {Uint8Array[]|null} outGrid  — back buffer; null → crear nuevo
+     * @param {number}       [width]       — columnas (default currentGrid.length)
+     * @param {number}       [height]      — filas    (default columna[0].length)
      * @returns {{ newGrid, changedCells: Uint32Array, changedCount, generationStats }}
      */
-    nextGeneration(currentGrid, countNeighbors, outGrid = null) {
-        const size = currentGrid.length;
-        const newGrid = outGrid || Array.from({length: size}, () => new Uint8Array(size));
-        const buf = this._ensureChangedBuf(size);
+    nextGeneration(currentGrid, countNeighbors, outGrid = null,
+                   width = currentGrid.length,
+                   height = currentGrid[0]?.length ?? width) {
+
+        const newGrid = outGrid ||
+            Array.from({length: width}, () => new Uint8Array(height));
+        const buf = this._ensureChangedBuf(width, height);
 
         let changedCount = 0, births = 0, deaths = 0;
 
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
+        for (let x = 0; x < width; x++) {
+            for (let y = 0; y < height; y++) {
                 const current = currentGrid[x][y];
                 const next = this.computeNextState(current, countNeighbors(x, y));
                 newGrid[x][y] = next;
                 if (next !== current) {
-                    buf[changedCount++] = x * size + y;
+                    buf[changedCount++] = x * height + y;
                     if (current === 0) births++; else deaths++;
                 }
             }
@@ -88,40 +97,44 @@ class RuleEngine {
         };
     }
 
+    // =========================================
+    // FASTPATH MOORE RADIO-1
+    // =========================================
+
     /**
      * Fastpath para Moore radio-1: el caso más común (~95% del uso).
      *
      * Mejoras sobre nextGeneration():
-     *   • Pre-cachea referencias de columna (colM / col / colP) por iteración exterior,
-     *     reduciendo accesos a currentGrid[x] de 8 a 3 por celda.
-     *   • Usa aritmética condicional (?: en lugar de %) para wrap de índices,
-     *     que en V8 es ~30% más rápido que el operador módulo para valores positivos.
-     *   • Elimina el callback countNeighbors() y su overhead de llamada.
-     *
-     * El resultado tiene exactamente el mismo formato que nextGeneration() para que
-     * el caller no necesite distinguir cuál se usó.
+     *   • Pre-cachea referencias de columna (colM / col / colP).
+     *   • Aritmética condicional en lugar de módulo para wrap de índices.
+     *   • Sin callback countNeighbors() y su overhead de llamada.
+     *   • Índice plano x * height + y (column-major rectangular).
      *
      * @param {Uint8Array[]} currentGrid
-     * @param {Uint8Array[]} outGrid      — back buffer (no null)
-     * @param {boolean}      wrap         — true = toroidal
+     * @param {Uint8Array[]} outGrid       — back buffer (no null)
+     * @param {boolean}      wrap          — true = toroidal
+     * @param {number}       [width]       — columnas
+     * @param {number}       [height]      — filas
      * @returns {{ newGrid, changedCells: Uint32Array, changedCount, generationStats }}
      */
-    nextGenerationMoore(currentGrid, outGrid, wrap) {
-        const size = currentGrid.length;
-        const buf = this._ensureChangedBuf(size);
+    nextGenerationMoore(currentGrid, outGrid, wrap,
+                        width = currentGrid.length,
+                        height = currentGrid[0]?.length ?? width) {
+
+        const buf = this._ensureChangedBuf(width, height);
         let changedCount = 0, births = 0, deaths = 0;
 
         if (wrap) {
-            for (let x = 0; x < size; x++) {
-                const xm = x === 0 ? size - 1 : x - 1;
-                const xp = x === size - 1 ? 0 : x + 1;
+            for (let x = 0; x < width; x++) {
+                const xm = x === 0 ? width - 1 : x - 1;
+                const xp = x === width - 1 ? 0 : x + 1;
                 const colM = currentGrid[xm];
                 const col = currentGrid[x];
                 const colP = currentGrid[xp];
 
-                for (let y = 0; y < size; y++) {
-                    const ym = y === 0 ? size - 1 : y - 1;
-                    const yp = y === size - 1 ? 0 : y + 1;
+                for (let y = 0; y < height; y++) {
+                    const ym = y === 0 ? height - 1 : y - 1;
+                    const yp = y === height - 1 ? 0 : y + 1;
 
                     const n = colM[ym] + colM[y] + colM[yp]
                         + col[ym] + col[yp]
@@ -134,24 +147,24 @@ class RuleEngine {
                     outGrid[x][y] = next;
 
                     if (next !== current) {
-                        buf[changedCount++] = x * size + y;
+                        buf[changedCount++] = x * height + y;
                         if (current === 0) births++; else deaths++;
                     }
                 }
             }
         } else {
-            // Bounded: maneja bordes con offsets (-1..1) y guarda condición de bounds.
-            for (let x = 0; x < size; x++) {
-                for (let y = 0; y < size; y++) {
+            // Bounded: maneja bordes con offsets (-1..1) verificando bounds.
+            for (let x = 0; x < width; x++) {
+                for (let y = 0; y < height; y++) {
                     let n = 0;
                     for (let dx = -1; dx <= 1; dx++) {
                         const nx = x + dx;
-                        if (nx < 0 || nx >= size) continue;
+                        if (nx < 0 || nx >= width) continue;
                         const ncol = currentGrid[nx];
                         for (let dy = -1; dy <= 1; dy++) {
                             if (dx === 0 && dy === 0) continue;
                             const ny = y + dy;
-                            if (ny >= 0 && ny < size) n += ncol[ny];
+                            if (ny >= 0 && ny < height) n += ncol[ny];
                         }
                     }
                     const current = currentGrid[x][y];
@@ -160,7 +173,7 @@ class RuleEngine {
                         : (this._birthSet.has(n) ? 1 : 0);
                     outGrid[x][y] = next;
                     if (next !== current) {
-                        buf[changedCount++] = x * size + y;
+                        buf[changedCount++] = x * height + y;
                         if (current === 0) births++; else deaths++;
                     }
                 }
@@ -173,14 +186,26 @@ class RuleEngine {
         };
     }
 
-    /** Reutiliza el buffer de changed cells; lo crece solo cuando el grid es mayor. */
-    _ensureChangedBuf(size) {
-        const needed = size * size;
+    // =========================================
+    // BUFFER DE CAMBIOS
+    // =========================================
+
+    /**
+     * Reutiliza el buffer de changed cells; lo crece sólo cuando el grid es mayor.
+     * @param {number} width
+     * @param {number} height
+     */
+    _ensureChangedBuf(width, height) {
+        const needed = width * height;
         if (!this._changedBuf || this._changedBuf.length < needed) {
             this._changedBuf = new Uint32Array(needed);
         }
         return this._changedBuf;
     }
+
+    // =========================================
+    // UTILIDADES
+    // =========================================
 
     equals(other) {
         if (!(other instanceof RuleEngine)) return false;
