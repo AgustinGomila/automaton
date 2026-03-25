@@ -586,7 +586,7 @@ class UIController {
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(String(slider.value), 10) + 1;
+        let value = parseInt(String(slider.value), 10) - 1;
         if (value < 1) value = 1;
         slider.value = value;
         slider.dispatchEvent(new Event('input'));
