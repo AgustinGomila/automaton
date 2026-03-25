@@ -403,6 +403,7 @@ class CellularAutomaton {
     // =========================================
 
     _initWorker() {
+        this._cleanupWorker();
         this._workerManager.init();
     }
 
@@ -606,7 +607,6 @@ class CellularAutomaton {
 
         if (changed) {
             this.renderer.markDirty(x, y);
-
             if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
                 if (this.rd2dEngine.stateGrid?.[x]) {
                     this.rd2dEngine.stateGrid[x][y] = state
@@ -620,8 +620,12 @@ class CellularAutomaton {
                     this.generationsEngine.stateGrid[x][y] = state ? 1 : 0;
                 }
             }
-        }
 
+            // Sincronizar el worker si está activo
+            if (this.worker && this.gridSize >= this.workerThreshold) {
+                this._syncWorkerGrid();
+            }
+        }
         return changed;
     }
 
@@ -644,24 +648,33 @@ class CellularAutomaton {
         const size = Math.min(Math.max(newSize, 20), 1000);
         if (this.isRunning) this.stop();
 
+        // 1. Limpiar el worker actual (si existe) y resetear estado
+        this._cleanupWorker();
+
+        // 2. Redimensionar el core
         this.core.resize(size);
         this.gridSize = this.core.gridManager.size;
 
+        // 3. Redimensionar el renderer (según modo especial)
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             this.triangleEngine.resize(size);
         } else {
             this.renderer.resize(this.gridSize, this.cellSize);
         }
 
+        // 4. Sincronizar motores especiales que mantienen estado propio
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridSize = this.gridSize;
             this.rd2dEngine._initStateGrid();
             this.rd2dEngine.initialized = false;
         }
 
+        // 5. Forzar repintado completo
+        this.renderer.markAllDirty();
         this.updateStats();
         this.render();
 
+        // 6. Si el nuevo tamaño requiere worker, inicializarlo
         if (size >= this.workerThreshold && this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
             this._initWorker();
         }
