@@ -184,6 +184,7 @@ class EditCoordinator {
 
     _resetCommonState() {
         this._a.generation = 0;
+        this._a.core.generation = 0;
         this._a._limiter.isLimitReached = false;
         this._a.renderer?.resetActivity();
         this._a._engineManager.resetAllEngines();
