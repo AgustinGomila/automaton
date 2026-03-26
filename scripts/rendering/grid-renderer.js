@@ -145,6 +145,12 @@ class GridRenderer {
     render(options = {}) {
         if (!this._fullDirtyPending && this._dirtyCells.size === 0) return;
 
+        // UMBRAL: Si más del 15% del grid está sucio, hacer render completo
+        const totalCells = this.config.gridWidth * this.config.gridHeight;
+        if (!this._fullDirtyPending && this._dirtyCells.size > totalCells * 0.15) {
+            this._fullDirtyPending = true;
+        }
+
         if (this._fullDirtyPending) {
             this._forceFullRender();
             this._fullDirtyPending = false;
@@ -372,20 +378,20 @@ class GridRenderer {
         for (const index of this._dirtyCells) {
             const x = (index / gridHeight) | 0;
             const y = index % gridHeight;
+            const px = x * cellSize;
+            const py = y * cellSize;
 
             if (gridCache) {
-                const px = x * cellSize;
-                const py = y * cellSize;
+                // Con grilla: restaurar trozo del cache
                 this.ctx.clearRect(px, py, cellSize, cellSize);
                 this.ctx.drawImage(gridCache, px, py, cellSize, cellSize, px, py, cellSize, cellSize);
             } else {
-                // Sin grilla: restaurar fondo oscuro antes de renderizar la celda
-                const px = x * cellSize;
-                const py = y * cellSize;
+                // Sin grilla: fondo oscuro
                 this.ctx.fillStyle = this.colorDead;
                 this.ctx.fillRect(px, py, cellSize, cellSize);
             }
 
+            // Encima pintar la celda (solo si tiene actividad)
             this._renderCell(x, y);
         }
     }
@@ -411,7 +417,7 @@ class GridRenderer {
             return;
         }
 
-        if (cellSize <= 2) {
+        if (cellSize <= 3) {
             this._renderSmallCell(x, y, cellIndex, isAlive);
         } else {
             this._renderLargeCell(x, y, cellIndex, isAlive);
@@ -432,14 +438,14 @@ class GridRenderer {
     }
 
     _renderSmallCell(x, y, cellIndex, isAlive) {
-        const cellSize = this.config.cellSize;
-        const xPos = x * cellSize;
-        const yPos = y * cellSize;
-
         const customColor = this._colorProvider?.(cellIndex) ?? null;
         const actColor = customColor ?? this._getCellColor(cellIndex, isAlive);
 
         if (actColor) {
+            const cellSize = this.config.cellSize;
+            const xPos = x * cellSize;
+            const yPos = y * cellSize;
+
             this.ctx.fillStyle = actColor;
             this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
         }
@@ -448,11 +454,11 @@ class GridRenderer {
 
     _renderLargeCell(x, y, cellIndex, isAlive) {
         const cellSize = this.config.cellSize;
-        const innerSize = cellSize - 2;
 
         if (this._colorProvider) {
             const customColor = this._colorProvider(cellIndex);
-            if (customColor) {  // Solo limpiar si vamos a pintar
+            if (customColor) {
+                const innerSize = cellSize - 2;
                 this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
                 this.ctx.fillStyle = customColor;
                 this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
@@ -461,37 +467,42 @@ class GridRenderer {
         }
 
         if (isAlive) {
+            const innerSize = cellSize - 2;
             this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
             this._drawSingleCell(x, y);
         } else {
             const dyingColor = this.config.showActivityEffect &&
             this._dyingAges[cellIndex] < this._activityCooldown
                 ? this.colorDying : null;
-            if (dyingColor) {  // Solo limpiar si vamos a pintar
-                this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+
+            if (dyingColor) {
+                const innerSize = cellSize - 2;
+                const px = x * cellSize + 1;
+                const py = y * cellSize + 1;
+                this.ctx.clearRect(px, py, innerSize, innerSize);
                 this.ctx.fillStyle = dyingColor;
-                this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+                this.ctx.fillRect(px, py, innerSize, innerSize);
             }
-            // Si no hay dyingColor, no hacemos nada: la grilla ya está restaurada
         }
     }
 
     _drawSingleCell(x, y) {
         const cellSize = this.config.cellSize;
-        const centerX = x * cellSize + cellSize / 2;
-        const centerY = y * cellSize + cellSize / 2;
         const cellIndex = x * this.config.gridHeight + y;
 
         const customColor = this._colorProvider?.(cellIndex);
         const baseColor = customColor ?? this._getCellColor(cellIndex, true);
-        const isBorn = !customColor && this.config.showActivityEffect
-            && this._activityAges[cellIndex] < this._activityCooldown;
         const drawSize = Math.max(1, cellSize - (cellSize > 2 ? 2 : 1));
         const offset = cellSize > 2 ? 1 : 0;
 
         if (customColor) {
             this.ctx.fillStyle = customColor;
         } else if (cellSize >= 4) {
+            const centerX = x * cellSize + cellSize / 2;
+            const centerY = y * cellSize + cellSize / 2;
+            const isBorn = this.config.showActivityEffect
+                && this._activityAges[cellIndex] < this._activityCooldown;
+
             const gradient = this.ctx.createRadialGradient(
                 centerX, centerY, 0, centerX, centerY, cellSize / 2
             );
@@ -510,9 +521,14 @@ class GridRenderer {
 
         this.ctx.fillRect(x * cellSize + offset, y * cellSize + offset, drawSize, drawSize);
 
-        if (!customColor && isBorn && cellSize >= 4) {
-            this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
+        // El efecto de brillo de nacimiento condicional
+        if (!customColor && cellSize >= 4) {
+            const isBorn = this.config.showActivityEffect
+                && this._activityAges[cellIndex] < this._activityCooldown;
+            if (isBorn) {
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
+            }
         }
     }
 
@@ -533,6 +549,13 @@ class GridRenderer {
             gridWidth, gridHeight, cellSize, gridMajorInterval,
             showGrid, showGridHighlights
         } = this.config;
+
+        // Guard clause: si no hay nada que dibujar, salir temprano
+        if (!showGrid && !showGridHighlights) {
+            this._subtleGridCache = null;
+            return;
+        }
+
         const interval = gridMajorInterval || 10;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
