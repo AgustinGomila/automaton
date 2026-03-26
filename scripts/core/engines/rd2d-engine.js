@@ -226,9 +226,13 @@ class RD2DEngine {
      */
     _getState(x, y) {
         const size = this.gridSize;
-        const wx = ((x % size) + size) % size;
-        const wy = ((y % size) + size) % size;
-        return this.stateGrid[wx]?.[wy] || 0;
+        if (this.automaton.wrapEdges) {
+            const wx = ((x % size) + size) % size;
+            const wy = ((y % size) + size) % size;
+            return this.stateGrid[wx]?.[wy] || 0;
+        }
+        if (x < 0 || x >= size || y < 0 || y >= size) return 0;
+        return this.stateGrid[x]?.[y] || 0;
     }
 
     /**

@@ -372,6 +372,8 @@ class CellularAutomaton {
                 this.generation = 0;
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
+                this.render();
+                this._initWorker();
                 eventBus.emit('automaton:ruleChanged', this.core.ruleEngine);
                 break;
             case 'neighborhoodChange':

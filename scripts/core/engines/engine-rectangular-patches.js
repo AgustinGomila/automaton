@@ -647,9 +647,13 @@ window.patchEnginesForRectangularGrids = function () {
     patch(window.RD2DEngine?.prototype, '_getState', (_orig) => function (x, y) {
         const w = this.gridWidth || this.gridSize;
         const h = this.gridHeight || this.gridSize;
-        const wx = ((x % w) + w) % w;
-        const wy = ((y % h) + h) % h;
-        return this.stateGrid[wx]?.[wy] || 0;
+        if (this.automaton.wrapEdges) {
+            const wx = ((x % w) + w) % w;
+            const wy = ((y % h) + h) % h;
+            return this.stateGrid[wx]?.[wy] || 0;
+        }
+        if (x < 0 || x >= w || y < 0 || y >= h) return 0;
+        return this.stateGrid[x]?.[y] || 0;
     });
 
     patch(window.RD2DEngine?.prototype, '_syncToAutomatonGrid', (_orig) => function () {
