@@ -1082,6 +1082,8 @@ canvas {
     max-height: 80vh;
     overflow-y: auto;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) transparent;
 }
 
 .modal-header {
@@ -1121,7 +1123,7 @@ canvas {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding: 0 20px 18px;
+    padding: 8px 20px 18px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1137,6 +1139,24 @@ canvas {
 
 .modal-footer a:hover {
     color: var(--primary);
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
 }
 
 /* ============================================================
