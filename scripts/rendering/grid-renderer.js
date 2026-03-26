@@ -542,45 +542,75 @@ class GridRenderer {
         cache.height = ch;
         const c = cache.getContext('2d');
 
-        c.lineWidth = 1;
+        const minorColor = 'rgba(255, 255, 255, 0.10)';
+        const majorColor = showGrid ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.10)';
 
-        // ── Líneas menores (grid normal) ───────────────────────────────
-        if (showGrid) {
-            c.strokeStyle = 'rgba(255, 255, 255, 0.10)';
-            c.beginPath();
-            for (let i = 0; i <= gridWidth; i++) {
-                // ELIMINADO: if (i % interval === 0) continue;
-                const pos = i * cellSize;
-                c.moveTo(pos, 0);
-                c.lineTo(pos, ch);
+        if (cellSize <= 2) {
+            // ── Pixel-perfect para celdas pequeñas ──────────────────────
+            if (showGrid) {
+                c.fillStyle = minorColor;
+                // Verticales
+                for (let x = 0; x <= gridWidth; x++) {
+                    if (showGridHighlights && x % interval === 0) continue;
+                    c.fillRect(x * cellSize, 0, 1, ch);
+                }
+                // Horizontales
+                for (let y = 0; y <= gridHeight; y++) {
+                    if (showGridHighlights && y % interval === 0) continue;
+                    c.fillRect(0, y * cellSize, cw, 1);
+                }
             }
-            for (let j = 0; j <= gridHeight; j++) {
-                // ELIMINADO: if (j % interval === 0) continue;
-                const pos = j * cellSize;
-                c.moveTo(0, pos);
-                c.lineTo(cw, pos);
-            }
-            c.stroke();
-        }
 
-        // ── Líneas mayores (highlights) ────────────────────────────────
-        if (showGridHighlights) {
-            // Si hay grilla debajo, usar blanco fuerte; si no, usar el mismo gris tenue
-            c.strokeStyle = showGrid ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.10)';
-            c.beginPath();
-            for (let i = 0; i <= gridWidth; i++) {
-                if (i % interval !== 0) continue;
-                const pos = i * cellSize;
-                c.moveTo(pos, 0);
-                c.lineTo(pos, ch);
+            if (showGridHighlights) {
+                c.fillStyle = majorColor;
+                for (let x = 0; x <= gridWidth; x++) {
+                    if (x % interval !== 0) continue;
+                    c.fillRect(x * cellSize, 0, 1, ch);
+                }
+                for (let y = 0; y <= gridHeight; y++) {
+                    if (y % interval !== 0) continue;
+                    c.fillRect(0, y * cellSize, cw, 1);
+                }
             }
-            for (let j = 0; j <= gridHeight; j++) {
-                if (j % interval !== 0) continue;
-                const pos = j * cellSize;
-                c.moveTo(0, pos);
-                c.lineTo(cw, pos);
+        } else {
+            // ── Stroke para celdas grandes ──────────────────────────────
+            c.lineWidth = 1;
+
+            if (showGrid) {
+                c.strokeStyle = minorColor;
+                c.beginPath();
+                for (let i = 0; i <= gridWidth; i++) {
+                    if (showGridHighlights && i % interval === 0) continue;
+                    const pos = i * cellSize;
+                    c.moveTo(pos, 0);
+                    c.lineTo(pos, ch);
+                }
+                for (let j = 0; j <= gridHeight; j++) {
+                    if (showGridHighlights && j % interval === 0) continue;
+                    const pos = j * cellSize;
+                    c.moveTo(0, pos);
+                    c.lineTo(cw, pos);
+                }
+                c.stroke();
             }
-            c.stroke();
+
+            if (showGridHighlights) {
+                c.strokeStyle = majorColor;
+                c.beginPath();
+                for (let i = 0; i <= gridWidth; i++) {
+                    if (i % interval !== 0) continue;
+                    const pos = i * cellSize;
+                    c.moveTo(pos, 0);
+                    c.lineTo(pos, ch);
+                }
+                for (let j = 0; j <= gridHeight; j++) {
+                    if (j % interval !== 0) continue;
+                    const pos = j * cellSize;
+                    c.moveTo(0, pos);
+                    c.lineTo(cw, pos);
+                }
+                c.stroke();
+            }
         }
 
         this._subtleGridCache = cache;
