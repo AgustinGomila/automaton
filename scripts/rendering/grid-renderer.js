@@ -23,6 +23,7 @@ class GridRenderer {
      * @param {number}   [options.cellSize]
      * @param {boolean}  [options.showGrid]
      * @param {boolean}  [options.showActivityEffect]
+     * @param {number}   [options.gridMajorInterval]
      */
     constructor(options) {
         if (!options.canvas) throw new Error('GridRenderer: canvas requerido');
@@ -52,7 +53,9 @@ class GridRenderer {
             showActivityEffect: options.showActivityEffect !== false,
             cellSize: Math.max(1, Math.min(options.cellSize || 4, 20)),
             gridWidth: Math.max(20, Math.min(options.gridWidth || legacySize, 1000)),
-            gridHeight: Math.max(20, Math.min(options.gridHeight || legacySize, 1000))
+            gridHeight: Math.max(20, Math.min(options.gridHeight || legacySize, 1000)),
+            /** Intervalo entre líneas de énfasis. 0 = desactivado. */
+            gridMajorInterval: options.gridMajorInterval ?? 10
         };
 
         // Dirty rendering
@@ -93,18 +96,18 @@ class GridRenderer {
         return this.config.gridHeight;
     }
 
+    _initActivityBuffers() {
+        const total = this.config.gridWidth * this.config.gridHeight;
+        this._activityAges = new Uint8Array(total).fill(this._activityCooldown);
+        this._dyingAges = new Uint8Array(total).fill(this._activityCooldown);
+    }
+
     get hasDirtyCells() {
         return this._fullDirtyPending || this._dirtyCells.size > 0;
     }
 
     get dirtyCount() {
         return this._dirtyCells.size;
-    }
-
-    _initActivityBuffers() {
-        const total = this.config.gridWidth * this.config.gridHeight;
-        this._activityAges = new Uint8Array(total).fill(this._activityCooldown);
-        this._dyingAges = new Uint8Array(total).fill(this._activityCooldown);
     }
 
     // =========================================
@@ -162,6 +165,10 @@ class GridRenderer {
         this.config[key] = value;
 
         if (key === 'showGrid' && oldValue !== value) {
+            this._subtleGridCache = null;
+            this.markAllDirty();
+        }
+        if (key === 'gridMajorInterval' && oldValue !== value) {
             this._subtleGridCache = null;
             this.markAllDirty();
         }
@@ -477,36 +484,64 @@ class GridRenderer {
     }
 
     _drawGrid() {
-        const {gridWidth, gridHeight, cellSize} = this.config;
+        const {gridWidth, gridHeight, cellSize, gridMajorInterval} = this.config;
+        const interval = gridMajorInterval || 0;
         const w = this.canvas.width;
         const h = this.canvas.height;
+        const ctx = this.ctx;
 
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-
+        // ── Líneas menores ────────────────────────────────────────────────
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
         for (let i = 0; i <= gridWidth; i++) {
+            if (i % interval === 0) continue;
             const pos = i * cellSize;
-            this.ctx.moveTo(pos, 0);
-            this.ctx.lineTo(pos, h);
+            ctx.moveTo(pos, 0);
+            ctx.lineTo(pos, h);
         }
         for (let j = 0; j <= gridHeight; j++) {
+            if (j % interval === 0) continue;
             const pos = j * cellSize;
-            this.ctx.moveTo(0, pos);
-            this.ctx.lineTo(w, pos);
+            ctx.moveTo(0, pos);
+            ctx.lineTo(w, pos);
         }
-        this.ctx.stroke();
+        ctx.stroke();
+
+        // ── Líneas mayores (cada `interval` celdas) ───────────────────────
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i <= gridWidth; i++) {
+            if (i % interval !== 0) continue;
+            const pos = i * cellSize;
+            ctx.moveTo(pos, 0);
+            ctx.lineTo(pos, h);
+        }
+        for (let j = 0; j <= gridHeight; j++) {
+            if (j % interval !== 0) continue;
+            const pos = j * cellSize;
+            ctx.moveTo(0, pos);
+            ctx.lineTo(w, pos);
+        }
+        ctx.stroke();
     }
 
     _buildSubtleGridCache() {
-        const {gridWidth, gridHeight, cellSize} = this.config;
+        const {gridWidth, gridHeight, cellSize, gridMajorInterval} = this.config;
+        const interval = gridMajorInterval || 0;
         const cache = document.createElement('canvas');
         cache.width = this.canvas.width;
         cache.height = this.canvas.height;
         const cCtx = cache.getContext('2d');
 
-        cCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        // Para cellSize ≤ 2 las líneas se dibujan como píxeles individuales.
+        // Menores: 1px semitransparente; mayores: 1px más visible.
+
+        // ── Píxeles menores ───────────────────────────────────────────────
+        cCtx.fillStyle = 'rgba(255, 255, 255, 0.10)';
         for (let x = 0; x < gridWidth; x++) {
+            if (x % interval === 0) continue;
             const xPos = x * cellSize;
             for (let y = 0; y < gridHeight; y++) {
                 const yPos = y * cellSize;
@@ -514,6 +549,32 @@ class GridRenderer {
                 cCtx.fillRect(xPos, yPos + 1, cellSize, 1);
             }
         }
+        // Columnas residuales de filas ya procesadas
+        for (let y = 0; y < gridHeight; y++) {
+            if (y % interval === 0) continue;
+            for (let x = 0; x < gridWidth; x++) {
+                if (x % interval !== 0) continue;
+                const xPos = x * cellSize;
+                const yPos = y * cellSize;
+                cCtx.fillRect(xPos, yPos + 1, cellSize, 1);
+            }
+        }
+
+        // ── Píxeles mayores ───────────────────────────────────────────────
+        cCtx.fillStyle = 'rgba(255, 255, 255, 0.30)';
+        for (let x = 0; x <= gridWidth; x++) {
+            if (x % interval !== 0) continue;
+            const xPos = x * cellSize;
+            // Línea vertical completa
+            cCtx.fillRect(xPos, 0, 1, cache.height);
+        }
+        for (let y = 0; y <= gridHeight; y++) {
+            if (y % interval !== 0) continue;
+            const yPos = y * cellSize;
+            // Línea horizontal completa
+            cCtx.fillRect(0, yPos, cache.width, 1);
+        }
+
         this._subtleGridCache = cache;
     }
 
