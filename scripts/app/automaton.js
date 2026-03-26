@@ -430,6 +430,7 @@ class CellularAutomaton {
     // =========================================
 
     _initWorker() {
+        this._cleanupWorker();
         this._workerManager.init();
     }
 
@@ -632,7 +633,6 @@ class CellularAutomaton {
         const changed = this.core.setCell(x, y, state);
         if (changed) {
             this.renderer.markDirty(x, y);
-
             if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
                 if (this.rd2dEngine.stateGrid?.[x]) {
                     this.rd2dEngine.stateGrid[x][y] = state
@@ -679,12 +679,14 @@ class CellularAutomaton {
         this.gridWidth = this.core.gridManager.width;
         this.gridHeight = this.core.gridManager.height;
 
+        // 3. Redimensionar el renderer (según modo especial)
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             this.triangleEngine.resize(Math.max(w, h));
         } else {
             this.renderer.resize(this.gridWidth, this.gridHeight, this.cellSize);
         }
 
+        // 4. Sincronizar motores especiales que mantienen estado propio
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridWidth = this.gridWidth;
             this.rd2dEngine.gridHeight = this.gridHeight;
@@ -693,6 +695,8 @@ class CellularAutomaton {
             this.rd2dEngine.initialized = false;
         }
 
+        // 5. Forzar repintado completo
+        this.renderer.markAllDirty();
         this.updateStats();
         this.render();
 

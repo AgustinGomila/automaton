@@ -746,6 +746,13 @@ canvas {
     padding-right: 12px;
 }
 
+.patterns-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
 .patterns-header h3 {
     font-size: 0.94rem;
     margin: 0;
@@ -2171,6 +2178,7 @@ canvas {
         overflow-y: auto;
         overflow-x: hidden;
     }
+}
 
     .patterns-grid-container.compact-view {
         max-height: 64px;
@@ -2307,7 +2315,6 @@ canvas {
     .stat-value {
         font-size: 0.82rem;
     }
-}
 
 /* ============================================================
    RESPONSIVE — LANDSCAPE EN MÓVIL
