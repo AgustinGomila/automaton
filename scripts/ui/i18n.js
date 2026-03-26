@@ -82,7 +82,9 @@ class I18n {
                 'controls.export': 'Exportar',
 
                 // Tooltips
+                'tooltip.autosize': 'Ajustar grilla',
                 'tooltip.grid': 'Mostrar/Ocultar Grilla (G)',
+                'tooltip.grid.highlights': 'Mostrar/Ocultar líneas resaltadas (H)',
                 'tooltip.influence': 'Área de Influencia',
                 'tooltip.export': 'Exportar Patrón',
                 'tooltip.import': 'Importar Patrón',
@@ -234,7 +236,8 @@ class I18n {
                 'instructions.shortcut.i': 'Performance',
                 'instructions.shortcut.b': 'Bote de pintura',
                 'instructions.shortcut.c': 'Limpiar',
-                'instructions.shortcut.h': 'Mostrar/Ocultar grilla',
+                'instructions.shortcut.g': 'Mostrar/Ocultar grilla',
+                'instructions.shortcut.h': 'Mostrar/Ocultar grilla resaltada',
                 'instructions.shortcut.esc': 'Cancelar/Clear',
                 'instructions.shortcut.undo': 'Deshacer',
                 'instructions.shortcut.redo': 'Rehacer',
@@ -369,7 +372,9 @@ class I18n {
                 'controls.export': 'Export',
 
                 // Tooltips
+                'tooltip.autosize': 'Grid autosize',
                 'tooltip.grid': 'Show/Hide Grid (G)',
+                'tooltip.grid.highlights': 'Show/Hide Highlight lines (H)',
                 'tooltip.influence': 'Influence Area',
                 'tooltip.export': 'Export Pattern',
                 'tooltip.import': 'Import Pattern',
@@ -521,7 +526,8 @@ class I18n {
                 'instructions.shortcut.i': 'Performance',
                 'instructions.shortcut.b': 'Bucket fill tool',
                 'instructions.shortcut.c': 'Clear',
-                'instructions.shortcut.h': 'Toggle grid',
+                'instructions.shortcut.g': 'Toggle grid',
+                'instructions.shortcut.h': 'Toggle grid highlight',
                 'instructions.shortcut.esc': 'Cancel/Clear',
                 'instructions.shortcut.undo': 'Undo',
                 'instructions.shortcut.redo': 'Redo',

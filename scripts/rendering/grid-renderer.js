@@ -23,6 +23,7 @@ class GridRenderer {
      * @param {number}   [options.cellSize]
      * @param {boolean}  [options.showGrid]
      * @param {boolean}  [options.showActivityEffect]
+     * @param {boolean}  [options.showGridHighlights]
      * @param {number}   [options.gridMajorInterval]
      */
     constructor(options) {
@@ -55,7 +56,9 @@ class GridRenderer {
             gridWidth: Math.max(20, Math.min(options.gridWidth || legacySize, 1000)),
             gridHeight: Math.max(20, Math.min(options.gridHeight || legacySize, 1000)),
             /** Intervalo entre líneas de énfasis. 0 = desactivado. */
-            gridMajorInterval: options.gridMajorInterval ?? 10
+            gridMajorInterval: options.gridMajorInterval ?? 10,
+            /** Mostrar líneas mayores de énfasis independientemente de showGrid. */
+            showGridHighlights: options.showGridHighlights !== false
         };
 
         // Dirty rendering
@@ -168,6 +171,10 @@ class GridRenderer {
             this._subtleGridCache = null;
             this.markAllDirty();
         }
+        if (key === 'showGridHighlights' && oldValue !== value) {
+            this._subtleGridCache = null;
+            this.markAllDirty();
+        }
         if (key === 'gridMajorInterval' && oldValue !== value) {
             this._subtleGridCache = null;
             this.markAllDirty();
@@ -184,7 +191,15 @@ class GridRenderer {
 
     toggleGrid() {
         this.config.showGrid = !this.config.showGrid;
+        this._subtleGridCache = null;
         return this.reGrid();
+    }
+
+    toggleGridHighlights() {
+        this.config.showGridHighlights = !this.config.showGridHighlights;
+        this._subtleGridCache = null;
+        this.markAllDirty();
+        return this.config.showGridHighlights;
     }
 
     /** Fuerza re-render completo y retorna el estado actual de showGrid. */
@@ -336,30 +351,54 @@ class GridRenderer {
     // =========================================
 
     _forceFullRender() {
-        const {cellSize, gridWidth, gridHeight} = this.config;
+        const {cellSize} = this.config;
 
         this.ctx.fillStyle = '#0f172a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        if (this.config.showGrid) {
-            if (cellSize > 2) {
-                this._drawGrid();
-            } else {
-                if (!this._subtleGridCache) this._buildSubtleGridCache();
-                this.ctx.drawImage(this._subtleGridCache, 0, 0);
-            }
+        // Dibujar grilla desde cache offscreen (siempre, para ambos tamaños de celda)
+        const gridCache = this._getGridCache();
+        if (gridCache) {
+            this.ctx.drawImage(gridCache, 0, 0);
         }
 
         this._drawCells((x, y) => this._getCell(x, y));
     }
 
     _renderDirtyCells() {
-        const {gridHeight} = this.config;
+        const {gridHeight, cellSize} = this.config;
+        const gridCache = this._getGridCache();
+
         for (const index of this._dirtyCells) {
             const x = (index / gridHeight) | 0;
             const y = index % gridHeight;
+
+            if (gridCache) {
+                const px = x * cellSize;
+                const py = y * cellSize;
+                this.ctx.clearRect(px, py, cellSize, cellSize);
+                this.ctx.drawImage(gridCache, px, py, cellSize, cellSize, px, py, cellSize, cellSize);
+            } else {
+                // Sin grilla: restaurar fondo oscuro antes de renderizar la celda
+                const px = x * cellSize;
+                const py = y * cellSize;
+                this.ctx.fillStyle = this.colorDead;
+                this.ctx.fillRect(px, py, cellSize, cellSize);
+            }
+
             this._renderCell(x, y);
         }
+    }
+
+    /**
+     * Devuelve el canvas offscreen de grilla (crea/reconstruye si es necesario).
+     * null si no hay nada que dibujar (grid y highlights ambos desactivados).
+     */
+    _getGridCache() {
+        const {showGrid, showGridHighlights} = this.config;
+        if (!showGrid && !showGridHighlights) return null;
+        if (!this._subtleGridCache) this._buildGridCache();
+        return this._subtleGridCache;
     }
 
     _renderCell(x, y) {
@@ -403,15 +442,8 @@ class GridRenderer {
         if (actColor) {
             this.ctx.fillStyle = actColor;
             this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
-        } else {
-            this.ctx.fillStyle = this.colorDead;
-            this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
-            if (this.config.showGrid && cellSize === 2) {
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-                this.ctx.fillRect(xPos + 1, yPos, 1, cellSize);
-                this.ctx.fillRect(xPos, yPos + 1, cellSize, 1);
-            }
         }
+        // Si no hay actColor, no hacemos nada: la grilla ya está restaurada en _renderDirtyCells
     }
 
     _renderLargeCell(x, y, cellIndex, isAlive) {
@@ -420,8 +452,8 @@ class GridRenderer {
 
         if (this._colorProvider) {
             const customColor = this._colorProvider(cellIndex);
-            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
-            if (customColor) {
+            if (customColor) {  // Solo limpiar si vamos a pintar
+                this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
                 this.ctx.fillStyle = customColor;
                 this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
             }
@@ -435,11 +467,12 @@ class GridRenderer {
             const dyingColor = this.config.showActivityEffect &&
             this._dyingAges[cellIndex] < this._activityCooldown
                 ? this.colorDying : null;
-            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
-            if (dyingColor) {
+            if (dyingColor) {  // Solo limpiar si vamos a pintar
+                this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
                 this.ctx.fillStyle = dyingColor;
                 this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
             }
+            // Si no hay dyingColor, no hacemos nada: la grilla ya está restaurada
         }
     }
 
@@ -483,96 +516,71 @@ class GridRenderer {
         }
     }
 
-    _drawGrid() {
-        const {gridWidth, gridHeight, cellSize, gridMajorInterval} = this.config;
-        const interval = gridMajorInterval || 0;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        const ctx = this.ctx;
+    /**
+     * Construye el canvas offscreen de grilla.
+     *
+     * Combina dos capas según config:
+     *   showGrid           → líneas menores en todas las posiciones (trazo tenue 10%)
+     *   showGridHighlights → líneas mayores superpuestas (cada gridMajorInterval)
+     *
+     * Las líneas mayores usan opacidad 28% si la grilla menor está activa (contraste),
+     * o 10% (igual que las menores) si se muestran solas.
+     *
+     * Ambas capas usan strokeStyle para alineación perfecta sin importar cellSize.
+     */
+    _buildGridCache() {
+        const {
+            gridWidth, gridHeight, cellSize, gridMajorInterval,
+            showGrid, showGridHighlights
+        } = this.config;
+        const interval = gridMajorInterval || 10;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
 
-        // ── Líneas menores ────────────────────────────────────────────────
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let i = 0; i <= gridWidth; i++) {
-            if (i % interval === 0) continue;
-            const pos = i * cellSize;
-            ctx.moveTo(pos, 0);
-            ctx.lineTo(pos, h);
-        }
-        for (let j = 0; j <= gridHeight; j++) {
-            if (j % interval === 0) continue;
-            const pos = j * cellSize;
-            ctx.moveTo(0, pos);
-            ctx.lineTo(w, pos);
-        }
-        ctx.stroke();
-
-        // ── Líneas mayores (cada `interval` celdas) ───────────────────────
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let i = 0; i <= gridWidth; i++) {
-            if (i % interval !== 0) continue;
-            const pos = i * cellSize;
-            ctx.moveTo(pos, 0);
-            ctx.lineTo(pos, h);
-        }
-        for (let j = 0; j <= gridHeight; j++) {
-            if (j % interval !== 0) continue;
-            const pos = j * cellSize;
-            ctx.moveTo(0, pos);
-            ctx.lineTo(w, pos);
-        }
-        ctx.stroke();
-    }
-
-    _buildSubtleGridCache() {
-        const {gridWidth, gridHeight, cellSize, gridMajorInterval} = this.config;
-        const interval = gridMajorInterval || 0;
         const cache = document.createElement('canvas');
-        cache.width = this.canvas.width;
-        cache.height = this.canvas.height;
-        const cCtx = cache.getContext('2d');
+        cache.width = cw;
+        cache.height = ch;
+        const c = cache.getContext('2d');
 
-        // Para cellSize ≤ 2 las líneas se dibujan como píxeles individuales.
-        // Menores: 1px semitransparente; mayores: 1px más visible.
+        c.lineWidth = 1;
 
-        // ── Píxeles menores ───────────────────────────────────────────────
-        cCtx.fillStyle = 'rgba(255, 255, 255, 0.10)';
-        for (let x = 0; x < gridWidth; x++) {
-            if (x % interval === 0) continue;
-            const xPos = x * cellSize;
-            for (let y = 0; y < gridHeight; y++) {
-                const yPos = y * cellSize;
-                cCtx.fillRect(xPos + 1, yPos, 1, cellSize);
-                cCtx.fillRect(xPos, yPos + 1, cellSize, 1);
+        // ── Líneas menores (grid normal) ───────────────────────────────
+        if (showGrid) {
+            c.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+            c.beginPath();
+            for (let i = 0; i <= gridWidth; i++) {
+                // ELIMINADO: if (i % interval === 0) continue;
+                const pos = i * cellSize;
+                c.moveTo(pos, 0);
+                c.lineTo(pos, ch);
             }
-        }
-        // Columnas residuales de filas ya procesadas
-        for (let y = 0; y < gridHeight; y++) {
-            if (y % interval === 0) continue;
-            for (let x = 0; x < gridWidth; x++) {
-                if (x % interval !== 0) continue;
-                const xPos = x * cellSize;
-                const yPos = y * cellSize;
-                cCtx.fillRect(xPos, yPos + 1, cellSize, 1);
+            for (let j = 0; j <= gridHeight; j++) {
+                // ELIMINADO: if (j % interval === 0) continue;
+                const pos = j * cellSize;
+                c.moveTo(0, pos);
+                c.lineTo(cw, pos);
             }
+            c.stroke();
         }
 
-        // ── Píxeles mayores ───────────────────────────────────────────────
-        cCtx.fillStyle = 'rgba(255, 255, 255, 0.30)';
-        for (let x = 0; x <= gridWidth; x++) {
-            if (x % interval !== 0) continue;
-            const xPos = x * cellSize;
-            // Línea vertical completa
-            cCtx.fillRect(xPos, 0, 1, cache.height);
-        }
-        for (let y = 0; y <= gridHeight; y++) {
-            if (y % interval !== 0) continue;
-            const yPos = y * cellSize;
-            // Línea horizontal completa
-            cCtx.fillRect(0, yPos, cache.width, 1);
+        // ── Líneas mayores (highlights) ────────────────────────────────
+        if (showGridHighlights) {
+            // Si hay grilla debajo, usar blanco fuerte; si no, usar el mismo gris tenue
+            c.strokeStyle = showGrid ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.10)';
+            c.beginPath();
+            for (let i = 0; i <= gridWidth; i++) {
+                if (i % interval !== 0) continue;
+                const pos = i * cellSize;
+                c.moveTo(pos, 0);
+                c.lineTo(pos, ch);
+            }
+            for (let j = 0; j <= gridHeight; j++) {
+                if (j % interval !== 0) continue;
+                const pos = j * cellSize;
+                c.moveTo(0, pos);
+                c.lineTo(cw, pos);
+            }
+            c.stroke();
         }
 
         this._subtleGridCache = cache;

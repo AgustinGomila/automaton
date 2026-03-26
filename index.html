@@ -34,25 +34,23 @@
                 </div>
                 <div class="header-quick-controls">
                     <span id="mouseCoords" class="coords">X: 0, Y: 0</span>
+                    <div class="patterns-controls-divider"></div>
+                    <button id="autoSizeBtn" class="btn-toggle" data-i18n="tooltip.autosize" data-i18n-attr="title"
+                            title="Ajustar Grilla a Ventana (A)">
+                        <i class="fas fa-expand-arrows-alt"></i>
+                    </button>
                     <button id="gridToggle" class="btn-toggle active" data-i18n="tooltip.grid" data-i18n-attr="title"
                             title="Mostrar/Ocultar Grilla (G)">
-                        <i class="fas fa-border-all"></i>
+                        <i class="fa-solid fa-table-cells"></i>
                     </button>
-                    <button id="quickInfluenceToggle" class="btn-toggle active" data-i18n="tooltip.influence"
-                            data-i18n-attr="title" title="Área de Influencia" style="color: var(--secondary);">
-                        <i class="fas fa-bullseye"></i>
+                    <button id="gridHighlightsToggle" class="btn-toggle active" data-i18n="tooltip.grid.highlights"
+                            data-i18n-attr="title" title="Mostrar/Ocultar Líneas Resaltadas (H)">
+                        <i class="fa-solid fa-border-all"></i>
                     </button>
+                    <div class="patterns-controls-divider"></div>
                     <button id="perfToggle" class="btn-toggle" data-i18n="tooltip.perf" data-i18n-attr="title"
                             title="Rendimiento">
                         <i class="fas fa-tachometer-alt"></i>
-                    </button>
-                    <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
-                            title="Exportar Patrón">
-                        <i class="fas fa-download"></i>
-                    </button>
-                    <button id="importBtn" class="btn-toggle" data-i18n="tooltip.import" data-i18n-attr="title"
-                            title="Importar Patrón">
-                        <i class="fas fa-upload"></i>
                     </button>
                 </div>
             </div>
@@ -190,7 +188,7 @@
                     <!-- Acordeón: Grid y Visualización -->
                     <div class="accordion-group">
                         <button class="accordion-header active" data-accordion="grid">
-                            <i class="fas fa-border-all"></i>
+                            <i class="fa-solid fa-table-cells"></i>
                             <span data-i18n="config.grid.title">Grid y Visualización</span>
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
@@ -199,7 +197,7 @@
                             <div class="config-group">
                                 <div class="grid-size-header">
                                     <label>
-                                        <i class="fas fa-border-all"></i>
+                                        <i class="fa-solid fa-table-cells"></i>
                                         <span data-i18n="config.gridSize">Tamaño:</span>
                                     </label>
                                     <span class="grid-dimensions-badge" id="gridDimensionsBadge">500×500</span>
@@ -818,6 +816,19 @@
                         data-i18n-attr="title" title="Bote de pintura (Ctrl: limpiar)">
                     <i class="fas fa-fill-drip"></i>
                 </button>
+                <button id="quickInfluenceToggle" class="btn-toggle active" data-i18n="tooltip.influence"
+                        data-i18n-attr="title" title="Área de Influencia" style="color: var(--secondary);">
+                    <i class="fas fa-bullseye"></i>
+                </button>
+                <div class="patterns-controls-divider"></div>
+                <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
+                        title="Exportar Patrón">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button id="importBtn" class="btn-toggle" data-i18n-attr="title" data-i18n="tooltip.import"
+                        title="Importar Patrón">
+                    <i class="fas fa-upload"></i>
+                </button>
                 <div class="patterns-controls-divider"></div>
                 <button class="btn-toggle" id="patternsShowAll" data-i18n="tooltip.patterns.showAll"
                         data-i18n-attr="title" title="Mostrar todos los patrones">
@@ -919,7 +930,8 @@
                         <li><strong>I</strong> - <span data-i18n="instructions.shortcut.i">Performance</span></li>
                         <li><strong>B</strong> - <span data-i18n="instructions.shortcut.b">Bote de pintura</span></li>
                         <li><strong>C</strong> - <span data-i18n="instructions.shortcut.c">Limpiar</span></li>
-                        <li><strong>G</strong> - <span data-i18n="instructions.shortcut.h">Mostrar/Ocultar grilla</span>
+                        <li><strong>G</strong> - <span data-i18n="instructions.shortcut.g">Mostrar/Ocultar grilla</span>
+                        <li><strong>H</strong> - <span data-i18n="instructions.shortcut.h">Mostrar/Ocultar grilla resaltada</span>
                         </li>
                         <li><strong>ESC</strong> - <span data-i18n="instructions.shortcut.esc">Cancelar/Clear</span>
                         </li>

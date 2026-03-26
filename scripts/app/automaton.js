@@ -76,6 +76,8 @@ class CellularAutomaton {
             getGridHeight: () => this.gridHeight,
             getCore: () => this.core,
             onResult: ({generation, population, changedCells, changedCount}) => {
+                const tStep = performance.now();
+
                 this.generation = generation;
                 this.stateManager.recordPopulation(population);
 
@@ -91,6 +93,13 @@ class CellularAutomaton {
                 this.checkLimits();
                 this.renderer.updateActivityAges(changedCells, changedCount);
                 this.render();
+
+                // Emitir métricas si es visible
+                if (this._workerStartTime && this._perfVisible) {
+                    const modeLabel = this._getPerfModeLabel();
+                    this._debugTiming(modeLabel, this._workerStartTime, tStep, performance.now());
+                    this._workerStartTime = null;
+                }
             },
             onError: () => {
                 this.renderer.markAllDirty();
@@ -526,8 +535,14 @@ class CellularAutomaton {
     }
 
     _nextGenerationWorker(stepsPerFrame = 1) {
+        this._workerStartTime = performance.now(); // Guardar tiempo de inicio
         this._workerManager.requestNextGeneration(stepsPerFrame);
         return 0;
+    }
+
+    _getPerfModeLabel() {
+        if (!this.specialMode) return 'Standard';
+        return this.specialMode.name;
     }
 
     _debugTiming(mode, t0, tStep, tRender) {
@@ -591,7 +606,8 @@ class CellularAutomaton {
         }
         this.render();
         if (this._pendingStepTime !== undefined) {
-            this._debugTiming('Standard', this._pendingStepT0, this._pendingStepTime, performance.now());
+            const modeLabel = this._getPerfModeLabel();
+            this._debugTiming(modeLabel, this._pendingStepT0, this._pendingStepTime, performance.now());
             this._pendingStepT0 = this._pendingStepTime = undefined;
         }
     }
@@ -735,6 +751,13 @@ class CellularAutomaton {
         const newState = this.renderer.toggleGrid();
         this.render();
         eventBus.emit('automaton:gridToggled', {showGrid: newState});
+        return newState;
+    }
+
+    toggleGridHighlights() {
+        const newState = this.renderer.toggleGridHighlights();
+        this.render();
+        eventBus.emit('automaton:gridHighlightsToggled', {showGridHighlights: newState});
         return newState;
     }
 
