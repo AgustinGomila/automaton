@@ -491,7 +491,6 @@ class GridRenderer {
         const cellIndex = x * this.config.gridHeight + y;
 
         const customColor = this._colorProvider?.(cellIndex);
-        const baseColor = customColor ?? this._getCellColor(cellIndex, true);
         const drawSize = Math.max(1, cellSize - (cellSize > 2 ? 2 : 1));
         const offset = cellSize > 2 ? 1 : 0;
 
@@ -516,7 +515,7 @@ class GridRenderer {
             }
             this.ctx.fillStyle = gradient;
         } else {
-            this.ctx.fillStyle = baseColor;
+            this.ctx.fillStyle = customColor ?? this._getCellColor(cellIndex, true);
         }
 
         this.ctx.fillRect(x * cellSize + offset, y * cellSize + offset, drawSize, drawSize);
@@ -651,7 +650,7 @@ class GridRenderer {
                 if (!color) continue;
 
                 this.ctx.fillStyle = color;
-                if (cellSize <= 2) {
+                if (cellSize <= 3) {
                     this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
                 } else {
                     this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
