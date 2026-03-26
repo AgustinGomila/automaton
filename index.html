@@ -754,22 +754,16 @@
     <div class="patterns-horizontal-container">
         <div class="patterns-header">
             <div class="patterns-header-left">
-                <h3><i class="fas fa-shapes"></i> <span data-i18n="patterns.title">Patrones</span></h3>
+                <h3 data-i18n="patterns.title">Patrones</h3>
                 <div class="pattern-info-expanded" id="patternInfoExpanded">
                     <div class="pattern-info-main" id="patternNameMini" data-i18n="patterns.select">Selecciona un
                         patrón
                     </div>
-                    <div class="pattern-info-secondary" id="patternDetailsMini" data-i18n="patterns.details">Clic en un
-                        patrón para seleccionarlo
-                    </div>
-                    <div class="pattern-info-description" id="patternDescriptionMini" style="
-                        font-size: 0.75rem;
-                        color: var(--gray-text);
-                        font-style: italic;
-                        margin-top: 2px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;">
+                    <div class="pattern-info-combined" id="patternInfoCombined">
+                        <span id="patternDetailsMini"
+                              data-i18n="patterns.details">Clic en un patrón para seleccionarlo</span>
+                        <span class="pattern-separator">|</span>
+                        <span id="patternDescriptionMini"></span>
                     </div>
                 </div>
             </div>

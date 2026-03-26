@@ -1579,8 +1579,13 @@ class UIController {
             btn.classList.remove('active');
         });
 
-        const miniEl = document.getElementById('patternNameMini');
-        if (miniEl) miniEl.textContent = t('patterns.select');
+        const nameEl = document.getElementById('patternNameMini');
+        const detailsEl = document.getElementById('patternDetailsMini');
+        const descEl = document.getElementById('patternDescriptionMini');
+
+        if (nameEl) nameEl.textContent = t('patterns.select');
+        if (detailsEl) detailsEl.textContent = t('patterns.details');
+        if (descEl) descEl.textContent = '';
 
         window.patternManager?.hidePatternPreview();
         window.patternManager?.hideInfluenceArea();
