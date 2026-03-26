@@ -727,12 +727,23 @@ canvas {
 
 .patterns-header {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: 10px 12px;
+    gap: 0;
     margin-bottom: 4px;
     padding-bottom: 4px;
     border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+
+.patterns-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    justify-content: flex-start;
+    padding-right: 12px;
 }
 
 .patterns-header-left {
@@ -746,6 +757,7 @@ canvas {
     font-size: 0.94rem;
     margin: 0;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .pattern-info-expanded {
@@ -753,6 +765,8 @@ canvas {
     display: flex;
     flex-direction: column;
     gap: 1px;
+    overflow: hidden;
+    flex: 1;
 }
 
 .pattern-info-main {
@@ -764,27 +778,35 @@ canvas {
     text-overflow: ellipsis;
 }
 
-.pattern-info-secondary {
+/* Contenedor combinado */
+.pattern-info-combined {
     font-size: 0.66rem;
     color: var(--gray-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
-.pattern-info-description {
-    font-size: 0.66rem !important;
-    color: var(--gray-text);
-    line-height: 1.1;
+.pattern-info-combined span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.pattern-separator {
+    color: var(--border-color);
+    flex-shrink: 0;
 }
 
 .patterns-center-controls {
     display: flex;
     justify-content: center;
     align-items: center;
+    margin: 0 auto;
+    min-width: fit-content;
 }
 
 .patterns-center-controls .controls {
@@ -821,11 +843,14 @@ canvas {
     gap: 4px;
     align-items: center;
     justify-content: flex-end;
+    padding-left: 12px;
+    min-width: 0;
 }
 
 .patterns-controls .btn-toggle {
     width: 28px;
     height: 28px;
+    flex-shrink: 0;
 }
 
 .patterns-controls-divider {
@@ -833,6 +858,7 @@ canvas {
     height: 12px;
     background: var(--border-color);
     margin: 0 2px;
+    flex-shrink: 0;
 }
 
 #bucketToolBtn:not(.active) {
@@ -1063,6 +1089,8 @@ canvas {
     max-height: 80vh;
     overflow-y: auto;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) transparent;
 }
 
 .modal-header {
@@ -1102,7 +1130,7 @@ canvas {
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding: 0 20px 18px;
+    padding: 8px 20px 18px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1118,6 +1146,24 @@ canvas {
 
 .modal-footer a:hover {
     color: var(--primary);
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
 }
 
 /* ============================================================
@@ -2132,6 +2178,7 @@ canvas {
         overflow-y: auto;
         overflow-x: hidden;
     }
+}
 
     .patterns-grid-container.compact-view {
         max-height: 64px;
@@ -2268,7 +2315,6 @@ canvas {
     .stat-value {
         font-size: 0.82rem;
     }
-}
 
 /* ============================================================
    RESPONSIVE — LANDSCAPE EN MÓVIL
@@ -2341,5 +2387,211 @@ canvas {
         padding: 0 !important;
         max-height: none !important;
         z-index: auto !important;
+    }
+}
+
+/* ── Cabecera de tamaño ──────────────────────────────────────────────────── */
+.grid-size-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.grid-size-header label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+/* ── Badge de dimensiones ────────────────────────────────────────────────── */
+.grid-dimensions-badge {
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: var(--primary);
+    letter-spacing: 0.03em;
+    transition: background 0.25s, border-color 0.25s;
+    white-space: nowrap;
+}
+
+/* Cuando el grid es rectangular (no cuadrado) */
+.grid-dimensions-badge.rect-badge {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: var(--secondary);
+}
+
+/* ── Presets rápidos ─────────────────────────────────────────────────────── */
+.grid-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 12px;
+}
+
+.btn-grid-preset {
+    flex: 1;
+    min-width: 44px;
+    padding: 5px 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--gray-text);
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.15s;
+    text-align: center;
+}
+
+.btn-grid-preset:hover {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.btn-grid-preset:active {
+    transform: translateY(0);
+}
+
+/* ── Filas de eje (ancho / alto) ─────────────────────────────────────────── */
+.grid-axis-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    margin-top: 10px;
+}
+
+.grid-axis-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: var(--gray-text);
+}
+
+.grid-axis-label i {
+    font-size: 0.75rem;
+    color: var(--secondary);
+    width: 14px;
+    text-align: center;
+}
+
+/* ── Bloqueo de aspecto ──────────────────────────────────────────────────── */
+.grid-aspect-lock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 8px 0 2px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    transition: background 0.2s, border-color 0.2s;
+}
+
+/* Estado activo del bloqueo */
+.grid-aspect-lock-row:has(#gridAspectLock:checked) {
+    background: rgba(245, 158, 11, 0.07);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.grid-aspect-lock-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--gray-text);
+    user-select: none;
+    margin-bottom: 0;
+}
+
+.grid-aspect-lock-label:hover {
+    color: var(--light-text);
+}
+
+/* Ocultar el checkbox nativo */
+.grid-aspect-lock-chk {
+    display: none;
+}
+
+/* Icono del candado */
+.grid-aspect-lock-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--border-color);
+    color: var(--gray-text);
+    font-size: 0.75rem;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+#gridAspectLock:checked ~ .grid-aspect-lock-icon,
+.grid-aspect-lock-label:has(#gridAspectLock:checked) .grid-aspect-lock-icon {
+    background: rgba(245, 158, 11, 0.18);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: var(--warning);
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.25);
+}
+
+/* Fallback para Firefox (no soporta :has en versiones antiguas) */
+.grid-aspect-lock-icon.locked {
+    background: rgba(245, 158, 11, 0.18);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: var(--warning);
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.25);
+}
+
+/* Display de ratio */
+.grid-aspect-ratio-display {
+    font-family: 'Courier New', monospace;
+    font-size: 0.72rem;
+    color: var(--gray-text);
+    white-space: nowrap;
+    min-width: 32px;
+    text-align: right;
+    transition: color 0.2s;
+}
+
+.grid-aspect-lock-row:has(#gridAspectLock:checked) .grid-aspect-ratio-display {
+    color: var(--warning);
+    font-weight: 700;
+}
+
+/* ── Ajustes responsive ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .grid-presets {
+        gap: 4px;
+    }
+
+    .btn-grid-preset {
+        font-size: 0.68rem;
+        padding: 6px 3px;
+        min-height: 36px;
+    }
+
+    .grid-aspect-lock-row {
+        padding: 7px 8px;
+    }
+
+    .grid-aspect-lock-label {
+        font-size: 0.78rem;
     }
 }

@@ -1,13 +1,10 @@
 /**
  * GridRenderer — Renderizado visual del autómata celular sobre Canvas 2D.
  *
- * Estrategia de rendering:
- *   - markAllDirty() activa un flag booleano (_fullDirtyPending) en O(1).
- *     render() lo consume haciendo un full render.
- *   - markDirty/markDirtyIndex agrega índices al Set _dirtyCells para
- *     renderizado parcial — solo si no hay ya un full render pendiente.
- *   - Las propiedades _prevFlags y _renderFlags han sido eliminadas:
- *     eran escritas pero nunca leídas en ninguna parte del proyecto.
+ * Soporta grids rectangulares (gridWidth × gridHeight).
+ * Índice plano: x * gridHeight + y  (column-major, igual que GridManager).
+ *
+ * Compatibilidad hacia atrás: opción `gridSize` se acepta como cuadrado.
  */
 class GridRenderer {
     /**
@@ -17,16 +14,30 @@ class GridRenderer {
      * @param {Function} options.getCell       — (x, y) => 0|1
      * @param {Function} options.getRD2DState  — (x, y) => 0..15
      * @param {Function} options.isRD2DActive  — () => boolean
-     * @param {Function} options.getGridSize   — () => number
-     * @param {number}   [options.gridSize]
+     * @param {Function} options.getGridWidth  — () => number
+     * @param {Function} options.getGridHeight — () => number
+     * @param {Function} [options.getGridSize] — legacy, () => number
+     * @param {number}   [options.gridWidth]
+     * @param {number}   [options.gridHeight]
+     * @param {number}   [options.gridSize]    — legacy alias (cuadrado)
      * @param {number}   [options.cellSize]
      * @param {boolean}  [options.showGrid]
      * @param {boolean}  [options.showActivityEffect]
+     * @param {boolean}  [options.showGridHighlights]
+     * @param {number}   [options.gridMajorInterval]
      */
     constructor(options) {
         if (!options.canvas) throw new Error('GridRenderer: canvas requerido');
         if (typeof options.getCell !== 'function') throw new Error('GridRenderer: getCell requerido');
-        if (typeof options.getGridSize !== 'function') throw new Error('GridRenderer: getGridSize requerido');
+
+        // Soporte para dimensiones rectangulares y compatibilidad legacy
+        const legacySize = options.gridSize || 200;
+        if (!options.getGridWidth && typeof options.getGridSize === 'function') {
+            options.getGridWidth = options.getGridSize;
+            options.getGridHeight = options.getGridSize;
+        }
+        if (typeof options.getGridWidth !== 'function') throw new Error('GridRenderer: getGridWidth requerido');
+        if (typeof options.getGridHeight !== 'function') throw new Error('GridRenderer: getGridHeight requerido');
 
         this.canvas = options.canvas;
         this.ctx = this.canvas.getContext('2d');
@@ -35,28 +46,30 @@ class GridRenderer {
         this._getCell = options.getCell;
         this._getRD2DState = options.getRD2DState || (() => undefined);
         this._isRD2DActive = options.isRD2DActive || (() => false);
-        this._getGridSize = options.getGridSize;
+        this._getGridWidth = options.getGridWidth;
+        this._getGridHeight = options.getGridHeight;
 
         this.config = {
             showGrid: options.showGrid !== false,
             showActivityEffect: options.showActivityEffect !== false,
             cellSize: Math.max(1, Math.min(options.cellSize || 4, 20)),
-            gridSize: Math.max(20, Math.min(options.gridSize || 200, 500))
+            gridWidth: Math.max(20, Math.min(options.gridWidth || legacySize, 1000)),
+            gridHeight: Math.max(20, Math.min(options.gridHeight || legacySize, 1000)),
+            /** Intervalo entre líneas de énfasis. 0 = desactivado. */
+            gridMajorInterval: options.gridMajorInterval ?? 10,
+            /** Mostrar líneas mayores de énfasis independientemente de showGrid. */
+            showGridHighlights: options.showGridHighlights !== false
         };
 
         // Dirty rendering
         this._dirtyCells = new Set();
-        this._fullDirtyPending = false;   // reemplaza markAllDirty O(n²)
+        this._fullDirtyPending = false;
 
         // Efecto de actividad
-        // _activityAges : cooldown para 0→1 (nacimiento, amarillo)
-        // _dyingAges    : cooldown para 1→0 (muerte, rojo)
         this._coolingCells = new Set();
         this._dyingCells = new Set();
         this._activityCooldown = 3;
-        const _totalCells = this.config.gridSize * this.config.gridSize;
-        this._activityAges = new Uint8Array(_totalCells).fill(this._activityCooldown);
-        this._dyingAges = new Uint8Array(_totalCells).fill(this._activityCooldown);
+        this._initActivityBuffers();
 
         // Grilla sutil offscreen (cellSize=2)
         this._subtleGridCache = null;
@@ -73,6 +86,25 @@ class GridRenderer {
         this._resizeCanvas();
     }
 
+    // =========================================
+    // GETTERS DE CONVENIENCIA
+    // =========================================
+
+    /** Ancho lógico actual del grid (puede diferir de config si se sincronizó externamente). */
+    get gridWidth() {
+        return this.config.gridWidth;
+    }
+
+    get gridHeight() {
+        return this.config.gridHeight;
+    }
+
+    _initActivityBuffers() {
+        const total = this.config.gridWidth * this.config.gridHeight;
+        this._activityAges = new Uint8Array(total).fill(this._activityCooldown);
+        this._dyingAges = new Uint8Array(total).fill(this._activityCooldown);
+    }
+
     get hasDirtyCells() {
         return this._fullDirtyPending || this._dirtyCells.size > 0;
     }
@@ -87,7 +119,7 @@ class GridRenderer {
 
     markDirty(x, y) {
         if (!this._fullDirtyPending) {
-            this._dirtyCells.add(x * this.config.gridSize + y);
+            this._dirtyCells.add(x * this.config.gridHeight + y);
         }
     }
 
@@ -98,10 +130,8 @@ class GridRenderer {
     }
 
     /**
-     * Marca todo el grid para re-renderizado.
-     * O(1): activa un flag. El full render ocurre en el próximo render().
-     * Las llamadas a markDirty posteriores son ignoradas hasta que render()
-     * consuma el flag.
+     * Marca todo el grid para re-renderizado en O(1).
+     * Las llamadas a markDirty posteriores se ignoran hasta que render() consuma el flag.
      */
     markAllDirty() {
         this._fullDirtyPending = true;
@@ -141,6 +171,14 @@ class GridRenderer {
             this._subtleGridCache = null;
             this.markAllDirty();
         }
+        if (key === 'showGridHighlights' && oldValue !== value) {
+            this._subtleGridCache = null;
+            this.markAllDirty();
+        }
+        if (key === 'gridMajorInterval' && oldValue !== value) {
+            this._subtleGridCache = null;
+            this.markAllDirty();
+        }
         if (key === 'showActivityEffect' && oldValue !== value) {
             this.markAllDirty();
         }
@@ -153,13 +191,18 @@ class GridRenderer {
 
     toggleGrid() {
         this.config.showGrid = !this.config.showGrid;
+        this._subtleGridCache = null;
         return this.reGrid();
     }
 
-    /**
-     * Fuerza re-render completo y retorna el estado actual de showGrid.
-     * Llamado al volver de modos especiales para restaurar el grid cuadrado.
-     */
+    toggleGridHighlights() {
+        this.config.showGridHighlights = !this.config.showGridHighlights;
+        this._subtleGridCache = null;
+        this.markAllDirty();
+        return this.config.showGridHighlights;
+    }
+
+    /** Fuerza re-render completo y retorna el estado actual de showGrid. */
     reGrid() {
         this.markAllDirty();
         return this.config.showGrid;
@@ -170,13 +213,20 @@ class GridRenderer {
         this._resizeCanvas();
     }
 
-    resize(gridSize, cellSize) {
-        this.config.gridSize = Math.max(20, Math.min(gridSize, 1000));
-        this.config.cellSize = Math.max(1, Math.min(cellSize, 20));
+    /**
+     * Redimensiona el renderer para un nuevo grid.
+     * @param {number} gridWidth
+     * @param {number} [gridHeight=gridWidth] — omitir para cuadrado
+     * @param {number} [cellSize]             — omitir para no cambiar
+     */
+    resize(gridWidth, gridHeight = gridWidth, cellSize) {
+        this.config.gridWidth = Math.max(20, Math.min(gridWidth, 1000));
+        this.config.gridHeight = Math.max(20, Math.min(gridHeight, 1000));
+        if (cellSize !== undefined) {
+            this.config.cellSize = Math.max(1, Math.min(cellSize, 20));
+        }
 
-        const totalCells = this.config.gridSize * this.config.gridSize;
-        this._activityAges = new Uint8Array(totalCells).fill(this._activityCooldown);
-        this._dyingAges = new Uint8Array(totalCells).fill(this._activityCooldown);
+        this._initActivityBuffers();
         this._dirtyCells.clear();
         this._coolingCells.clear();
         this._dyingCells.clear();
@@ -193,33 +243,28 @@ class GridRenderer {
 
     /**
      * Avanza los contadores de actividad.
-     *   0→1 (nacimiento): _activityAges[i] = 0  → se pinta amarillo durante cooldown frames
-     *   1→0 (muerte):     _dyingAges[i]    = 0  → se pinta rojo   durante cooldown frames
+     * Índice plano: x * gridHeight + y
      *
-     * @param {Uint32Array|Array} changedBuffer — índices planos (x*size+y)
+     * @param {Uint32Array|Array} changedBuffer — índices planos
      * @param {number}            [changedCount]
      */
     updateActivityAges(changedBuffer, changedCount) {
         const cooldown = this._activityCooldown;
-        const size = this.config.gridSize;
+        const gridHeight = this.config.gridHeight;
         const count = changedCount !== undefined ? changedCount : changedBuffer.length;
 
         for (let i = 0; i < count; i++) {
             const index = changedBuffer[i];
-            const x = (index / size) | 0;
-            const y = index % size;
+            const x = (index / gridHeight) | 0;
+            const y = index % gridHeight;
             if (this._getCell(x, y)) {
-                // 0→1: nació
                 this._activityAges[index] = 0;
                 this._coolingCells.add(index);
-                // Limpiar dying por si la celda renació en el mismo spot
                 this._dyingAges[index] = cooldown;
                 this._dyingCells.delete(index);
             } else {
-                // 1→0: murió
                 this._dyingAges[index] = 0;
                 this._dyingCells.add(index);
-                // Limpiar born
                 this._activityAges[index] = cooldown;
                 this._coolingCells.delete(index);
             }
@@ -253,7 +298,7 @@ class GridRenderer {
     }
 
     // =========================================
-    // COLOR PROVIDER (LangtonEngine multi-color)
+    // COLOR PROVIDER
     // =========================================
 
     setColorProvider(fn) {
@@ -272,10 +317,10 @@ class GridRenderer {
         const canvasX = (e.clientX - rect.left) * scaleX;
         const canvasY = (e.clientY - rect.top) * scaleY;
 
-        const {cellSize, gridSize} = this.config;
+        const {cellSize, gridWidth, gridHeight} = this.config;
         return {
-            x: Math.max(0, Math.min(Math.floor(canvasX / cellSize), gridSize - 1)),
-            y: Math.max(0, Math.min(Math.floor(canvasY / cellSize), gridSize - 1))
+            x: Math.max(0, Math.min(Math.floor(canvasX / cellSize), gridWidth - 1)),
+            y: Math.max(0, Math.min(Math.floor(canvasY / cellSize), gridHeight - 1))
         };
     }
 
@@ -297,7 +342,8 @@ class GridRenderer {
         this._getCell = null;
         this._getRD2DState = null;
         this._isRD2DActive = null;
-        this._getGridSize = null;
+        this._getGridWidth = null;
+        this._getGridHeight = null;
     }
 
     // =========================================
@@ -305,34 +351,59 @@ class GridRenderer {
     // =========================================
 
     _forceFullRender() {
-        const cellSize = this.config.cellSize;
+        const {cellSize} = this.config;
 
         this.ctx.fillStyle = '#0f172a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        if (this.config.showGrid) {
-            if (cellSize > 2) {
-                this._drawGrid();
-            } else {
-                if (!this._subtleGridCache) this._buildSubtleGridCache();
-                this.ctx.drawImage(this._subtleGridCache, 0, 0);
-            }
+        // Dibujar grilla desde cache offscreen (siempre, para ambos tamaños de celda)
+        const gridCache = this._getGridCache();
+        if (gridCache) {
+            this.ctx.drawImage(gridCache, 0, 0);
         }
 
         this._drawCells((x, y) => this._getCell(x, y));
     }
 
     _renderDirtyCells() {
+        const {gridHeight, cellSize} = this.config;
+        const gridCache = this._getGridCache();
+
         for (const index of this._dirtyCells) {
-            const x = (index / this.config.gridSize) | 0;
-            const y = index % this.config.gridSize;
+            const x = (index / gridHeight) | 0;
+            const y = index % gridHeight;
+
+            if (gridCache) {
+                const px = x * cellSize;
+                const py = y * cellSize;
+                this.ctx.clearRect(px, py, cellSize, cellSize);
+                this.ctx.drawImage(gridCache, px, py, cellSize, cellSize, px, py, cellSize, cellSize);
+            } else {
+                // Sin grilla: restaurar fondo oscuro antes de renderizar la celda
+                const px = x * cellSize;
+                const py = y * cellSize;
+                this.ctx.fillStyle = this.colorDead;
+                this.ctx.fillRect(px, py, cellSize, cellSize);
+            }
+
             this._renderCell(x, y);
         }
     }
 
+    /**
+     * Devuelve el canvas offscreen de grilla (crea/reconstruye si es necesario).
+     * null si no hay nada que dibujar (grid y highlights ambos desactivados).
+     */
+    _getGridCache() {
+        const {showGrid, showGridHighlights} = this.config;
+        if (!showGrid && !showGridHighlights) return null;
+        if (!this._subtleGridCache) this._buildGridCache();
+        return this._subtleGridCache;
+    }
+
     _renderCell(x, y) {
         const cellSize = this.config.cellSize;
-        const cellIndex = x * this.config.gridSize + y;
+        const cellIndex = x * this.config.gridHeight + y;
         const isAlive = this._getCell(x, y);
 
         if (this._isRD2DActive() && isAlive) {
@@ -351,17 +422,6 @@ class GridRenderer {
     // COLOR DE CELDA
     // =========================================
 
-    /**
-     * Devuelve el color CSS para una celda según su estado y actividad.
-     *   isAlive + naciendo  → amarillo (#b9b610)
-     *   isAlive estable     → verde   (#059669)
-     *   !isAlive + muriendo → rojo    (#ef4444)
-     *   !isAlive estable    → null    (usar fondo)
-     *
-     * @param {number}  cellIndex
-     * @param {boolean} isAlive
-     * @returns {string|null}
-     */
     _getCellColor(cellIndex, isAlive) {
         if (!this.config.showActivityEffect) return isAlive ? this.colorAlive : null;
         const cooldown = this._activityCooldown;
@@ -376,34 +436,24 @@ class GridRenderer {
         const xPos = x * cellSize;
         const yPos = y * cellSize;
 
-        // Si hay colorProvider (Generations, Langton multi-color) consultarlo siempre,
-        // no solo para celdas vivas — las células moribundas tienen grid=0 pero color propio.
         const customColor = this._colorProvider?.(cellIndex) ?? null;
         const actColor = customColor ?? this._getCellColor(cellIndex, isAlive);
 
         if (actColor) {
             this.ctx.fillStyle = actColor;
             this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
-        } else {
-            this.ctx.fillStyle = this.colorDead;
-            this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
-            if (this.config.showGrid && cellSize === 2) {
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-                this.ctx.fillRect(xPos + 1, yPos, 1, cellSize);
-                this.ctx.fillRect(xPos, yPos + 1, cellSize, 1);
-            }
         }
+        // Si no hay actColor, no hacemos nada: la grilla ya está restaurada en _renderDirtyCells
     }
 
     _renderLargeCell(x, y, cellIndex, isAlive) {
         const cellSize = this.config.cellSize;
         const innerSize = cellSize - 2;
 
-        // Si hay colorProvider activo, usarlo también para celdas "muertas" (moribundas)
         if (this._colorProvider) {
             const customColor = this._colorProvider(cellIndex);
-            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
-            if (customColor) {
+            if (customColor) {  // Solo limpiar si vamos a pintar
+                this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
                 this.ctx.fillStyle = customColor;
                 this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
             }
@@ -414,13 +464,15 @@ class GridRenderer {
             this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
             this._drawSingleCell(x, y);
         } else {
-            const dyingColor = this.config.showActivityEffect && this._dyingAges[cellIndex] < this._activityCooldown
+            const dyingColor = this.config.showActivityEffect &&
+            this._dyingAges[cellIndex] < this._activityCooldown
                 ? this.colorDying : null;
-            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
-            if (dyingColor) {
+            if (dyingColor) {  // Solo limpiar si vamos a pintar
+                this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
                 this.ctx.fillStyle = dyingColor;
                 this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
             }
+            // Si no hay dyingColor, no hacemos nada: la grilla ya está restaurada
         }
     }
 
@@ -428,7 +480,7 @@ class GridRenderer {
         const cellSize = this.config.cellSize;
         const centerX = x * cellSize + cellSize / 2;
         const centerY = y * cellSize + cellSize / 2;
-        const cellIndex = x * this.config.gridSize + y;
+        const cellIndex = x * this.config.gridHeight + y;
 
         const customColor = this._colorProvider?.(cellIndex);
         const baseColor = customColor ?? this._getCellColor(cellIndex, true);
@@ -464,55 +516,86 @@ class GridRenderer {
         }
     }
 
-    _drawGrid() {
-        const {gridSize, cellSize} = this.config;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+    /**
+     * Construye el canvas offscreen de grilla.
+     *
+     * Combina dos capas según config:
+     *   showGrid           → líneas menores en todas las posiciones (trazo tenue 10%)
+     *   showGridHighlights → líneas mayores superpuestas (cada gridMajorInterval)
+     *
+     * Las líneas mayores usan opacidad 28% si la grilla menor está activa (contraste),
+     * o 10% (igual que las menores) si se muestran solas.
+     *
+     * Ambas capas usan strokeStyle para alineación perfecta sin importar cellSize.
+     */
+    _buildGridCache() {
+        const {
+            gridWidth, gridHeight, cellSize, gridMajorInterval,
+            showGrid, showGridHighlights
+        } = this.config;
+        const interval = gridMajorInterval || 10;
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
 
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        for (let i = 0; i <= gridSize; i++) {
-            const pos = i * cellSize;
-            this.ctx.moveTo(pos, 0);
-            this.ctx.lineTo(pos, h);
-            this.ctx.moveTo(0, pos);
-            this.ctx.lineTo(w, pos);
-        }
-        this.ctx.stroke();
-    }
-
-    _buildSubtleGridCache() {
-        const {gridSize, cellSize} = this.config;
         const cache = document.createElement('canvas');
-        cache.width = this.canvas.width;
-        cache.height = this.canvas.height;
-        const cCtx = cache.getContext('2d');
+        cache.width = cw;
+        cache.height = ch;
+        const c = cache.getContext('2d');
 
-        cCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        for (let x = 0; x < gridSize; x++) {
-            const xPos = x * cellSize;
-            for (let y = 0; y < gridSize; y++) {
-                const yPos = y * cellSize;
-                cCtx.fillRect(xPos + 1, yPos, 1, cellSize);
-                cCtx.fillRect(xPos, yPos + 1, cellSize, 1);
+        c.lineWidth = 1;
+
+        // ── Líneas menores (grid normal) ───────────────────────────────
+        if (showGrid) {
+            c.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+            c.beginPath();
+            for (let i = 0; i <= gridWidth; i++) {
+                // ELIMINADO: if (i % interval === 0) continue;
+                const pos = i * cellSize;
+                c.moveTo(pos, 0);
+                c.lineTo(pos, ch);
             }
+            for (let j = 0; j <= gridHeight; j++) {
+                // ELIMINADO: if (j % interval === 0) continue;
+                const pos = j * cellSize;
+                c.moveTo(0, pos);
+                c.lineTo(cw, pos);
+            }
+            c.stroke();
         }
+
+        // ── Líneas mayores (highlights) ────────────────────────────────
+        if (showGridHighlights) {
+            // Si hay grilla debajo, usar blanco fuerte; si no, usar el mismo gris tenue
+            c.strokeStyle = showGrid ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.10)';
+            c.beginPath();
+            for (let i = 0; i <= gridWidth; i++) {
+                if (i % interval !== 0) continue;
+                const pos = i * cellSize;
+                c.moveTo(pos, 0);
+                c.lineTo(pos, ch);
+            }
+            for (let j = 0; j <= gridHeight; j++) {
+                if (j % interval !== 0) continue;
+                const pos = j * cellSize;
+                c.moveTo(0, pos);
+                c.lineTo(cw, pos);
+            }
+            c.stroke();
+        }
+
         this._subtleGridCache = cache;
     }
 
     _drawCells(predicate) {
-        const {gridSize, cellSize} = this.config;
-        for (let x = 0; x < gridSize; x++) {
-            for (let y = 0; y < gridSize; y++) {
+        const {gridWidth, gridHeight, cellSize} = this.config;
+        for (let x = 0; x < gridWidth; x++) {
+            for (let y = 0; y < gridHeight; y++) {
                 const isAlive = predicate(x, y);
-                const cellIndex = x * gridSize + y;
-                // Si hay colorProvider (Generations, Langton) consultarlo siempre:
-                // las células moribundas tienen isAlive=false pero color propio.
+                const cellIndex = x * gridHeight + y;
                 const customColor = this._colorProvider?.(cellIndex) ?? null;
                 const color = customColor ?? this._getCellColor(cellIndex, isAlive);
 
-                if (!color) continue; // muerta y sin actividad reciente
+                if (!color) continue;
 
                 this.ctx.fillStyle = color;
                 if (cellSize <= 2) {
@@ -569,14 +652,16 @@ class GridRenderer {
 
     _resizeCanvas() {
         if (!this.canvas) return;
-        const width = this.config.gridSize * this.config.cellSize;
-        this.canvas.width = width;
-        this.canvas.height = width;
-        this.canvas.style.width = width + 'px';
-        this.canvas.style.height = width + 'px';
+        const {gridWidth, gridHeight, cellSize} = this.config;
+        const w = gridWidth * cellSize;
+        const h = gridHeight * cellSize;
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this.canvas.style.width = w + 'px';
+        this.canvas.style.height = h + 'px';
         if (this.container) {
-            this.container.style.width = (width + 20) + 'px';
-            this.container.style.height = (width + 20) + 'px';
+            this.container.style.width = (w + 20) + 'px';
+            this.container.style.height = (h + 20) + 'px';
         }
     }
 }

@@ -1,49 +1,66 @@
 /**
- * GridManager - Gestión pura del grid de celdas
- * Responsabilidad: Crear, redimensionar y acceder al grid bidimensional
- * Sin dependencias de UI, renderizado o reglas específicas
+ * GridManager - Gestión pura del grid de celdas.
+ *
+ * Soporta grids rectangulares (width × height).
+ * El almacenamiento es column-major: grid[x] es una columna Uint8Array de
+ * longitud `height`. El índice plano transferible es x * height + y.
+ *
+ * Compatibilidad hacia atrás:
+ *   • Constructor acepta (size) → grid cuadrado size×size.
+ *   • Getter `size` devuelve Math.max(width, height) para código legacy.
  */
 class GridManager {
-    constructor(size) {
-        this.size = size;
-        this.grid = this._createEmptyGrid(size);
-        this._backGrid = this._createEmptyGrid(size);
+    /**
+     * @param {number} width
+     * @param {number} [height=width] — omitir para grid cuadrado
+     */
+    constructor(width, height = width) {
+        this.width = Math.max(20, Math.min(width, 1000));
+        this.height = Math.max(20, Math.min(height, 1000));
+        this.grid = this._createEmptyGrid(this.width, this.height);
+        this._backGrid = this._createEmptyGrid(this.width, this.height);
     }
 
-    /**
-     * Devuelve el buffer trasero para que RuleEngine escriba en él.
-     * @returns {Uint8Array[]}
-     */
+    /** Dimensión mayor — sólo para código legacy que necesite un único número. */
+    get size() {
+        return Math.max(this.width, this.height);
+    }
+
+    // =========================================
+    // DOBLE BUFFER
+    // =========================================
+
+    /** Devuelve el back-buffer para que RuleEngine escriba en él. */
     getBackGrid() {
         return this._backGrid;
     }
 
-    /**
-     * Intercambia front y back buffer tras una generación calculada.
-     * El resultado de RuleEngine pasa a ser el grid activo sin copiar datos.
-     */
+    /** Intercambia front ↔ back buffer sin copiar datos. */
     swapBuffers() {
         const tmp = this.grid;
         this.grid = this._backGrid;
         this._backGrid = tmp;
     }
 
+    // =========================================
+    // DESPLAZAMIENTO TOROIDAL
+    // =========================================
+
     /**
      * Desplaza el contenido del grid toroidalmente.
-     * @param {number} dx - Celdas a desplazar en X (positivo = derecha)
-     * @param {number} dy - Celdas a desplazar en Y (positivo = abajo)
+     * @param {number} dx — celdas en X (positivo = derecha)
+     * @param {number} dy — celdas en Y (positivo = abajo)
      */
     shift(dx, dy) {
-        const size = this.size;
-        const src = this.grid;
-        const dst = this._backGrid;
+        const {width, height} = this;
+        const src = this.grid, dst = this._backGrid;
 
-        for (let x = 0; x < size; x++) {
-            const srcX = ((x - dx) % size + size) % size;
+        for (let x = 0; x < width; x++) {
+            const srcX = ((x - dx) % width + width) % width;
             const srcCol = src[srcX];
             const dstCol = dst[x];
-            for (let y = 0; y < size; y++) {
-                dstCol[y] = srcCol[((y - dy) % size + size) % size];
+            for (let y = 0; y < height; y++) {
+                dstCol[y] = srcCol[((y - dy) % height + height) % height];
             }
         }
 
@@ -52,67 +69,69 @@ class GridManager {
         this._backGrid = src;
     }
 
+    // =========================================
+    // PRIVADOS
+    // =========================================
+
     /**
-     * Crea un grid vacío de tamaño específico
-     * @param {number} size - Tamaño del grid (size × size)
-     * @returns {Uint8Array[]} Grid como array de columnas (column-major)
-     * @private
+     * Crea un grid vacío width × height (column-major).
+     * @returns {Uint8Array[]} Array de `width` columnas de `height` celdas
      */
-    _createEmptyGrid(size) {
-        return Array.from({length: size}, () => new Uint8Array(size));
+    _createEmptyGrid(width, height) {
+        return Array.from({length: width}, () => new Uint8Array(height));
     }
 
+    // =========================================
+    // REDIMENSIONADO
+    // =========================================
+
     /**
-     * Redimensiona el grid manteniendo el contenido existente donde sea posible
-     * @param {number} newSize - Nuevo tamaño deseado
-     * @returns {Object} {grid, wasResized}
+     * Redimensiona conservando el contenido en la intersección de tamaños.
+     * @param {number} newWidth
+     * @param {number} [newHeight=newWidth]
+     * @returns {{ grid: Uint8Array[], wasResized: boolean }}
      */
-    resize(newSize) {
-        const oldSize = this.size;
+    resize(newWidth, newHeight = newWidth) {
+        const w = Math.max(20, Math.min(newWidth, 1000));
+        const h = Math.max(20, Math.min(newHeight, 1000));
+
         const oldGrid = this.grid;
+        const oldW = this.width;
+        const oldH = this.height;
 
-        // Crear nuevos grids (front + back)
-        const newGrid = this._createEmptyGrid(newSize);
-
-        // Copiar datos existentes (intersección de tamaños)
-        const copySize = Math.min(oldSize, newSize);
-        for (let x = 0; x < copySize; x++) {
-            for (let y = 0; y < copySize; y++) {
+        const newGrid = this._createEmptyGrid(w, h);
+        const copyW = Math.min(oldW, w);
+        const copyH = Math.min(oldH, h);
+        for (let x = 0; x < copyW; x++) {
+            for (let y = 0; y < copyH; y++) {
                 newGrid[x][y] = oldGrid[x][y];
             }
         }
 
-        this.size = newSize;
+        this.width = w;
+        this.height = h;
         this.grid = newGrid;
-        this._backGrid = this._createEmptyGrid(newSize);
+        this._backGrid = this._createEmptyGrid(w, h);
 
-        return {
-            grid: newGrid,
-            wasResized: newSize !== oldSize
-        };
+        return {grid: newGrid, wasResized: w !== oldW || h !== oldH};
     }
 
-    /**
-     * Obtiene el estado de una celda
-     * @param {number} x - Coordenada X
-     * @param {number} y - Coordenada Y
-     * @returns {number} 0 o 1
-     */
+    // =========================================
+    // ACCESO A CELDAS
+    // =========================================
+
+    /** @returns {number} 0 o 1, o 0 si (x,y) está fuera de rango */
     getCell(x, y) {
-        if (x < 0 || x >= this.size || y < 0 || y >= this.size) return 0;
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) return 0;
         return this.grid[x][y];
     }
 
     /**
-     * Establece el estado de una celda
-     * @param {number} x - Coordenada X
-     * @param {number} y - Coordenada Y
-     * @param {number} state - 0 o 1
+     * @param {number} state — 0 o 1
      * @returns {boolean} true si cambió el estado
      */
     setCell(x, y, state) {
-        if (x < 0 || x >= this.size || y < 0 || y >= this.size) return false;
-
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) return false;
         const current = this.grid[x][y];
         if (current !== state) {
             this.grid[x][y] = state;
@@ -121,96 +140,85 @@ class GridManager {
         return false;
     }
 
-    /**
-     * Limpia todo el grid (todas las celdas a 0)
-     */
+    /** Pone todas las celdas a 0. */
     clear() {
-        for (let x = 0; x < this.size; x++) {
-            this.grid[x].fill(0);
-        }
+        for (let x = 0; x < this.width; x++) this.grid[x].fill(0);
     }
 
-    /**
-     * Cuenta población total
-     * @returns {number} Cantidad de celdas vivas
-     */
+    /** @returns {number} Total de celdas vivas */
     countPopulation() {
         let count = 0;
-        for (let x = 0; x < this.size; x++) {
-            for (let y = 0; y < this.size; y++) {
-                if (this.grid[x][y]) count++;
+        for (let x = 0; x < this.width; x++) {
+            const col = this.grid[x];
+            for (let y = 0; y < this.height; y++) {
+                if (col[y]) count++;
             }
         }
         return count;
     }
 
+    // =========================================
+    // SERIALIZACIÓN
+    // =========================================
+
     /**
-     * Serializa el estado actual (para undo/export)
-     * @returns {Object} {size, aliveCells: [{x, y}, ...]}
+     * Serializa el estado actual para undo/export.
+     * @returns {{ width, height, aliveCells: {x,y}[], timestamp }}
      */
     serialize() {
         const aliveCells = [];
-        for (let x = 0; x < this.size; x++) {
-            for (let y = 0; y < this.size; y++) {
-                if (this.grid[x][y]) {
-                    aliveCells.push({x, y});
-                }
+        for (let x = 0; x < this.width; x++) {
+            const col = this.grid[x];
+            for (let y = 0; y < this.height; y++) {
+                if (col[y]) aliveCells.push({x, y});
             }
         }
-        return {
-            size: this.size,
-            aliveCells,
-            timestamp: Date.now()
-        };
+        return {width: this.width, height: this.height, aliveCells, timestamp: Date.now()};
     }
 
     /**
-     * Deserializa estado guardado
-     * @param {Object} data - Datos serializados
+     * Restaura estado guardado.
+     * Acepta tanto el formato nuevo {width, height} como el legado {size}.
      * @returns {boolean} true si se restauró correctamente
      */
     deserialize(data) {
-        if (!data || !data.size || !Array.isArray(data.aliveCells)) {
-            return false;
-        }
+        if (!data || !Array.isArray(data.aliveCells)) return false;
 
-        // Redimensionar si es necesario
-        if (data.size !== this.size) {
-            this.resize(data.size);
-        }
+        // Compatibilidad con formato legacy {size}
+        const w = data.width ?? data.size;
+        const h = data.height ?? data.size;
+        if (!w || !h) return false;
 
+        if (w !== this.width || h !== this.height) this.resize(w, h);
         this.clear();
 
-        // Restaurar celdas vivas
         for (const {x, y} of data.aliveCells) {
-            if (x >= 0 && x < this.size && y >= 0 && y < this.size) {
+            if (x >= 0 && x < this.width && y >= 0 && y < this.height) {
                 this.grid[x][y] = 1;
             }
         }
-
         return true;
     }
 
     /**
-     * Crea una copia profunda del grid actual
-     * @returns {Uint8Array[]} Copia del grid
+     * Copia profunda del grid activo.
+     * @returns {Uint8Array[]}
      */
     clone() {
-        const cloned = this._createEmptyGrid(this.size);
-        for (let x = 0; x < this.size; x++) {
-            cloned[x].set(this.grid[x]);
-        }
+        const cloned = this._createEmptyGrid(this.width, this.height);
+        for (let x = 0; x < this.width; x++) cloned[x].set(this.grid[x]);
         return cloned;
     }
 
     /**
-     * Obtiene estadísticas básicas del grid
-     * @returns {Object} {size, population, density}
+     * @returns {{ width, height, size, population, density }}
      */
     getStats() {
         const population = this.countPopulation();
-        const totalCells = this.size * this.size;
+        const totalCells = this.width * this.height;
         return {
+            width: this.width,
+            height: this.height,
             size: this.size,
             population,
             density: ((population / totalCells) * 100).toFixed(1)
@@ -218,5 +226,4 @@ class GridManager {
     }
 }
 
-// Exportar global para compatibilidad
 window.GridManager = GridManager;

@@ -1,22 +1,12 @@
 /**
  * SpecialEngineManager - Gestiona los motores especiales de simulación.
  *
- * Responsabilidad: ciclo de vida (activación, desactivación, swap de renderer)
- * de WolframEngine, RD2DEngine, TriangleEngine, UlamWarburtonEngine, LangtonEngine
- * y WireWorldEngine.
- *
- * Cada engine recibe un EngineContext mínimo en lugar del automaton completo,
- * aplicando DI fina: el engine solo puede acceder a las dependencias que necesita.
- *
- * stepActive() centraliza el dispatch de paso de simulación: devuelve un descriptor
- * normalizado que CellularAutomaton.nextGeneration() consume sin necesidad de
- * ramificación por modo.
+ * Cambios para grids rectangulares:
+ *   • Todos los contextos exponen gridWidth y gridHeight además de gridSize
+ *     (que se mantiene como Math.max(w,h) para compatibilidad).
+ *   • stepActive() usa height para recalcular índices planos en Triangle.
  */
 class SpecialEngineManager {
-
-    // =========================================
-    // CONSTANTES DE MODO
-    // =========================================
 
     static MODES = Object.freeze({
         STANDARD: 'standard',
@@ -29,12 +19,18 @@ class SpecialEngineManager {
         GENERATIONS: 'generations'
     });
 
-    constructor({getRenderer, setRenderer, getCore, setCore, getGridSize, getCellSize, getAutomaton}) {
+    constructor({
+                    getRenderer, setRenderer, getCore, setCore, getGridSize,
+                    getGridWidth, getGridHeight, getCellSize, getAutomaton
+                }) {
         this._getRenderer = getRenderer;
         this._setRenderer = setRenderer;
         this._getCore = getCore;
         this._setCore = setCore;
-        this._getGridSize = getGridSize;
+        // Soporte para API rectangular y legacy
+        this._getGridWidth = getGridWidth || getGridSize || (() => 500);
+        this._getGridHeight = getGridHeight || getGridSize || (() => 500);
+        this._getGridSize = getGridSize || (() => Math.max(this._getGridWidth(), this._getGridHeight()));
         this._getCellSize = getCellSize;
         this._getAutomaton = getAutomaton;
 
@@ -54,39 +50,22 @@ class SpecialEngineManager {
     }
 
     // =========================================
-    // DISPATCH DE PASO — API PÚBLICA
+    // DISPATCH DE PASO
     // =========================================
 
-    /**
-     * Ejecuta un paso del motor especial activo y devuelve un descriptor normalizado.
-     *
-     * @typedef  {Object}        EngineStepDescriptor
-     * @property {boolean}       continued          — false = motor terminó, detener simulación
-     * @property {string}        label              — etiqueta para _debugTiming
-     * @property {string|null}   stopMessage        — mensaje de log cuando continued=false
-     * @property {number}        generation         — generación tras el paso
-     * @property {Array}         changedCells       — índices o packed coords (según markDirtyFromCells)
-     * @property {number|null}   population         — null = calcular desde grid
-     * @property {boolean}       markDirtyFromCells — si true, changedCells contiene packed (q<<16|r)
-     *
-     * @returns {EngineStepDescriptor|null} null si no hay motor especial activo
-     */
     stepActive() {
         switch (this.specialMode) {
             case SpecialEngineManager.MODES.RD2D:
                 return this._describeStep(this.rd2dEngine, {
-                    label: 'RD-2D',
-                    stopMessage: 'RD-2D: Simulación detenida (estable)'
+                    label: 'RD-2D', stopMessage: 'RD-2D: Simulación detenida (estable)'
                 });
             case SpecialEngineManager.MODES.WOLFRAM:
                 return this._describeStep(this.wolframEngine, {
-                    label: 'Wolfram',
-                    stopMessage: 'Wolfram: Límite alcanzado'
+                    label: 'Wolfram', stopMessage: 'Wolfram: Límite alcanzado'
                 });
             case SpecialEngineManager.MODES.ULAM_WARBURTON:
                 return this._describeStep(this.uwEngine, {
-                    label: 'Ulam-Warburton',
-                    stopMessage: 'Ulam-Warburton: patrón estable'
+                    label: 'Ulam-Warburton', stopMessage: 'Ulam-Warburton: patrón estable'
                 });
             case SpecialEngineManager.MODES.LANGTON:
                 return this._describeStep(this.langtonEngine, {label: 'Langton'});
@@ -94,8 +73,7 @@ class SpecialEngineManager {
                 return this._describeStep(this.wireworldEngine, {label: 'WireWorld'});
             case SpecialEngineManager.MODES.GENERATIONS:
                 return this._describeStep(this.generationsEngine, {
-                    label: 'Generations',
-                    skipActivity: true
+                    label: 'Generations', skipActivity: true
                 });
             case SpecialEngineManager.MODES.TRIANGLE:
                 return this._describeTriangleStep();
@@ -104,19 +82,10 @@ class SpecialEngineManager {
         }
     }
 
-    /**
-     * Descriptor genérico para motores con interfaz estándar: step() + getChangedCells().
-     * @param {Object} engine
-     * @param {string} label
-     * @param {string|null} [stopMessage]
-     * @returns {EngineStepDescriptor}
-     */
     _describeStep(engine, {label, stopMessage = null, skipActivity = false}) {
         const continued = engine.step();
         return {
-            continued,
-            label,
-            stopMessage,
+            continued, label, stopMessage,
             generation: engine.generation,
             changedCells: engine.getChangedCells(),
             population: null,
@@ -125,26 +94,9 @@ class SpecialEngineManager {
         };
     }
 
-    /**
-     * Descriptor para TriangleEngine: paso asíncrono / worker-based.
-     *
-     * step() se llama sin await: cuando usa worker, el resultado llega vía
-     * _onWorkerResult (que llama a render internamente y emite stats:updated
-     * con el conteo correcto del grid triangular). Para el path síncrono,
-     * changedCells contiene las celdas del paso actual; para el worker, son las
-     * del paso anterior (stale), pero _onWorkerResult sobreescribe con las correctas.
-     *
-     * population: null evita countPopulation() sobre el grid 2× (potencialmente
-     * 2 M de celdas). CellularAutomaton.updateStats() usa el grid base mapeado,
-     * y _onWorkerResult emite los stats finales con el valor preciso.
-     *
-     * skipActivity: true — TriangleRenderer maneja su propio visual; el efecto
-     * de actividad amarillo del GridRenderer no aplica a este modo.
-     * @returns {EngineStepDescriptor}
-     */
     _describeTriangleStep() {
         if (!this.triangleEngine?.gridManager) return null;
-        this.triangleEngine.step(); // fire-and-forget; resultado via _onWorkerResult
+        this.triangleEngine.step();
         return {
             continued: true,
             label: 'Triangle',
@@ -158,17 +110,9 @@ class SpecialEngineManager {
     }
 
     // =========================================
-    // INFO DEL MOTOR ACTIVO — para DisplayController
+    // INFO DEL MOTOR ACTIVO
     // =========================================
 
-    /**
-     * Retorna el modo activo y la info del engine correspondiente.
-     * Centraliza el dispatch que antes se repetía en DisplayController.
-     *
-     * @returns {{ mode: string, info: Object|null }}
-     *   mode — SpecialEngineManager.MODES.*
-     *   info — engine.getInfo() si el modo lo expone; null si no aplica
-     */
     getActiveInfo() {
         const mode = this.specialMode || SpecialEngineManager.MODES.STANDARD;
         switch (mode) {
@@ -190,9 +134,7 @@ class SpecialEngineManager {
     // =========================================
 
     async activate(engineName) {
-        if (this.specialMode === engineName && this._specialEngineLoaded) {
-            return;
-        }
+        if (this.specialMode === engineName && this._specialEngineLoaded) return;
 
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
@@ -204,65 +146,41 @@ class SpecialEngineManager {
         this._restoreOriginals();
 
         if (engineName === SpecialEngineManager.MODES.RD2D) {
-            if (typeof RD2DEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/rd2d-engine.js');
-            }
+            if (typeof RD2DEngine === 'undefined') await this._loadScript('scripts/core/engines/rd2d-engine.js');
             this.rd2dEngine = new RD2DEngine(this._buildRD2DContext());
             this.specialMode = SpecialEngineManager.MODES.RD2D;
 
         } else if (engineName === SpecialEngineManager.MODES.WOLFRAM) {
-            if (typeof WolframEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/wolfram-engine.js');
-            }
+            if (typeof WolframEngine === 'undefined') await this._loadScript('scripts/core/engines/wolfram-engine.js');
             this.wolframEngine = new WolframEngine(this._buildWolframContext());
             this.specialMode = SpecialEngineManager.MODES.WOLFRAM;
 
         } else if (engineName === SpecialEngineManager.MODES.ULAM_WARBURTON) {
-            if (typeof UlamWarburtonEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/ulam-warburton-engine.js');
-            }
+            if (typeof UlamWarburtonEngine === 'undefined') await this._loadScript('scripts/core/engines/ulam-warburton-engine.js');
             this.uwEngine = new UlamWarburtonEngine(this._buildUWContext());
             this.specialMode = SpecialEngineManager.MODES.ULAM_WARBURTON;
 
         } else if (engineName === SpecialEngineManager.MODES.LANGTON) {
-            if (typeof LangtonEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/langton-engine.js');
-            }
+            if (typeof LangtonEngine === 'undefined') await this._loadScript('scripts/core/engines/langton-engine.js');
             this.langtonEngine = new LangtonEngine(this._buildLangtonContext());
             this.specialMode = SpecialEngineManager.MODES.LANGTON;
 
         } else if (engineName === SpecialEngineManager.MODES.WIREWORLD) {
-            if (typeof WireWorldEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/wireworld-engine.js');
-            }
+            if (typeof WireWorldEngine === 'undefined') await this._loadScript('scripts/core/engines/wireworld-engine.js');
             this.wireworldEngine = new WireWorldEngine(this._buildWireworldContext());
             this.specialMode = SpecialEngineManager.MODES.WIREWORLD;
 
         } else if (engineName === SpecialEngineManager.MODES.GENERATIONS) {
-            if (typeof GenerationsEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/generations-engine.js');
-            }
-            // Las opciones (birth/survival/numStates) se pasan vía activate()
-            // desde SpecialModeController después de construir el engine.
+            if (typeof GenerationsEngine === 'undefined') await this._loadScript('scripts/core/engines/generations-engine.js');
             this.generationsEngine = new GenerationsEngine(this._buildGenerationsContext());
             this.specialMode = SpecialEngineManager.MODES.GENERATIONS;
 
         } else if (engineName === SpecialEngineManager.MODES.TRIANGLE) {
-            if (typeof TriangleGridManager === 'undefined') {
-                await this._loadScript('scripts/core/triangle-grid-manager.js');
-            }
-            if (typeof TriangleWorkerManager === 'undefined') {
-                await this._loadScript('scripts/infrastructure/workers/triangle-worker-manager.js');
-            }
-            if (typeof TriangleEngine === 'undefined') {
-                await this._loadScript('scripts/core/engines/triangle-engine.js');
-            }
-            if (typeof TriangleRenderer === 'undefined') {
-                await this._loadScript('scripts/rendering/triangle-renderer.js');
-            }
-            if (typeof TriangleWebGL2Renderer === 'undefined') {
-                await this._loadScript('scripts/rendering/triangle-webgl2-renderer.js');
-            }
+            if (typeof TriangleGridManager === 'undefined') await this._loadScript('scripts/core/triangle-grid-manager.js');
+            if (typeof TriangleWorkerManager === 'undefined') await this._loadScript('scripts/infrastructure/workers/triangle-worker-manager.js');
+            if (typeof TriangleEngine === 'undefined') await this._loadScript('scripts/core/engines/triangle-engine.js');
+            if (typeof TriangleRenderer === 'undefined') await this._loadScript('scripts/rendering/triangle-renderer.js');
+            if (typeof TriangleWebGL2Renderer === 'undefined') await this._loadScript('scripts/rendering/triangle-webgl2-renderer.js');
 
             this._originalRenderer = this._getRenderer();
             this._originalCore = this._getCore();
@@ -276,8 +194,7 @@ class SpecialEngineManager {
 
             const useWebGL2 = this._detectWebGL2Support();
             const rendererOptions = {
-                canvas,
-                container,
+                canvas, container,
                 cellSize: Math.max(3, Math.min(6, this._getCellSize())),
                 showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
                 colorAlive: '#ec4899',
@@ -312,7 +229,6 @@ class SpecialEngineManager {
         this.langtonEngine = null;
         this.wireworldEngine = null;
         this.generationsEngine = null;
-
         this._originalRenderer = null;
         this._originalCore = null;
         this._getRenderer = null;
@@ -322,7 +238,7 @@ class SpecialEngineManager {
     }
 
     // =========================================
-    // OPERACIONES BATCH — usadas por EditCoordinator / CellularAutomaton
+    // OPERACIONES BATCH
     // =========================================
 
     clearActiveEngine() {
@@ -331,11 +247,9 @@ class SpecialEngineManager {
                 this.wolframEngine?.reset();
                 this.wolframEngine?._initializeSeed?.();
                 return true;
-
             case SpecialEngineManager.MODES.RD2D:
                 this.rd2dEngine?.reset();
                 return true;
-
             case SpecialEngineManager.MODES.TRIANGLE:
                 if (this.triangleEngine?.gridManager) {
                     for (let q = 0; q < this.triangleEngine.gridManager.width; q++) {
@@ -344,19 +258,15 @@ class SpecialEngineManager {
                 }
                 this.triangleEngine?.reset?.();
                 return true;
-
             case SpecialEngineManager.MODES.LANGTON:
                 this.langtonEngine?.reset();
                 return true;
-
             case SpecialEngineManager.MODES.WIREWORLD:
                 this.wireworldEngine?.reset();
                 return true;
-
             case SpecialEngineManager.MODES.GENERATIONS:
                 this.generationsEngine?.reset();
                 return true;
-
             default:
                 return false;
         }
@@ -376,27 +286,22 @@ class SpecialEngineManager {
                 resetLimit: false
             };
         }
-
         if (this.specialMode === SpecialEngineManager.MODES.ULAM_WARBURTON && this.uwEngine?.isActive) {
             this.uwEngine.randomize(density);
             return {handled: true, population: null, resetLimit: true};
         }
-
         if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
             const population = this.langtonEngine.randomize(density);
             return {handled: true, population, resetLimit: false};
         }
-
         if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
             this.wireworldEngine.randomize(density);
             return {handled: true, population: null, resetLimit: false};
         }
-
         if (this.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.generationsEngine?.isActive) {
             this.generationsEngine.randomize(density);
             return {handled: true, population: null, resetLimit: false};
         }
-
         return {handled: false};
     }
 
@@ -421,149 +326,97 @@ class SpecialEngineManager {
     }
 
     // =========================================
-    // CONTEXTOS POR ENGINE
+    // CONTEXTOS — incluyen gridWidth y gridHeight
     // =========================================
 
-    _buildWolframContext() {
+    /** Construye un contexto base con propiedades compartidas por todos los engines. */
+    _buildBaseContext(automaton) {
         const self = this;
-        const automaton = self._getAutomaton();
         return {
             get grid() {
                 return automaton.grid;
             },
-            get gridSize() {
-                return self._getGridSize();
+            get gridWidth() {
+                return self._getGridWidth();
             },
+            get gridHeight() {
+                return self._getGridHeight();
+            },
+            /** Legacy: para engines que aún usen ctx.gridSize */
+            get gridSize() {
+                return Math.max(self._getGridWidth(), self._getGridHeight());
+            },
+            get renderer() {
+                return self._getRenderer();
+            },
+            get wrapEdges() {
+                return automaton.wrapEdges;
+            }
+        };
+    }
+
+    _buildWolframContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        const base = this._buildBaseContext(automaton);
+        return Object.assign(Object.create(base), {
             get generation() {
                 return automaton.generation;
             },
             set generation(v) {
                 automaton.generation = v;
             },
-            get renderer() {
-                return self._getRenderer();
-            },
             _markAllDirty() {
                 automaton._markAllDirty();
             },
-            setCell(x, y, state, markDirty) {
-                return automaton.setCell(x, y, state, markDirty);
+            setCell(x, y, s, m) {
+                return automaton.setCell(x, y, s, m);
             }
-        };
+        });
     }
 
     _buildRD2DContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            }
-        };
+        const automaton = this._getAutomaton();
+        return this._buildBaseContext(automaton);
     }
 
     _buildTriangleContext() {
         const self = this;
         const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
+        const base = this._buildBaseContext(automaton);
+        return Object.assign(Object.create(base), {
             get cellSize() {
                 return self._getCellSize();
             },
             render() {
                 return automaton.render();
-            },
-            get renderer() {
-                return self._getRenderer();
             }
-        };
+        });
     }
 
     _buildUWContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            },
+        const automaton = this._getAutomaton();
+        const base = this._buildBaseContext(automaton);
+        return Object.assign(Object.create(base), {
             _markAllDirty() {
                 automaton._markAllDirty();
             }
-        };
+        });
     }
 
     _buildLangtonContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            },
-            get wrapEdges() {
-                return automaton.wrapEdges;
-            }
-        };
+        const automaton = this._getAutomaton();
+        return this._buildBaseContext(automaton);
     }
 
     _buildWireworldContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            },
-            get wrapEdges() {
-                return automaton.wrapEdges;
-            }
-        };
+        const automaton = this._getAutomaton();
+        return this._buildBaseContext(automaton);
     }
 
     _buildGenerationsContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
-        return {
-            get grid() {
-                return automaton.grid;
-            },
-            get gridSize() {
-                return self._getGridSize();
-            },
-            get renderer() {
-                return self._getRenderer();
-            },
-            get wrapEdges() {
-                return automaton.wrapEdges;
-            }
-        };
+        const automaton = this._getAutomaton();
+        return this._buildBaseContext(automaton);
     }
 
     // =========================================
@@ -586,8 +439,8 @@ class SpecialEngineManager {
             const canvas = document.createElement('canvas');
             const gl = canvas.getContext('webgl2');
             if (!gl) return false;
-            return typeof gl.createVertexArray === 'function'
-                && typeof gl.drawArraysInstanced === 'function';
+            return typeof gl.createVertexArray === 'function' &&
+                typeof gl.drawArraysInstanced === 'function';
         } catch (e) {
             return false;
         }
@@ -597,7 +450,12 @@ class SpecialEngineManager {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src;
-            script.onload = resolve;
+            script.onload = () => {
+                // Re-aplicar parches rectangulares para el engine recién cargado.
+                // La función es idempotente: no re-parchea engines ya parcheados.
+                window.patchEnginesForRectangularGrids?.();
+                resolve();
+            };
             script.onerror = reject;
             document.head.appendChild(script);
         });

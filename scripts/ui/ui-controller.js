@@ -307,7 +307,9 @@ class UIController {
         this._addEventListener(document.getElementById('speedUp'), 'click', () => this.increaseSpeed());
         this._addEventListener(document.getElementById('gridSize'), 'input', () => this.updateGridSize());
         this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
+        this._addEventListener(document.getElementById('autoSizeBtn'), 'click', () => this.autoSizeGrid());
         this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
+        this._addEventListener(document.getElementById('gridHighlightsToggle'), 'click', () => this.toggleHighlightsGrid());
         this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
         this._addEventListener(document.getElementById('importBtn'), 'click', () => this.importPatternFromFile());
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
@@ -450,8 +452,11 @@ class UIController {
                     this._canvasController.deleteSelection();
                 }
                 break;
-            case 'h':
+            case 'g':
                 this.toggleGrid();
+                break;
+            case 'h':
+                this.toggleHighlightsGrid();
                 break;
             case 'i':
                 this._togglePerf();
@@ -669,19 +674,83 @@ class UIController {
         if (display) display.textContent = `${value}px`;
     }
 
+    autoSizeGrid() {
+        const automaton = this.automaton;
+        const isMobile = window.innerWidth <= 768;
+        const MARGIN = 6;
+        const MIN_CELLS = 20;
+        const MAX_CELLS = 1000;
+
+        let availW, availH;
+        if (isMobile) {
+            const headerH = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
+            const statsH = document.querySelector('.stats')?.getBoundingClientRect().height ?? 40;
+            const patH = document.querySelector('.patterns-horizontal-container')?.getBoundingClientRect().height ?? 120;
+            availW = Math.floor(window.innerWidth - MARGIN * 2);
+            availH = Math.floor(window.innerHeight - headerH - statsH - patH - 40);
+        } else {
+            const wrapper = document.querySelector('.canvas-wrapper');
+            if (!wrapper) return;
+            const rect = wrapper.getBoundingClientRect();
+            availW = Math.floor(rect.width - 20 - MARGIN);
+            availH = Math.floor(rect.height - 20 - MARGIN);
+        }
+
+        if (availW <= 0 || availH <= 0) return;
+
+        const cs = automaton.cellSize;
+        const gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
+        const gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
+
+        if (automaton.gridWidth === gw && automaton.gridHeight === gh) return;
+
+        automaton.resizeGrid(gw, gh);
+
+        // Sincronizar sliders rectangulares
+        const _set = (id, prop, val) => {
+            const el = document.getElementById(id);
+            if (el) el[prop] = val;
+        };
+        _set('gridWidth', 'value', gw);
+        _set('gridWidthValue', 'textContent', gw);
+        _set('gridHeight', 'value', gh);
+        _set('gridHeightValue', 'textContent', gh);
+        const badge = document.getElementById('gridDimensionsBadge');
+        if (badge) {
+            badge.textContent = `${gw}×${gh}`;
+            badge.classList.toggle('rect-badge', gw !== gh);
+        }
+        _set('gridSize', 'value', Math.max(gw, gh));
+        _set('gridSizeValue', 'textContent', `${gw}×${gh}`);
+
+        this._showNotification(`Grid: ${gw}×${gh}`, 'info', 1200);
+    }
+
     toggleGrid() {
         // Funciona para ambos modos (estándar y triangular)
         const newState = this.automaton.toggleGrid();
 
-        // Actualizar visual del botón
+        // Actualizar visual del botón (iluminado = grilla activa)
         const gridToggle = document.getElementById('gridToggle');
         if (gridToggle) {
             gridToggle.classList.toggle('active', newState);
         }
 
-        // Forzar renderizado
         this.automaton.render();
+        return newState;
+    }
 
+    toggleHighlightsGrid() {
+        const newState = this.automaton.toggleGridHighlights();
+        const btn = document.getElementById('gridHighlightsToggle');
+        if (btn) {
+            const icon = btn.querySelector('i');
+            if (icon) {
+                // Alternar entre border-all (visible) y border-none (oculto)
+                icon.className = newState ? 'fa-solid fa-border-all' : 'fa-solid fa-border-none';
+            }
+        }
+        this.automaton.render();
         return newState;
     }
 
@@ -693,6 +762,16 @@ class UIController {
         const active = btn.classList.toggle('active');
         overlay.style.display = active ? 'block' : 'none';
         this.automaton.setPerfVisible(active);
+
+        // Forzar actualización inmediata con datos actuales o placeholder
+        if (active) {
+            this._updatePerfOverlay({
+                genPerSec: 0,
+                stepMs: 0,
+                renderMs: 0,
+                mode: this.automaton.specialMode || 'Standard'
+            });
+        }
     }
 
     _updatePerfOverlay(perf) {
@@ -1579,8 +1658,13 @@ class UIController {
             btn.classList.remove('active');
         });
 
-        const miniEl = document.getElementById('patternNameMini');
-        if (miniEl) miniEl.textContent = t('patterns.select');
+        const nameEl = document.getElementById('patternNameMini');
+        const detailsEl = document.getElementById('patternDetailsMini');
+        const descEl = document.getElementById('patternDescriptionMini');
+
+        if (nameEl) nameEl.textContent = t('patterns.select');
+        if (detailsEl) detailsEl.textContent = t('patterns.details');
+        if (descEl) descEl.textContent = '';
 
         window.patternManager?.hidePatternPreview();
         window.patternManager?.hideInfluenceArea();

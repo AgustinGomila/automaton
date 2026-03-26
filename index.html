@@ -34,25 +34,23 @@
                 </div>
                 <div class="header-quick-controls">
                     <span id="mouseCoords" class="coords">X: 0, Y: 0</span>
+                    <div class="patterns-controls-divider"></div>
+                    <button id="autoSizeBtn" class="btn-toggle" data-i18n="tooltip.autosize" data-i18n-attr="title"
+                            title="Ajustar Grilla a Ventana (A)">
+                        <i class="fas fa-expand-arrows-alt"></i>
+                    </button>
                     <button id="gridToggle" class="btn-toggle active" data-i18n="tooltip.grid" data-i18n-attr="title"
                             title="Mostrar/Ocultar Grilla (G)">
-                        <i class="fas fa-border-all"></i>
+                        <i class="fa-solid fa-table-cells"></i>
                     </button>
-                    <button id="quickInfluenceToggle" class="btn-toggle active" data-i18n="tooltip.influence"
-                            data-i18n-attr="title" title="Área de Influencia" style="color: var(--secondary);">
-                        <i class="fas fa-bullseye"></i>
+                    <button id="gridHighlightsToggle" class="btn-toggle active" data-i18n="tooltip.grid.highlights"
+                            data-i18n-attr="title" title="Mostrar/Ocultar Líneas Resaltadas (H)">
+                        <i class="fa-solid fa-border-all"></i>
                     </button>
+                    <div class="patterns-controls-divider"></div>
                     <button id="perfToggle" class="btn-toggle" data-i18n="tooltip.perf" data-i18n-attr="title"
                             title="Rendimiento">
                         <i class="fas fa-tachometer-alt"></i>
-                    </button>
-                    <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
-                            title="Exportar Patrón">
-                        <i class="fas fa-download"></i>
-                    </button>
-                    <button id="importBtn" class="btn-toggle" data-i18n="tooltip.import" data-i18n-attr="title"
-                            title="Importar Patrón">
-                        <i class="fas fa-upload"></i>
                     </button>
                 </div>
             </div>
@@ -190,22 +188,97 @@
                     <!-- Acordeón: Grid y Visualización -->
                     <div class="accordion-group">
                         <button class="accordion-header active" data-accordion="grid">
-                            <i class="fas fa-border-all"></i>
+                            <i class="fa-solid fa-table-cells"></i>
                             <span data-i18n="config.grid.title">Grid y Visualización</span>
                             <i class="fas fa-chevron-down accordion-icon"></i>
                         </button>
                         <div class="accordion-content">
+                            <!-- ── Cabecera del bloque de tamaño ─────────────────────────────────────── -->
                             <div class="config-group">
-                                <label for="gridSize">
-                                    <i class="fas fa-border-all"></i> <span data-i18n="config.gridSize">Tamaño:</span>
-                                    <span class="value-display" id="gridSizeValue">500×500</span>
-                                </label>
-                                <input id="gridSize" max="1000" min="20" step="5" type="range" value="500">
-                                <div class="range-ticks">
-                                    <span data-i18n="config.gridSize.small">Pequeño</span>
-                                    <span data-i18n="config.gridSize.medium">Medio</span>
-                                    <span data-i18n="config.gridSize.large">Grande</span>
+                                <div class="grid-size-header">
+                                    <label>
+                                        <i class="fa-solid fa-table-cells"></i>
+                                        <span data-i18n="config.gridSize">Tamaño:</span>
+                                    </label>
+                                    <span class="grid-dimensions-badge" id="gridDimensionsBadge">500×500</span>
                                 </div>
+
+                                <!-- ── Presets rápidos ────────────────────────────────────────────────── -->
+                                <div class="grid-presets">
+                                    <button class="btn-grid-preset" data-w="200" data-h="200"
+                                            title="200×200 — Pequeño cuadrado">
+                                        200²
+                                    </button>
+                                    <button class="btn-grid-preset" data-w="500" data-h="500"
+                                            title="500×500 — Predeterminado">
+                                        500²
+                                    </button>
+                                    <button class="btn-grid-preset" data-w="800" data-h="800"
+                                            title="800×800 — Grande cuadrado">
+                                        800²
+                                    </button>
+                                    <button class="btn-grid-preset" data-w="800" data-h="400"
+                                            title="800×400 — Panorámico">
+                                        16:8
+                                    </button>
+                                    <button class="btn-grid-preset" data-w="400" data-h="800"
+                                            title="400×800 — Retrato">
+                                        9:18
+                                    </button>
+                                    <button class="btn-grid-preset" data-w="1000" data-h="200"
+                                            title="1000×200 — Franja horizontal">
+                                        5:1
+                                    </button>
+                                </div>
+
+                                <!-- ── Ancho ──────────────────────────────────────────────────────────── -->
+                                <div class="grid-axis-row">
+                                    <span class="grid-axis-label">
+                                        <i class="fas fa-arrows-alt-h"></i>
+                                        <span data-i18n="config.gridWidth">Ancho</span>
+                                    </span>
+                                    <span class="value-display" id="gridWidthValue">500</span>
+                                </div>
+                                <input id="gridWidth" type="range" min="20" max="1000" step="10" value="500">
+                                <div class="range-ticks">
+                                    <span>20</span>
+                                    <span>500</span>
+                                    <span>1000</span>
+                                </div>
+
+                                <!-- ── Bloqueo de aspecto ─────────────────────────────────────────────── -->
+                                <div class="grid-aspect-lock-row">
+                                    <label class="grid-aspect-lock-label" for="gridAspectLock">
+                                        <input type="checkbox" id="gridAspectLock" class="grid-aspect-lock-chk">
+                                        <span class="grid-aspect-lock-icon" id="gridAspectLockIcon">
+                                            <i class="fas fa-link"></i>
+                                        </span>
+                                        <span data-i18n="config.gridAspectLock">Proporción fija</span>
+                                    </label>
+                                    <span class="grid-aspect-ratio-display" id="gridAspectRatioDisplay">1:1</span>
+                                </div>
+
+                                <!-- ── Alto ───────────────────────────────────────────────────────────── -->
+                                <div class="grid-axis-row">
+                                    <span class="grid-axis-label">
+                                        <i class="fas fa-arrows-alt-v"></i>
+                                        <span data-i18n="config.gridHeight">Alto</span>
+                                    </span>
+                                    <span class="value-display" id="gridHeightValue">500</span>
+                                </div>
+                                <input id="gridHeight" type="range" min="20" max="1000" step="10" value="500">
+                                <div class="range-ticks">
+                                    <span>20</span>
+                                    <span>500</span>
+                                    <span>1000</span>
+                                </div>
+
+                                <!--
+                                  ── Slider legacy oculto (#gridSize) ─────────────────────────────────────
+                                  Se mantiene para no romper código que lo busque por ID, pero se oculta.
+                                -->
+                                <input id="gridSize" type="range" min="20" max="1000" step="5" value="500"
+                                       style="display:none" aria-hidden="true">
                             </div>
 
                             <div class="config-group">
@@ -679,22 +752,16 @@
     <div class="patterns-horizontal-container">
         <div class="patterns-header">
             <div class="patterns-header-left">
-                <h3><i class="fas fa-shapes"></i> <span data-i18n="patterns.title">Patrones</span></h3>
+                <h3 data-i18n="patterns.title">Patrones</h3>
                 <div class="pattern-info-expanded" id="patternInfoExpanded">
                     <div class="pattern-info-main" id="patternNameMini" data-i18n="patterns.select">Selecciona un
                         patrón
                     </div>
-                    <div class="pattern-info-secondary" id="patternDetailsMini" data-i18n="patterns.details">Clic en un
-                        patrón para seleccionarlo
-                    </div>
-                    <div class="pattern-info-description" id="patternDescriptionMini" style="
-                        font-size: 0.75rem;
-                        color: var(--gray-text);
-                        font-style: italic;
-                        margin-top: 2px;
-                        white-space: nowrap;
-                        overflow: hidden;
-                        text-overflow: ellipsis;">
+                    <div class="pattern-info-combined" id="patternInfoCombined">
+                        <span id="patternDetailsMini"
+                              data-i18n="patterns.details">Clic en un patrón para seleccionarlo</span>
+                        <span class="pattern-separator">|</span>
+                        <span id="patternDescriptionMini"></span>
                     </div>
                 </div>
             </div>
@@ -748,6 +815,19 @@
                 <button class="btn-toggle" id="bucketToolBtn" data-i18n="tooltip.bucket"
                         data-i18n-attr="title" title="Bote de pintura (Ctrl: limpiar)">
                     <i class="fas fa-fill-drip"></i>
+                </button>
+                <button id="quickInfluenceToggle" class="btn-toggle active" data-i18n="tooltip.influence"
+                        data-i18n-attr="title" title="Área de Influencia" style="color: var(--secondary);">
+                    <i class="fas fa-bullseye"></i>
+                </button>
+                <div class="patterns-controls-divider"></div>
+                <button id="exportBtn" class="btn-toggle" data-i18n="tooltip.export" data-i18n-attr="title"
+                        title="Exportar Patrón">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button id="importBtn" class="btn-toggle" data-i18n-attr="title" data-i18n="tooltip.import"
+                        title="Importar Patrón">
+                    <i class="fas fa-upload"></i>
                 </button>
                 <div class="patterns-controls-divider"></div>
                 <button class="btn-toggle" id="patternsShowAll" data-i18n="tooltip.patterns.showAll"
@@ -850,7 +930,8 @@
                         <li><strong>I</strong> - <span data-i18n="instructions.shortcut.i">Performance</span></li>
                         <li><strong>B</strong> - <span data-i18n="instructions.shortcut.b">Bote de pintura</span></li>
                         <li><strong>C</strong> - <span data-i18n="instructions.shortcut.c">Limpiar</span></li>
-                        <li><strong>G</strong> - <span data-i18n="instructions.shortcut.h">Mostrar/Ocultar grilla</span>
+                        <li><strong>G</strong> - <span data-i18n="instructions.shortcut.g">Mostrar/Ocultar grilla</span>
+                        <li><strong>H</strong> - <span data-i18n="instructions.shortcut.h">Mostrar/Ocultar grilla resaltada</span>
                         </li>
                         <li><strong>ESC</strong> - <span data-i18n="instructions.shortcut.esc">Cancelar/Clear</span>
                         </li>
@@ -874,6 +955,7 @@
 <script src="scripts/utils/circular-array.js"></script>
 <script src="scripts/infrastructure/event-bus.js"></script>
 <script src="scripts/ui/i18n.js"></script>
+<script src="scripts/ui/i18n-rect-grid.js"></script>
 
 <!-- Core matemático -->
 <script src="scripts/core/grid-manager.js"></script>
@@ -915,8 +997,15 @@
 <script src="scripts/ui/canvas-controller.js"></script>
 <script src="scripts/ui/special-mode-controller.js"></script>
 <script src="scripts/ui/ui-controller.js"></script>
+<script src="scripts/ui/ui-grid-rect-patch.js"></script>
 <script src="scripts/ui/responsive-controller.js"></script>
 <script src="scripts/ui/welcome-modal.js"></script>
 <script src="scripts/main.js"></script>
+
+<script src="scripts/core/engines/grid-rect-integration.js"></script>
+<script src="scripts/core/engines/engine-rectangular-patches.js"></script>
+<script src="scripts/rect-bug-fixes.js"></script>
+
+<script src="scripts/grid-autofit.js"></script>
 </body>
 </html>
