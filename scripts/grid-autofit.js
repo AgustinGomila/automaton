@@ -2,144 +2,155 @@
  * grid-autofit.js
  *
  * Detecta el tamaño óptimo de la cuadrícula al inicio de la app,
- * midiendo el espacio real disponible para el canvas después de que
- * el layout se haya pintado.
+ * midiendo el espacio real disponible para el canvas una vez que
+ * el layout se ha pintado.
  *
- * Estrategia:
- *   1. Espera a que app:ready sea emitido (automaton + UI listos).
- *   2. Mide el área disponible del canvas-wrapper usando getBoundingClientRect.
- *   3. Calcula gridWidth = floor(availableWidth / cellSize),
- *              gridHeight = floor(availableHeight / cellSize).
- *   4. Aplica el resize y sincroniza sliders + badge.
+ * Funciona tanto en desktop como en móvil. En móvil el panel izquierdo
+ * está oculto (drawer) y el canvas-wrapper ocupa toda la pantalla menos
+ * el header y la barra de patrones, por lo que el cálculo se hace sobre
+ * el viewport en lugar del wrapper (que puede tener height:0 si aún
+ * no se renderizó el layout flex).
  *
- * Solo se ejecuta una vez al inicio. No reemplaza el resize manual del usuario.
- * En móvil no actúa (ResponsiveController ya fija 200×200).
- *
- * Cargar después de grid-rect-integration.js.
+ * Cargar después de grid-rect-integration.js y responsive-controller.js.
  */
 
 (function initGridAutofit() {
     'use strict';
 
-    /** Margen de seguridad en píxeles para no llegar justo al borde del scroll. */
-    const MARGIN_PX = 8;
+    /** Margen de seguridad para no tocar el borde del scroll. */
+    const MARGIN_PX = 6;
 
-    /** Mínimo de celdas por eje para que el autofit tenga sentido. */
+    /** Mínimo de celdas por eje. */
     const MIN_CELLS = 20;
 
-    /** Tamaño máximo permitido (mismo límite que GridManager). */
+    /** Máximo permitido (igual a GridManager). */
     const MAX_CELLS = 1000;
 
     /**
-     * Mide el área disponible para el canvas y devuelve {w, h} en píxeles.
-     * Usa el contenedor .canvas-wrapper que es el scroll-parent directo del canvas.
+     * Mide el área real disponible para el canvas.
+     *
+     * Desktop: usa getBoundingClientRect sobre .canvas-wrapper que ya
+     *          tiene su altura definitiva dentro del layout flex.
+     *
+     * Mobile:  el canvas-wrapper puede estar colapsado o con scroll.
+     *          Se calcula como: viewport - header - stats - patterns bar - gaps.
      *
      * @returns {{ w: number, h: number } | null}
      */
     function measureAvailableArea() {
+        const isMobile = window.innerWidth <= 768;
+
+        if (isMobile) {
+            return measureMobile();
+        }
+
+        // ── Desktop: medir el wrapper directamente ────────────────────────
         const wrapper = document.querySelector('.canvas-wrapper');
         if (!wrapper) return null;
 
         const rect = wrapper.getBoundingClientRect();
-
-        // Descontar el padding del canvas-container (10px × 2 lados = 20px)
+        // Descontar el padding del #canvas-container (10px × 2 lados)
         const containerPadding = 20;
-
         const w = Math.floor(rect.width - containerPadding - MARGIN_PX);
         const h = Math.floor(rect.height - containerPadding - MARGIN_PX);
-
-        return w > 0 && h > 0 ? {w, h} : null;
+        return (w > 0 && h > 0) ? {w, h} : null;
     }
 
     /**
-     * Calcula el tamaño óptimo del grid dado el área disponible y el cellSize.
-     *
-     * @param {{ w: number, h: number }} area
+     * Calcula el área disponible en móvil sustrayendo las alturas reales
+     * de header, stats y patterns bar al viewport.
+     */
+    function measureMobile() {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+
+        // Medir componentes que consumen espacio vertical
+        const headerEl = document.querySelector('header');
+        const statsEl = document.querySelector('.stats');
+        const patternsEl = document.querySelector('.patterns-horizontal-container');
+
+        const headerH = headerEl ? headerEl.getBoundingClientRect().height : 60;
+        const statsH = statsEl ? statsEl.getBoundingClientRect().height : 40;
+        const patternsH = patternsEl ? patternsEl.getBoundingClientRect().height : 120;
+
+        // Gaps del container (padding top + bottom + gaps internos)
+        const containerGaps = 40;
+
+        const availW = Math.floor(vw - MARGIN_PX * 2);
+        const availH = Math.floor(vh - headerH - statsH - patternsH - containerGaps);
+
+        return (availW > 0 && availH > 0) ? {w: availW, h: availH} : null;
+    }
+
+    /**
+     * Calcula el tamaño óptimo del grid en celdas.
+     * @param {{ w: number, h: number }} area — píxeles disponibles
      * @param {number} cellSize
      * @returns {{ gridWidth: number, gridHeight: number }}
      */
     function computeOptimalSize(area, cellSize) {
         const cs = Math.max(1, cellSize);
-        const gridWidth = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(area.w / cs)));
-        const gridHeight = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(area.h / cs)));
-        return {gridWidth, gridHeight};
+        return {
+            gridWidth: Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(area.w / cs))),
+            gridHeight: Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(area.h / cs)))
+        };
     }
 
     /**
-     * Aplica el tamaño óptimo al autómata y sincroniza todos los controles UI.
-     *
-     * @param {CellularAutomaton} automaton
-     * @param {UIController}      uiController
-     * @param {number}            gridWidth
-     * @param {number}            gridHeight
+     * Aplica el tamaño al autómata y sincroniza todos los controles UI.
      */
-    function applyOptimalSize(automaton, uiController, gridWidth, gridHeight) {
-        // Evitar resize innecesario si ya coincide
+    function applyOptimalSize(automaton, gridWidth, gridHeight) {
         if (automaton.gridWidth === gridWidth && automaton.gridHeight === gridHeight) return;
 
         automaton.resizeGrid(gridWidth, gridHeight);
 
-        // ── Sincronizar sliders rectangulares ─────────────────────────────
-        const wSlider = document.getElementById('gridWidth');
-        const hSlider = document.getElementById('gridHeight');
-        const wDisplay = document.getElementById('gridWidthValue');
-        const hDisplay = document.getElementById('gridHeightValue');
-        const badge = document.getElementById('gridDimensionsBadge');
+        // ── Sliders rectangulares ─────────────────────────────────────────
+        _setEl('gridWidth', 'value', gridWidth);
+        _setEl('gridHeight', 'value', gridHeight);
+        _setEl('gridWidthValue', 'textContent', gridWidth);
+        _setEl('gridHeightValue', 'textContent', gridHeight);
 
-        if (wSlider) wSlider.value = gridWidth;
-        if (hSlider) hSlider.value = gridHeight;
-        if (wDisplay) wDisplay.textContent = gridWidth;
-        if (hDisplay) hDisplay.textContent = gridHeight;
+        const badge = document.getElementById('gridDimensionsBadge');
         if (badge) {
             badge.textContent = `${gridWidth}×${gridHeight}`;
             badge.classList.toggle('rect-badge', gridWidth !== gridHeight);
         }
 
-        // ── Sincronizar slider legacy (#gridSize) si existe ───────────────
-        const legacySlider = document.getElementById('gridSize');
-        const legacyDisplay = document.getElementById('gridSizeValue');
+        // ── Slider legacy (#gridSize) ─────────────────────────────────────
         const maxDim = Math.max(gridWidth, gridHeight);
-        if (legacySlider) legacySlider.value = maxDim;
-        if (legacyDisplay) legacyDisplay.textContent = `${gridWidth}×${gridHeight}`;
+        _setEl('gridSize', 'value', maxDim);
+        _setEl('gridSizeValue', 'textContent', `${gridWidth}×${gridHeight}`);
 
-        // ── Notificar en consola para facilitar ajuste manual ─────────────
         console.info(
             `🔲 Grid autofit: ${gridWidth}×${gridHeight} ` +
             `(cellSize=${automaton.cellSize}, ` +
+            `${window.innerWidth <= 768 ? 'mobile' : 'desktop'}, ` +
             `viewport=${window.innerWidth}×${window.innerHeight})`
         );
     }
 
+    function _setEl(id, prop, value) {
+        const el = document.getElementById(id);
+        if (el) el[prop] = value;
+    }
+
     /**
-     * Punto de entrada principal.
-     * Se llama una vez cuando app:ready es emitido.
+     * Punto de entrada. Se llama tras app:ready con doble rAF para garantizar
+     * que el navegador completó al menos un ciclo layout + paint antes de medir.
      */
     function run() {
-        const app = window.app;
-        if (!app?.automaton || !app?.uiController) return;
-
-        const automaton = app.automaton;
-        const uiController = app.uiController;
-
-        // En móvil, ResponsiveController ya gestiona el tamaño → no interferir
-        if (window.innerWidth <= 768) return;
+        const automaton = window.app?.automaton;
+        if (!automaton) return;
 
         const area = measureAvailableArea();
         if (!area) return;
 
         const {gridWidth, gridHeight} = computeOptimalSize(area, automaton.cellSize);
-        applyOptimalSize(automaton, uiController, gridWidth, gridHeight);
+        applyOptimalSize(automaton, gridWidth, gridHeight);
     }
 
-    // Esperar a que el layout esté completamente pintado antes de medir.
-    // app:ready dispara cuando el autómata y la UI están listos, pero el
-    // layout puede no haber alcanzado su tamaño definitivo todavía.
-    // Dos rAF garantizan que el navegador haya completado al menos un ciclo
-    // de layout + paint antes de medir getBoundingClientRect().
     eventBus.on('app:ready', () => {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(run);
-        });
+        requestAnimationFrame(() => requestAnimationFrame(run));
     });
 
 })();
