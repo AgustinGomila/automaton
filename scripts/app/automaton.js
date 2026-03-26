@@ -373,6 +373,7 @@ class CellularAutomaton {
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
                 this.render();
+                // Re-inicializar el worker para que aplique la nueva regla B/S.
                 this._initWorker();
                 eventBus.emit('automaton:ruleChanged', this.core.ruleEngine);
                 break;
@@ -380,6 +381,10 @@ class CellularAutomaton {
                 this.generation = 0;
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
+                // Re-inicializar el worker para que reciba los nuevos offsets.
+                // Sin esto, grids ≥ 600 seguirían usando el fastpath Moore-1
+                // sin importar la vecindad configurada.
+                this._initWorker();
                 eventBus.emit('automaton:neighborhoodChanged', event.info);
                 break;
             case 'randomize':
@@ -520,8 +525,8 @@ class CellularAutomaton {
         return changed;
     }
 
-    _nextGenerationWorker() {
-        this._workerManager.requestNextGeneration();
+    _nextGenerationWorker(stepsPerFrame = 1) {
+        this._workerManager.requestNextGeneration(stepsPerFrame);
         return 0;
     }
 
@@ -572,8 +577,11 @@ class CellularAutomaton {
             return;
         }
         if (this._workerManager.isProcessing) return;
+
         if (this._workerManager.isAvailable) {
-            this.nextGeneration();
+            // El worker ejecuta stepsPerFrame pasos internamente antes de responder.
+            // Esto hace efectivos los niveles de velocidad 7-10 incluso con el worker.
+            this._nextGenerationWorker(stepsPerFrame);
             return;
         }
 

@@ -84,23 +84,96 @@ function sync(data) {
 
 // ─── Paso de simulación ───────────────────────────────────────────────────────
 
-function step() {
+/**
+ * Ejecuta `count` pasos (default 1) y devuelve el resultado agregado.
+ *
+ * Con count > 1, acumula los índices de celdas cambiadas de todos los
+ * pasos en un Set, de modo que el renderer sólo repinta las que difieren
+ * del estado previo (no cada transición intermedia). La población se
+ * calcula una sola vez sobre el estado final.
+ *
+ * Esto hace efectivos los niveles de velocidad 7–10 (2/4/8/16 pasos/frame)
+ * incluso con grids grandes donde el worker es obligatorio.
+ */
+function step(count) {
     if (!frontGrid) return;
+    count = (count > 1) ? count : 1;
 
+    if (count === 1) {
+        _stepSingle();
+        return;
+    }
+
+    // Múltiples pasos: acumular índices únicos en un Uint8Array de flags
+    // (más rápido que un Set para índices densos en grids grandes).
+    const total = width * height;
+    const dirtyMap = new Uint8Array(total);  // 1 = celda cambió en algún paso
+    let dirtyCount = 0;
+
+    for (let s = 0; s < count; s++) {
+        const changed = _runStep();
+        for (let i = 0; i < changed; i++) {
+            const idx = _changedBuf[i];
+            if (!dirtyMap[idx]) {
+                dirtyMap[idx] = 1;
+                dirtyCount++;
+            }
+        }
+    }
+
+    // Compactar en _changedBuf y emitir
+    let out = 0;
+    for (let i = 0; i < total && out < dirtyCount; i++) {
+        if (dirtyMap[i]) _changedBuf[out++] = i;
+    }
+
+    _emitResult(dirtyCount);
+}
+
+/** Camino rápido: un único paso, sin overhead de acumulación. */
+function _stepSingle() {
+    const changed = _runStep();
+    const transferBuf = _changedBuf.buffer.slice(0, changed * 4);
+    const pop = _countPopulation();
+
+    self.postMessage(
+        {type: 'result', changedCells: transferBuf, changedCount: changed, population: pop, generation},
+        [transferBuf]
+    );
+}
+
+/** Emite resultado tras N pasos. changedCount índices ya escritos en _changedBuf. */
+function _emitResult(changedCount) {
+    const transferBuf = _changedBuf.buffer.slice(0, changedCount * 4);
+    const pop = _countPopulation();
+    self.postMessage(
+        {type: 'result', changedCells: transferBuf, changedCount, population: pop, generation},
+        [transferBuf]
+    );
+}
+
+/**
+ * Ejecuta un único paso: calcula la nueva generación, hace swap de buffers
+ * e incrementa generation.
+ * @returns {number} celdas cambiadas en este paso
+ */
+function _runStep() {
     const changed = isMoore1 && wrapEdges
         ? stepMoore1Wrap()
         : isMoore1
             ? stepMoore1Bounded()
             : stepGeneric();
 
-    // Swap buffers
     const tmp = frontGrid;
     frontGrid = backGrid;
     backGrid = tmp;
 
     generation++;
+    return changed;
+}
 
-    // Calcular población
+/** Cuenta la población total del frontGrid. */
+function _countPopulation() {
     let pop = 0;
     for (let x = 0; x < width; x++) {
         const col = frontGrid[x];
@@ -108,14 +181,9 @@ function step() {
             if (col[y]) pop++;
         }
     }
-
-    const transferBuf = _changedBuf.buffer.slice(0, changed * 4);
-
-    self.postMessage(
-        {type: 'result', changedCells: transferBuf, changedCount: changed, population: pop, generation},
-        [transferBuf]
-    );
+    return pop;
 }
+
 
 // ─── Fastpath Moore radio-1, wrap toroidal ────────────────────────────────────
 
@@ -214,7 +282,7 @@ self.onmessage = function (e) {
     try {
         const {type, data} = e.data;
         if (type === 'init') init(data);
-        else if (type === 'step') step();
+        else if (type === 'step') step(data?.count);
         else if (type === 'sync') sync(data);
         else self.postMessage({type: 'error', message: `Unknown type: ${type}`});
     } catch (err) {

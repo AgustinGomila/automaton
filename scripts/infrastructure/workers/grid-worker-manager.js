@@ -106,10 +106,17 @@ class GridWorkerManager {
         }
     }
 
-    requestNextGeneration() {
+    /**
+     * Solicita N pasos al worker.
+     * El worker los ejecuta internamente antes de responder, acumulando
+     * los índices de celdas cambiadas en un único mensaje de retorno.
+     * @param {number} [count=1]
+     * @returns {boolean} true si el mensaje fue enviado
+     */
+    requestNextGeneration(count = 1) {
         if (!this.isAvailable) return false;
         this.isProcessing = true;
-        this._worker.postMessage({type: 'step'});
+        this._worker.postMessage({type: 'step', data: {count}});
         return true;
     }
 
