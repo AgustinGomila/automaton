@@ -324,8 +324,12 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.TRIANGLE);
 
-            for (let x = 0; x < this.automaton.gridSize; x++) {
-                for (let y = 0; y < this.automaton.gridSize; y++) {
+            // Limpiar el grid completo con las dimensiones reales (rectangular).
+            // gridSize = max(w,h) dejaría filas/columnas sin limpiar en grids no cuadrados.
+            const gw = this.automaton.gridWidth;
+            const gh = this.automaton.gridHeight;
+            for (let x = 0; x < gw; x++) {
+                for (let y = 0; y < gh; y++) {
                     this.automaton.grid[x][y] = 0;
                 }
             }
@@ -364,8 +368,11 @@ class SpecialModeController {
         this.automaton.specialMode = null;
         this.automaton.generation = 0;
 
-        for (let x = 0; x < this.automaton.gridSize; x++) {
-            for (let y = 0; y < this.automaton.gridSize; y++) {
+        // Limpiar el grid completo con las dimensiones reales (rectangular).
+        const gw = this.automaton.gridWidth;
+        const gh = this.automaton.gridHeight;
+        for (let x = 0; x < gw; x++) {
+            for (let y = 0; y < gh; y++) {
                 this.automaton.grid[x][y] = 0;
             }
         }
@@ -467,12 +474,7 @@ class SpecialModeController {
         this._returnToStandard();
         // Restaurar swatches binarios y respetar estado del toggle de actividad
         window.app?.uiController?._syncActivityColorsBlock(false);
-        window.app?.uiController?._toggleActivityEffect(true);
-
-        // Limpiar el color provider del renderer al volver a modo estándar
-        this.automaton.renderer?.setColorProvider?.(null);
-        this.automaton._markAllDirty();
-        this.automaton.render();
+        window.app?.uiController?._toggleActivityEffect(true)
     }
 
     async activateUWMode() {
@@ -830,7 +832,12 @@ class SpecialModeController {
             this.automaton.renderer = this.automaton._originalRenderer;
             this.automaton._originalRenderer = null;
             oldRenderer?.destroy?.();
-            this.automaton._resizeRenderer(this.automaton.gridSize, this.automaton.cellSize);
+            // Sin argumentos: _resizeRenderer usa automaton.gridWidth, gridHeight y cellSize
+            // como defaults, que son los valores reales del grid rectangular.
+            // La firma antigua _resizeRenderer(gridSize, cellSize) era incorrecta:
+            // pasaba gridSize como gw y cellSize (~4) como gh, generando dimensiones
+            // absurdas (ej. 500×4 en lugar de 300×200).
+            this.automaton._resizeRenderer();
         }
         if (this.automaton._originalCore) {
             this.automaton.core = this.automaton._originalCore;

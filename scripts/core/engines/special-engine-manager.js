@@ -202,9 +202,32 @@ class SpecialEngineManager {
             if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const useWebGL2 = this._detectWebGL2Support();
+
+            // Calcular el cellSize máximo que mantiene el canvas triangular
+            // dentro de las dimensiones del canvas original.
+            //
+            // Geometría del canvas triangular (igual en TriangleRenderer y WebGL2):
+            //   canvasWidth  = (triWidth  / 2 + 0.5) × cs
+            //   canvasHeight = (triHeight × √3/2)    × cs
+            //
+            // Con triWidth = gridWidth×2 y triHeight = gridHeight, despejamos cs:
+            //   csFromWidth  = origW / (gridWidth  + 0.5)   ≈ origCellSize
+            //   csFromHeight = origH / (gridHeight × √3/2)  ≈ origCellSize × 1.155
+            //
+            // El binding constraint es siempre el ancho, lo que produce un cellSize
+            // casi igual al original y un canvas triangular proporcional al rectangular.
+            const origW = canvas.width;
+            const origH = canvas.height;
+            const gw = this._getGridWidth();
+            const gh = this._getGridHeight();
+            const csFromWidth = origW / (gw + 0.5);
+            const csFromHeight = origH / (gh * (Math.sqrt(3) / 2));
+            // Floor para no superar el límite; clamp entre 2 y 20 como guardia extrema
+            const fittedCellSize = Math.max(2, Math.min(20, Math.floor(Math.min(csFromWidth, csFromHeight))));
+
             const rendererOptions = {
                 canvas, container,
-                cellSize: Math.max(3, Math.min(6, this._getCellSize())),
+                cellSize: fittedCellSize,
                 showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
                 colorAlive: '#ec4899',
                 colorDead: '#0f172a',

@@ -33,8 +33,12 @@ class TriangleEngine {
     }
 
     activate(options = {}) {
-        const width = this.automaton.gridSize * 2;
-        const height = this.automaton.gridSize;
+        // Preservar las proporciones del grid rectangular:
+        //   triWidth  = gridWidth  * 2  (cada celda rectangular mapea a 2 triángulos en X)
+        //   triHeight = gridHeight      (1:1 en Y)
+        // Para grids cuadrados esto equivale al comportamiento anterior (size*2 / size).
+        const width = this.automaton.gridWidth * 2;
+        const height = this.automaton.gridHeight;
 
         this.ruleNumber = options.rule ?? 50;
         this.wrapEdges = options.wrap ?? true;
@@ -363,18 +367,19 @@ class TriangleEngine {
     }
 
     _syncChangedToAutomaton() {
-        const autoSize = this.automaton.gridSize;
+        const autoW = this.automaton.gridWidth;
+        const autoH = this.automaton.gridHeight;
         const triWidth = this.gridManager.width;
         const triHeight = this.gridManager.height;
         const autoGrid = this.automaton.grid;
         const triGrid = this.gridManager.grid;
 
-        // Scale factors
-        const scaleX = triWidth / autoSize;
-        const scaleY = triHeight / autoSize;
+        // Factores de escala (con grid rectangular: scaleX=2, scaleY=1)
+        const scaleX = triWidth / autoW;
+        const scaleY = triHeight / autoH;
 
-        // Track which auto cells were modified to avoid redundant marks
-        const modifiedAutoCells = new Uint8Array(autoSize * autoSize);
+        // Bitmap de deduplicación: índice column-major x * autoH + y
+        const modifiedAutoCells = new Uint8Array(autoW * autoH);
         let modifiedCount = 0;
 
         for (let i = 0; i < this._changedCells.length; i++) {
@@ -382,12 +387,12 @@ class TriangleEngine {
             const q = packed >>> 16;
             const r = packed & 0xFFFF;
 
-            // Mapeo inverso: triangular -> automaton
+            // Mapeo inverso: triangular → automaton
             const autoX = Math.floor(q / scaleX);
             const autoY = Math.floor(r / scaleY);
 
-            if (autoX >= 0 && autoX < autoSize && autoY >= 0 && autoY < autoSize) {
-                const autoIdx = autoX * autoSize + autoY;
+            if (autoX >= 0 && autoX < autoW && autoY >= 0 && autoY < autoH) {
+                const autoIdx = autoX * autoH + autoY;   // column-major
 
                 if (!modifiedAutoCells[autoIdx]) {
                     modifiedAutoCells[autoIdx] = 1;
@@ -425,18 +430,21 @@ class TriangleEngine {
     }
 
     _initializeFromAutomaton() {
-        const autoSize = this.automaton.gridSize;
+        const autoW = this.automaton.gridWidth;
+        const autoH = this.automaton.gridHeight;
         const centerQ = Math.floor(this.gridManager.width / 2);
         const centerR = Math.floor(this.gridManager.height / 2);
         const autoGrid = this.automaton.grid;
 
-        const halfSize = autoSize >> 1;
+        // Offset para centrar el grid rectangular en el triangular
+        const halfW = autoW >> 1;
+        const halfH = autoH >> 1;
 
-        for (let x = 0; x < autoSize; x++) {
-            for (let y = 0; y < autoSize; y++) {
+        for (let x = 0; x < autoW; x++) {
+            for (let y = 0; y < autoH; y++) {
                 if (autoGrid[x][y]) {
-                    const tq = centerQ + x - halfSize;
-                    const tr = centerR + y - halfSize;
+                    const tq = centerQ + x - halfW;
+                    const tr = centerR + y - halfH;
                     if (this.gridManager.isValid(tq, tr)) {
                         this.gridManager.grid[tq][tr] = 1;
                     }
@@ -448,21 +456,22 @@ class TriangleEngine {
     }
 
     _syncToAutomaton() {
-        // Mapeo simple: samplear el grid triangular al cuadrado
-        const autoSize = this.automaton.gridSize;
+        // Mapeo: samplear el grid triangular al rectangular
+        const autoW = this.automaton.gridWidth;
+        const autoH = this.automaton.gridHeight;
         const triGrid = this.gridManager.grid;
         const autoGrid = this.automaton.grid;
 
-        const scaleX = this.gridManager.width / autoSize;
-        const scaleY = this.gridManager.height / autoSize;
+        const scaleX = this.gridManager.width / autoW;
+        const scaleY = this.gridManager.height / autoH;
 
-        for (let x = 0; x < autoSize; x++) {
+        for (let x = 0; x < autoW; x++) {
             const tq = Math.floor(x * scaleX);
             if (tq >= this.gridManager.width) continue;
 
             const triCol = triGrid[tq];
 
-            for (let y = 0; y < autoSize; y++) {
+            for (let y = 0; y < autoH; y++) {
                 const tr = Math.floor(y * scaleY);
                 if (tr >= this.gridManager.height) continue;
 
