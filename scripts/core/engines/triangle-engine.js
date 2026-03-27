@@ -112,47 +112,54 @@ class TriangleEngine {
     }
 
     /**
-     * Redimensiona el grid triangular (llamado por el autómata principal)
-     * @param {number} newSize - Nuevo tamaño del grid cuadrado
+     * Redimensiona el grid triangular.
+     *
+     * La relación geométrica es fija: cada celda rectangular mapea a 2 triángulos
+     * en X, y a 1 en Y.  Por eso:
+     *   triWidth  = rectWidth  * 2
+     *   triHeight = rectHeight
+     *
+     * @param {number} rectWidth  — ancho del grid rectangular de referencia
+     * @param {number} [rectHeight=rectWidth] — alto del grid rectangular (cuadrado si se omite)
      */
-    resize(newSize) {
+    resize(rectWidth, rectHeight = rectWidth) {
         if (!this.isActive || !this.gridManager) return;
 
-        const newWidth = newSize * 2;
-        const newHeight = newSize;
+        const newWidth = rectWidth * 2;
+        const newHeight = rectHeight;
 
         if (this.gridManager.width === newWidth && this.gridManager.height === newHeight) {
             return;
         }
 
-        console.debug(`🔺 Triangle Engine resize: ${this.gridManager.width}x${this.gridManager.height} → ${newWidth}x${newHeight}`);
+        console.debug(`🔺 Triangle Engine resize: ${this.gridManager.width}×${this.gridManager.height} → ${newWidth}×${newHeight}`);
 
-        // Guardar y migrar datos
+        // Copia anclada en la esquina superior izquierda.
+        // Las celdas que caben en el nuevo tamaño se preservan exactamente;
+        // las que quedan fuera se pierden. No se escala ni se desplaza el dibujo.
         const oldGrid = this.gridManager.grid;
         const oldWidth = this.gridManager.width;
         const oldHeight = this.gridManager.height;
+        const copyW = Math.min(oldWidth, newWidth);
+        const copyH = Math.min(oldHeight, newHeight);
 
         this.gridManager = new TriangleGridManager(newWidth, newHeight);
         this._newGrid = Array.from({length: newWidth}, () => new Uint8Array(newHeight));
 
-        // Sampleo para preservar patrón
-        const scaleX = oldWidth / newWidth;
-        const scaleY = oldHeight / newHeight;
-
-        for (let q = 0; q < newWidth; q++) {
-            for (let r = 0; r < newHeight; r++) {
-                const oldQ = Math.floor(q * scaleX);
-                const oldR = Math.floor(r * scaleY);
-                if (oldQ < oldWidth && oldR < oldHeight) {
-                    this.gridManager.grid[q][r] = oldGrid[oldQ][oldR];
-                }
+        for (let q = 0; q < copyW; q++) {
+            const srcCol = oldGrid[q];
+            const dstCol = this.gridManager.grid[q];
+            for (let r = 0; r < copyH; r++) {
+                dstCol[r] = srcCol[r];
             }
         }
 
-        // Sincronizar renderer del triángulo
+        // Notificar al renderer del nuevo gridManager.
+        // NO se pasa cellSize: el renderer mantiene el suyo propio.
+        // Cambiar zoom es responsabilidad exclusiva de setCellSize(), no de resize().
         if (this.automaton?.renderer?.setGridManager) {
             this.automaton.renderer.setGridManager(this.gridManager);
-            this.automaton.renderer.resize(newSize, this.automaton.cellSize);
+            this.automaton.renderer.resize(rectWidth);
         }
 
         // Sincronizar worker con nuevas dimensiones

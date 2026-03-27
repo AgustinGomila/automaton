@@ -218,12 +218,9 @@ class SpecialEngineManager {
             // cs=origCellSize en todos los casos habituales, con un desborde de 1-4 px en
             // ancho (inferior al padding del contenedor y completamente imperceptible).
             //
-            // El canvas triangular es geométricamente más corto que el rectangular
-            // (factor √3/2 ≈ 0.866 en alto). Para que el alto visual coincida con
-            // origH, se pasa targetHeight al renderer: el bitmap mantiene las dimensiones
-            // geométricas correctas para el render y getCellFromMouse, mientras que el
-            // CSS se escala al alto original. La distorsión resultante es exactamente
-            // 2/√3 ≈ 1.155 — constante e imperceptible para el ojo en celdas pequeñas.
+            // El cssHeight lo calcula el renderer internamente como bitmapH × 2/√3,
+            // lo que produce triángulos equiláteros correctos sin importar el historial
+            // de cambios de cellSize. No se necesita targetHeight externo.
             const origW = canvas.width;
             const origH = canvas.height;
             const gw = this._getGridWidth();
@@ -236,10 +233,6 @@ class SpecialEngineManager {
             const rendererOptions = {
                 canvas, container,
                 cellSize: fittedCellSize,
-                // targetHeight: altura CSS del canvas (= origH).
-                // El bitmap queda en sus dimensiones geométricas; el CSS lo estira
-                // para ocupar exactamente el mismo alto que el canvas rectangular.
-                targetHeight: origH,
                 showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
                 colorAlive: '#ec4899',
                 colorDead: '#0f172a',
@@ -252,6 +245,22 @@ class SpecialEngineManager {
 
             this._setRenderer(newRenderer);
             this.specialMode = SpecialEngineManager.MODES.TRIANGLE;
+
+            // Sincronizar automaton.cellSize con el cellSize real del renderer.
+            // fittedCellSize puede diferir de automaton.cellSize (calculado para que el
+            // canvas triangular ocupe el mismo espacio que el rectangular original).
+            // Sin esta sincronización, autoSizeGrid y setCellSize operan con valores
+            // distintos, produciendo grids sobredimensionados o distorsión de triángulos.
+            const automaton = this._getAutomaton();
+            automaton.cellSize = fittedCellSize;
+            // Actualizar el slider y su display para reflejar el zoom real.
+            const cellSizeSlider = document.getElementById('cellSize');
+            if (cellSizeSlider) {
+                cellSizeSlider.value = fittedCellSize;
+                // Actualizar el display asociado si existe
+                const cellSizeDisplay = document.getElementById('cellSizeValue');
+                if (cellSizeDisplay) cellSizeDisplay.textContent = `${fittedCellSize}px`;
+            }
         }
 
         this._specialEngineLoaded = true;

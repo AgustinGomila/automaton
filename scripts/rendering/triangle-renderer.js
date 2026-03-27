@@ -12,14 +12,6 @@ class TriangleRenderer {
         this.colorDead = options.colorDead || '#0f172a';
         this.colorGrid = options.colorGrid || 'rgba(255,255,255,0.1)';
 
-        // Alto CSS objetivo (= alto del canvas rectangular de origen).
-        // El bitmap del canvas mantiene el alto geométrico correcto (gridHeight × √3/2 × cs)
-        // para que el render y getCellFromMouse funcionen sin distorsión lógica.
-        // El CSS se estira al alto original para que el canvas ocupe el mismo espacio
-        // visual que el modo rectangular. La diferencia es un factor 2/√3 ≈ 1.155
-        // (triángulos ligeramente más altos que equiláteros — imperceptible a cellSizes pequeños).
-        this.targetHeight = options.targetHeight || null;
-
         this.gridManager = null;
         this._dirtyCells = new Set();
         this._activityAges = new Map();
@@ -64,7 +56,10 @@ class TriangleRenderer {
     }
 
     resize(gridSize, cellSize) {
-        this.cellSize = cellSize;
+        // Solo actualizar cellSize si se pasa explícitamente.
+        // Cuando se llama solo con gridSize (resize de grid sin cambio de zoom),
+        // se preserva el cellSize actual del renderer.
+        if (cellSize) this.cellSize = cellSize;
         this._rebuildPathCache();
         if (this.gridManager) {
             this._resizeCanvas();
@@ -86,16 +81,16 @@ class TriangleRenderer {
         this.canvas.width = Math.ceil(width);
         this.canvas.height = Math.ceil(height);
 
-        // Dimensiones CSS: ancho natural, alto al valor objetivo si está disponible.
-        // targetHeight hace que el canvas ocupe el mismo espacio visual que el modo
-        // rectangular. getCellFromMouse compensa el escalado vía getBoundingClientRect.
-        const cssHeight = this.targetHeight || this.canvas.height;
+        // El CSS refleja el bitmap exactamente (sin stretch).
+        // fittedCellSize en special-engine-manager se calcula para que bitmapH ≈ origH,
+        // por lo que el canvas llena el espacio sin escalar y los triángulos son equiláteros.
+        // autoSizeGrid usa gh = floor(availH / (√3/2 × cs)) para la misma garantía.
         this.canvas.style.width = this.canvas.width + 'px';
-        this.canvas.style.height = cssHeight + 'px';
+        this.canvas.style.height = this.canvas.height + 'px';
 
         if (this.container) {
             this.container.style.width = (this.canvas.width + 20) + 'px';
-            this.container.style.height = (cssHeight + 20) + 'px';
+            this.container.style.height = (this.canvas.height + 20) + 'px';
         }
     }
 

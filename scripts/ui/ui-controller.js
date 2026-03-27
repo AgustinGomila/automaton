@@ -699,8 +699,27 @@ class UIController {
         if (availW <= 0 || availH <= 0) return;
 
         const cs = automaton.cellSize;
-        const gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
-        const gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
+        let gw, gh;
+
+        if (automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE
+            && automaton.triangleEngine?.isActive) {
+            // Geometría del canvas triangular:
+            //   canvasWidth  = (gw * 2 - 1) * cs/2 + cs  ≈ (gw + 0.5) * cs
+            //   canvasHeight = gh * (√3/2) * cs
+            //
+            // Despejar gw y gh para que el canvas llene exactamente el espacio:
+            //   gw = floor(availW / cs - 0.5)
+            //   gh = floor(availH / (√3/2 * cs))
+            //
+            // Esto garantiza triángulos equiláteros correctos independientemente
+            // del cellSize — el autofit no deforma la geometría.
+            const sqrt3_2 = Math.sqrt(3) / 2;
+            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs - 0.5)));
+            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / (sqrt3_2 * cs))));
+        } else {
+            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
+            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
+        }
 
         if (automaton.gridWidth === gw && automaton.gridHeight === gh) return;
 
@@ -1102,16 +1121,11 @@ class UIController {
             const codec = new MCLCodec();
             const decoded = codec.decode(text);
 
-            // Intentar ajustar el patrón al grid actual antes de redimensionar.
-            // Si el patrón cabe en gridWidth × gridHeight no hace falta ningún cambio.
-            // Solo se redimensiona cuando el patrón excede alguna dimensión real.
-            const gw = this.automaton.gridWidth;
-            const gh = this.automaton.gridHeight;
-
-            if (decoded.width > gw || decoded.height > gh) {
-                // Calcular el nuevo tamaño cuadrado mínimo que contenga el patrón
-                // con un margen del 20% (mínimo 20 celdas), redondeado a múltiplos de 5.
-                const needed = Math.max(decoded.width, decoded.height);
+            // Auto-resize: si el patrón no cabe en el grid actual, ampliar con margen
+            const needed = Math.max(decoded.width, decoded.height);
+            const current = this.automaton.gridSize;
+            if (needed > current) {
+                // Margen del 20% redondeado a múltiplo de 5, mínimo 20px de margen
                 const margin = Math.max(20, Math.round(needed * 0.2 / 5) * 5);
                 const newSize = Math.min(Math.round((needed + margin) / 5) * 5, 1000);
                 this.automaton.resizeGrid(newSize);
