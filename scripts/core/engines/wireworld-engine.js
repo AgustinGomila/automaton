@@ -1,22 +1,26 @@
 /**
- * WireWorldEngine - Motor del autómata WireWorld (Brian Silverman, 1987).
+ * WireWorldEngine — Motor del autómata WireWorld (Brian Silverman, 1987).
  *
  * 4 estados:
  *   0 — Empty     (vacío, siempre permanece vacío)
- *   1 — Head      (cabeza de electrón, → Tail)
- *   2 — Tail      (cola de electrón, → Conductor)
- *   3 — Conductor (conductor; → Head si tiene 1 o 2 vecinos Head, si no → Conductor)
+ *   1 — Head      (cabeza de electrón → Tail en el siguiente paso)
+ *   2 — Tail      (cola de electrón  → Conductor en el siguiente paso)
+ *   3 — Conductor (→ Head si tiene 1 o 2 vecinos Head; si no → Conductor)
  *
  * Vecindario: Moore (8 vecinos), configurable con wrap toroidal.
  *
- * Fuente de verdad: stateGrid[][] (Uint8Array[gridWidth][gridHeight]).
- * grid[][] refleja vivo/muerto (0 si Empty, 1 si cualquier otro estado).
+ * ─── Fuentes de verdad ─────────────────────────────────────────────────
+ * stateGrid[][] almacena el estado 0..3 por celda.
+ * grid[][] es un reflejo binario: 0 si Empty, 1 si cualquier otro estado.
  * colorProvider inyecta el color de cada estado al renderer.
  *
- * Índice plano: x * gridHeight + y  (column-major, igual que GridRenderer/GridManager).
- * Soporta grids rectangulares: ctx.gridWidth y ctx.gridHeight se usan en lugar
- * del legacy ctx.gridSize (Math.max) para evitar desplazamientos de coordenadas
- * en grillas no cuadradas.
+ * ─── Convención de índice plano ────────────────────────────────────────
+ * Column-major:  index = x * gridHeight + y
+ * Consistente con GridRenderer y GridManager.
+ *
+ * ─── Grids rectangulares ───────────────────────────────────────────────
+ * Lee gridWidth/gridHeight desde _ctx en cada operación; no guarda
+ * snapshots de dimensiones, por lo que funciona tras resize.
  *
  * Referencia: Dewdney (1990), Scientific American.
  */
@@ -38,10 +42,10 @@ class WireWorldEngine {
     /**
      * @param {Object} ctx - Contexto inyectado por SpecialEngineManager
      *   ctx.grid       → automaton.grid (Uint8Array[])
-     *   ctx.gridWidth  → ancho del grid en celdas
-     *   ctx.gridHeight → alto del grid en celdas
+     *   ctx.gridWidth  → ancho actual del grid
+     *   ctx.gridHeight → alto actual del grid
      *   ctx.renderer   → GridRenderer activo
-     *   ctx.wrapEdges  → boolean
+     *   ctx.wrapEdges  → boolean, modo toroidal
      */
     constructor(ctx) {
         this._ctx = ctx;
@@ -59,14 +63,12 @@ class WireWorldEngine {
     // =========================================
 
     activate() {
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
-        const grid = this._ctx.grid;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
         this.stateGrid = Array.from({length: gw}, () => new Uint8Array(gh));
         this._nextState = Array.from({length: gw}, () => new Uint8Array(gh));
 
-        // Las celdas vivas del grid actual se promueven a Conductor (3).
+        // Las celdas vivas del grid actual se promueven a Conductor.
         // Permite entrar desde cualquier otro modo sin perder el dibujo.
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
@@ -94,27 +96,24 @@ class WireWorldEngine {
         console.debug('⚡ WireWorld desactivado');
     }
 
+    /**
+     * Reinicia el grid a estado vacío, conservando la regla activa.
+     * Verifica ambas dimensiones al detectar si el grid fue redimensionado;
+     * solo comprobar el ancho no es suficiente si únicamente cambió el alto.
+     */
     reset() {
         if (!this.isActive) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
-        // Si stateGrid tiene un tamaño distinto al grid actual (puede ocurrir tras
-        // redimensionado del grid), recrearlo en lugar de intentar limpiar columnas
-        // inexistentes, lo que causaría TypeError al llamar .fill() sobre undefined.
+        // Recrear buffers si cualquiera de las dimensiones cambió
         if (!this.stateGrid || this.stateGrid.length !== gw || this.stateGrid[0]?.length !== gh) {
             this.stateGrid = Array.from({length: gw}, () => new Uint8Array(gh));
             this._nextState = Array.from({length: gw}, () => new Uint8Array(gh));
         } else {
-            for (let x = 0; x < gw; x++) {
-                this.stateGrid[x].fill(0);
-            }
+            for (let x = 0; x < gw; x++) this.stateGrid[x].fill(0);
         }
 
-        // Limpiar grid principal siempre
-        for (let x = 0; x < gw; x++) {
-            this._ctx.grid[x].fill(0);
-        }
+        for (let x = 0; x < gw; x++) grid[x].fill(0);
 
         this.generation = 0;
         this._changedIndices = [];
@@ -122,15 +121,14 @@ class WireWorldEngine {
     }
 
     /**
-     * Randomiza el grid con una distribución realista para WireWorld:
+     * Randomiza con una distribución realista para WireWorld:
      * conductores dispersos (~30%), muy pocas cabezas (~2%), resto vacío.
-     * No se colocan colas (se forman naturalmente al avanzar).
-     * @param {number} density - densidad base (0-1), ajustada internamente
+     * No se colocan colas — se forman naturalmente al avanzar.
+     * @param {number} density — densidad base (0-1), ajustada internamente
      */
     randomize(density = 0.35) {
         if (!this.stateGrid) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
         const conductorProb = density * 0.9;
         const headProb = density * 0.05;
 
@@ -143,7 +141,7 @@ class WireWorldEngine {
                 else s = WireWorldEngine.EMPTY;
 
                 this.stateGrid[x][y] = s;
-                this._ctx.grid[x][y] = s > 0 ? 1 : 0;
+                grid[x][y] = s > 0 ? 1 : 0;
             }
         }
 
@@ -159,28 +157,29 @@ class WireWorldEngine {
     /**
      * Avanza una generación.
      *
-     * Vecindario Moore (8 vecinos), con wrap toroidal opcional.
-     * Índice plano: x * gridHeight + y (column-major, igual que GridRenderer).
+     * Dos pasadas para consistencia temporal:
+     *   1. Calcular el siguiente estado de cada celda en _nextState.
+     *   2. Aplicar _nextState → stateGrid y registrar cambios.
+     *
+     * Vecindario Moore (8 vecinos). Con wrapEdges activo los bordes
+     * se tratan de forma toroidal; el cambio aplica en caliente.
      */
     step() {
         if (!this.isActive) return false;
 
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid, wrapEdges: wrap} = this._ctx;
         const state = this.stateGrid;
-        const grid = this._ctx.grid;
         const renderer = this._ctx.renderer;
-        const wrap = this._ctx.wrapEdges;
         const changed = this._changedIndices;
         changed.length = 0;
 
-        // Asegurar buffer del tamaño correcto
+        // Asegurar buffer correcto en ambas dimensiones
         if (!this._nextState || this._nextState.length !== gw || this._nextState[0]?.length !== gh) {
             this._nextState = Array.from({length: gw}, () => new Uint8Array(gh));
         }
         const next = this._nextState;
 
-        // Calcular siguiente estado para cada celda
+        // Pasada 1 — calcular siguiente estado
         for (let x = 0; x < gw; x++) {
             const col = state[x];
             const ncol = next[x];
@@ -193,7 +192,9 @@ class WireWorldEngine {
                 } else if (s === WireWorldEngine.TAIL) {
                     ncol[y] = WireWorldEngine.CONDUCTOR;
                 } else {
-                    // CONDUCTOR: contar cabezas en vecindad Moore (8)
+                    // CONDUCTOR: contar cabezas en vecindad Moore (8).
+                    // El early-exit a heads=3 evita trabajo innecesario; la regla
+                    // solo distingue entre 0, 1-2 y ≥3 cabezas.
                     let heads = 0;
                     for (let ddx = -1; ddx <= 1 && heads < 3; ddx++) {
                         let nx = x + ddx;
@@ -216,7 +217,7 @@ class WireWorldEngine {
             }
         }
 
-        // Aplicar y registrar cambios
+        // Pasada 2 — aplicar y registrar cambios
         for (let x = 0; x < gw; x++) {
             const col = state[x];
             const ncol = next[x];
@@ -249,12 +250,9 @@ class WireWorldEngine {
     /**
      * Coloca el estado indicado en la celda (x, y) y marca dirty.
      * Usado por canvas-controller para pintar con el pincel activo.
-     *
-     * Índice plano: x * gridHeight + y (column-major, igual que GridRenderer).
      */
     setStateAt(x, y, state) {
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh} = this._ctx;
         if (x < 0 || x >= gw || y < 0 || y >= gh) return false;
 
         if (this.stateGrid[x][y] === state) return false;
@@ -263,8 +261,7 @@ class WireWorldEngine {
         this._ctx.grid[x][y] = state > 0 ? 1 : 0;
 
         // Índice plano column-major: x * gridHeight + y
-        const idx = x * gh + y;
-        this._ctx.renderer.markDirtyIndex(idx);
+        this._ctx.renderer.markDirtyIndex(x * gh + y);
         return true;
     }
 
@@ -272,10 +269,13 @@ class WireWorldEngine {
     // DESPLAZAMIENTO TOROIDAL (pan)
     // =========================================
 
+    /**
+     * Desplaza el stateGrid (dx, dy) celdas en modo toroidal.
+     * Llamado por shiftGrid() cuando el usuario hace pan con Alt+drag.
+     */
     shift(dx, dy) {
         if (!this.stateGrid) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
         const src = this.stateGrid;
         const dst = Array.from({length: gw}, () => new Uint8Array(gh));
 
@@ -290,13 +290,10 @@ class WireWorldEngine {
 
         this.stateGrid = dst;
 
-        const grid = this._ctx.grid;
         for (let x = 0; x < gw; x++) {
             const col = dst[x];
             const gcol = grid[x];
-            for (let y = 0; y < gh; y++) {
-                gcol[y] = col[y] > 0 ? 1 : 0;
-            }
+            for (let y = 0; y < gh; y++) gcol[y] = col[y] > 0 ? 1 : 0;
         }
     }
 
@@ -306,16 +303,14 @@ class WireWorldEngine {
 
     /**
      * Reconstruye stateGrid a partir del estado actual de grid[][].
-     * - Celda viva (grid=1) con stateGrid=0 → asignada como Conductor (3)
-     * - Celda muerta (grid=0) → stateGrid=0
-     * - Celda viva con stateGrid>0 → se preserva el estado
+     *   - grid=0                      → stateGrid = EMPTY
+     *   - grid=1 y stateGrid=EMPTY    → stateGrid = CONDUCTOR
+     *   - grid=1 y stateGrid>0        → se preserva el estado real
      * Llamado por endDrag() en canvas-controller tras un move/paste.
      */
     syncFromGrid() {
         if (!this.stateGrid) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
-        const grid = this._ctx.grid;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
@@ -324,7 +319,6 @@ class WireWorldEngine {
                 } else if (this.stateGrid[x][y] === WireWorldEngine.EMPTY) {
                     this.stateGrid[x][y] = WireWorldEngine.CONDUCTOR;
                 }
-                // Si grid=1 y stateGrid>0, se preserva el estado real
             }
         }
     }
@@ -344,16 +338,13 @@ class WireWorldEngine {
     /**
      * Proveedor de color para GridRenderer.setColorProvider().
      * Recibe un índice plano (x * gridHeight + y) y devuelve color CSS o null.
-     *
-     * IMPORTANTE: la descomposición usa gridHeight como divisor, igual que
-     * GridRenderer, para que la coordenada x/y corresponda a la celda correcta.
      */
     _colorProvider(cellIndex) {
         if (!this.stateGrid) return null;
         const gh = this._ctx.gridHeight;
         const x = (cellIndex / gh) | 0;
         const y = cellIndex % gh;
-        return WireWorldEngine.COLORS[this.stateGrid[x][y]] ?? null;
+        return WireWorldEngine.COLORS[this.stateGrid[x]?.[y]] ?? null;
     }
 }
 

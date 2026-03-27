@@ -10,8 +10,7 @@
  *   • Usa el flag `_rectPatched_<method>` en cada prototipo para evitar
  *     doble-aplicación si se invoca varias veces.
  *   • SpecialEngineManager._loadScript() la llama tras cada carga lazy para
- *     que los engines cargados a demanda (Wolfram, RD2D,
- *     WireWorld) reciban el parche al estar disponibles.
+ *     que los engines cargados a demanda (Wolfram, RD2D)
  *   • GenerationsEngine se carga de forma estática en index.html y recibe
  *     el parche en la llamada inicial al final de este archivo.
  */
@@ -224,102 +223,6 @@ window.patchEnginesForRectangularGrids = function () {
                     this.stateGrid[x][y] = 0;
                 }
             }
-        }
-    });
-
-    // ─── WireWorldEngine ──────────────────────────────────────────────────
-    patch(window.WireWorldEngine?.prototype, 'step', (_orig) => function () {
-        if (!this.isActive) return false;
-
-        const width = this._ctx.gridWidth || this._ctx.gridSize;
-        const height = this._ctx.gridHeight || this._ctx.gridSize;
-        const state = this.stateGrid;
-        const grid = this._ctx.grid;
-        const renderer = this._ctx.renderer;
-        const wrap = this._ctx.wrapEdges;
-        const changed = this._changedIndices;
-        changed.length = 0;
-
-        if (!this._nextState || this._nextState.length !== width) {
-            this._nextState = Array.from({length: width}, () => new Uint8Array(height));
-        }
-        const next = this._nextState;
-
-        for (let x = 0; x < width; x++) {
-            const col = state[x];
-            const ncol = next[x];
-            for (let y = 0; y < height; y++) {
-                const s = col[y];
-                if (s === 0) {
-                    ncol[y] = 0;
-                } else if (s === 1) {
-                    ncol[y] = 2;
-                }  // HEAD → TAIL
-                else if (s === 2) {
-                    ncol[y] = 3;
-                }  // TAIL → CONDUCTOR
-                else {
-                    let heads = 0;
-                    for (let dx = -1; dx <= 1 && heads < 3; dx++) {
-                        let nx = x + dx;
-                        if (wrap) nx = (nx + width) % width;
-                        else if (nx < 0 || nx >= width) continue;
-                        const nrow = state[nx];
-                        for (let dy = -1; dy <= 1; dy++) {
-                            if (dx === 0 && dy === 0) continue;
-                            let ny = y + dy;
-                            if (wrap) ny = (ny + height) % height;
-                            else if (ny < 0 || ny >= height) continue;
-                            if (nrow[ny] === 1) heads++;
-                        }
-                    }
-                    ncol[y] = (heads === 1 || heads === 2) ? 1 : 3;
-                }
-            }
-        }
-
-        for (let x = 0; x < width; x++) {
-            const col = state[x];
-            const ncol = next[x];
-            const gcol = grid[x];
-            for (let y = 0; y < height; y++) {
-                const ns = ncol[y];
-                if (col[y] !== ns) {
-                    col[y] = ns;
-                    gcol[y] = ns > 0 ? 1 : 0;
-                    const idx = x * height + y;
-                    changed.push(idx);
-                    renderer.markDirtyIndex(idx);
-                }
-            }
-        }
-
-        this.generation++;
-        return true;
-    });
-
-    patch(window.WireWorldEngine?.prototype, 'shift', (_orig) => function (dx, dy) {
-        if (!this.stateGrid) return;
-        const width = this._ctx.gridWidth || this._ctx.gridSize;
-        const height = this._ctx.gridHeight || this._ctx.gridSize;
-        const src = this.stateGrid;
-        const dst = Array.from({length: width}, () => new Uint8Array(height));
-
-        for (let x = 0; x < width; x++) {
-            const srcX = ((x - dx) % width + width) % width;
-            const srcCol = src[srcX];
-            const dstCol = dst[x];
-            for (let y = 0; y < height; y++) {
-                dstCol[y] = srcCol[((y - dy) % height + height) % height];
-            }
-        }
-        this.stateGrid = dst;
-
-        const grid = this._ctx.grid;
-        for (let x = 0; x < width; x++) {
-            const col = dst[x];
-            const gcol = grid[x];
-            for (let y = 0; y < height; y++) gcol[y] = col[y] > 0 ? 1 : 0;
         }
     });
 
