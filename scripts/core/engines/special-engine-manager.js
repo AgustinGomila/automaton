@@ -202,9 +202,44 @@ class SpecialEngineManager {
             if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             const useWebGL2 = this._detectWebGL2Support();
+
+            // Calcular el cellSize que preserva las proporciones del canvas original.
+            //
+            // Geometría del canvas triangular (igual en TriangleRenderer y WebGL2):
+            //   canvasWidth  = ceil((gridWidth  + 0.5) × cs)
+            //   canvasHeight = ceil( gridHeight × √3/2  × cs)
+            //
+            // Con triWidth = gridWidth×2 y triHeight = gridHeight, despejamos cs:
+            //   csFromWidth  = origW / (gridWidth  + 0.5)   ≈ origCellSize
+            //   csFromHeight = origH / (gridHeight × √3/2)  ≈ origCellSize × 1.155
+            //
+            // Math.round en lugar de Math.floor: floor(2.99)=2 pierde un entero completo
+            // y genera un canvas mucho más pequeño que el original. round(2.99)=3 mantiene
+            // cs=origCellSize en todos los casos habituales, con un desborde de 1-4 px en
+            // ancho (inferior al padding del contenedor y completamente imperceptible).
+            //
+            // El canvas triangular es geométricamente más corto que el rectangular
+            // (factor √3/2 ≈ 0.866 en alto). Para que el alto visual coincida con
+            // origH, se pasa targetHeight al renderer: el bitmap mantiene las dimensiones
+            // geométricas correctas para el render y getCellFromMouse, mientras que el
+            // CSS se escala al alto original. La distorsión resultante es exactamente
+            // 2/√3 ≈ 1.155 — constante e imperceptible para el ojo en celdas pequeñas.
+            const origW = canvas.width;
+            const origH = canvas.height;
+            const gw = this._getGridWidth();
+            const gh = this._getGridHeight();
+            const csFromWidth = origW / (gw + 0.5);
+            const csFromHeight = origH / (gh * (Math.sqrt(3) / 2));
+            // Round (no floor): recupera origCellSize con ≤4 px de desborde en ancho
+            const fittedCellSize = Math.max(2, Math.min(20, Math.round(Math.min(csFromWidth, csFromHeight))));
+
             const rendererOptions = {
                 canvas, container,
-                cellSize: Math.max(3, Math.min(6, this._getCellSize())),
+                cellSize: fittedCellSize,
+                // targetHeight: altura CSS del canvas (= origH).
+                // El bitmap queda en sus dimensiones geométricas; el CSS lo estira
+                // para ocupar exactamente el mismo alto que el canvas rectangular.
+                targetHeight: origH,
                 showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
                 colorAlive: '#ec4899',
                 colorDead: '#0f172a',

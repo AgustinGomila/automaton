@@ -126,6 +126,20 @@ class GridWorkerManager {
         this._worker.postMessage({type: 'sync', data: {gridFlat}}, [gridFlat.buffer]);
     }
 
+    /**
+     * Actualiza parámetros de simulación en el worker sin reinicializarlo.
+     * Solo se envía si el worker existe, está listo y no está procesando un
+     * paso — el worker es idle entre mensajes, por lo que el cambio se aplica
+     * antes del siguiente 'step'.
+     *
+     * @param {Object} config
+     * @param {boolean} [config.wrapEdges] — activa/desactiva modo toroidal
+     */
+    updateConfig(config) {
+        if (!this._worker || !this._isReady) return;
+        this._worker.postMessage({type: 'config', data: config});
+    }
+
     cleanup() {
         this._terminate();
     }

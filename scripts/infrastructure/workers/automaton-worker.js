@@ -2,9 +2,10 @@
  * automaton-worker.js — Worker stateful con doble buffer.
  *
  * Protocolo de mensajes:
- *   → { type: 'init',  data: { gridFlat, width, height, rule, wrapEdges, neighborOffsets } }
- *   → { type: 'step' }
- *   → { type: 'sync',  data: { gridFlat } }
+ *   → { type: 'init',   data: { gridFlat, width, height, rule, wrapEdges, neighborOffsets } }
+ *   → { type: 'step',   data: { count } }
+ *   → { type: 'sync',   data: { gridFlat } }
+ *   → { type: 'config', data: { wrapEdges? } }  — actualización en caliente sin reinit
  *   ← { type: 'ready' }
  *   ← { type: 'result', changedCells: ArrayBuffer, changedCount, population, generation }
  *   ← { type: 'error',  message }
@@ -276,6 +277,25 @@ function stepGeneric() {
     return changedCount;
 }
 
+// ─── Actualización de configuración en caliente ───────────────────────────────
+
+/**
+ * Actualiza parámetros de simulación sin reinicializar el grid.
+ * Actualmente soporta:
+ *   - wrapEdges {boolean} — activa/desactiva modo toroidal
+ *
+ * Aplicar en caliente es seguro porque el worker está idle entre pasos:
+ * el manager solo envía 'config' cuando no está procesando un 'step'.
+ *
+ * @param {Object} data
+ * @param {boolean} [data.wrapEdges]
+ */
+function configure(data) {
+    if (data.wrapEdges !== undefined) {
+        wrapEdges = data.wrapEdges;
+    }
+}
+
 // ─── Dispatcher de mensajes ───────────────────────────────────────────────────
 
 self.onmessage = function (e) {
@@ -284,6 +304,7 @@ self.onmessage = function (e) {
         if (type === 'init') init(data);
         else if (type === 'step') step(data?.count);
         else if (type === 'sync') sync(data);
+        else if (type === 'config') configure(data);
         else self.postMessage({type: 'error', message: `Unknown type: ${type}`});
     } catch (err) {
         self.postMessage({type: 'error', message: err.message});

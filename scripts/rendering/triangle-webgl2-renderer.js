@@ -19,6 +19,10 @@ class TriangleWebGL2Renderer {
         this.colorDead = options.colorDead || '#0f172a';
         this.colorGrid = options.colorGrid || 'rgba(255,255,255,0.1)';
 
+        // Alto CSS objetivo (= alto del canvas rectangular de origen).
+        // Ver comentario equivalente en TriangleRenderer.
+        this.targetHeight = options.targetHeight || null;
+
         // Grid manager (referencia, no propiedad)
         this.gridManager = null;
 
@@ -409,22 +413,28 @@ class TriangleWebGL2Renderer {
         const width = (this.gridManager.width - 1) * 0.5 + 1;
         const height = this.gridManager.height * h;
 
+        // Dimensiones geométricas del bitmap (base para render, getCellFromMouse, WebGL viewport)
         const canvasWidth = Math.ceil(width * this.cellSize);
         const canvasHeight = Math.ceil(height * this.cellSize);
 
         this.canvas.width = canvasWidth;
         this.canvas.height = canvasHeight;
+
+        // Dimensiones CSS: ancho natural, alto al valor objetivo si está disponible.
+        // targetHeight hace que el canvas ocupe el mismo espacio visual que el modo
+        // rectangular. getCellFromMouse compensa el escalado vía getBoundingClientRect.
+        const cssHeight = this.targetHeight || canvasHeight;
         this.canvas.style.width = canvasWidth + 'px';
-        this.canvas.style.height = canvasHeight + 'px';
+        this.canvas.style.height = cssHeight + 'px';
 
         this._syncOverlayToCanvas();
 
         if (this.container) {
             this.container.style.width = (canvasWidth + 20) + 'px';
-            this.container.style.height = (canvasHeight + 20) + 'px';
+            this.container.style.height = (cssHeight + 20) + 'px';
         }
 
-        // Viewport WebGL
+        // Viewport WebGL: dimensiones del bitmap, no CSS
         if (this.gl) {
             this.gl.viewport(0, 0, canvasWidth, canvasHeight);
         }
@@ -490,11 +500,17 @@ class TriangleWebGL2Renderer {
 
         if (this._useFallback) {
             if (!this._fallbackRenderer) {
+                // IMPORTANTE: pasar targetHeight para que el fallback ajuste su style.height
+                // al mismo alto que el canvas rectangular de origen. Sin este parámetro,
+                // _resizeCanvas() en TriangleRenderer usaría bitmapH (≈87% de origH),
+                // sobreescribiendo el style.height ya seteado por WebGL2._resizeCanvas()
+                // y dejando el canvas visible más corto que el modo estándar.
                 this._fallbackRenderer = new TriangleRenderer({
                     canvas: this.canvas, container: this.container,
                     cellSize: this.cellSize, showGrid: this.showGrid,
                     colorAlive: this.colorAlive, colorDead: this.colorDead,
-                    colorGrid: this.colorGrid
+                    colorGrid: this.colorGrid,
+                    targetHeight: this.targetHeight
                 });
                 this._fallbackRenderer.setGridManager(this.gridManager);
             }
