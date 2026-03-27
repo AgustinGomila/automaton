@@ -494,12 +494,7 @@ class SpecialEngineManager {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = src;
-            script.onload = () => {
-                // Re-aplicar parches rectangulares para el engine recién cargado.
-                // La función es idempotente: no re-parchea engines ya parcheados.
-                window.patchEnginesForRectangularGrids?.();
-                resolve();
-            };
+            script.onload = () => resolve();
             script.onerror = reject;
             document.head.appendChild(script);
         });

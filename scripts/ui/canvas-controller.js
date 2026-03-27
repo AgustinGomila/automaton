@@ -402,6 +402,7 @@ class CanvasController {
             this._isPanning = false;
             this._panLastCell = null;
             this._updateCursor();
+            // El pan ya sincroniza el worker vía shiftGrid → no es necesario aquí.
             return;
         }
 
@@ -409,6 +410,13 @@ class CanvasController {
         if (this.isDragging) this.endDrag();
 
         this.lastCell = null;
+
+        // Sincronizar el worker tras cualquier edición con el pincel (o con el
+        // drag de selección). Sin esta llamada, en grids ≥ 600 donde el worker
+        // está activo, las celdas dibujadas/pegadas manualmente no llegan al
+        // worker: éste computa desde su estado interno y el XOR resultante
+        // "congela" las celdas nuevas en vez de hacerlas evolucionar.
+        this.automaton?._syncWorkerGrid();
     }
 
     _handleMouseLeave() {
@@ -426,6 +434,10 @@ class CanvasController {
         if (this.showInfluenceArea) window.patternManager?.hideInfluenceArea();
 
         this.lastCell = null;
+
+        // Sincronizar el worker por si el usuario dibujó y salió del canvas
+        // sin soltar el botón (el mouseup no se dispara fuera del canvas).
+        this.automaton?._syncWorkerGrid();
     }
 
     _handleRightClick(e) {
