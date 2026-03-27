@@ -413,22 +413,37 @@ window.patchEnginesForRectangularGrids = function () {
         const width = automaton.gridWidth || automaton.gridSize;
         const height = automaton.gridHeight || automaton.gridSize;
         const grid = automaton.grid;
+        const wrap = automaton.wrapEdges;
         this._changedCells.length = 0;
 
+        // Primera pasada: recoger candidatos SIN modificar el grid,
+        // para que el cómputo de vecinos use solo el estado actual.
         const candidates = [];
         for (let x = 0; x < width; x++) {
             const col = grid[x];
             for (let y = 0; y < height; y++) {
                 if (col[y] === 1) continue;
+
+                // Vecindad Von Neumann (N, S, E, W).
+                // Con wrap toroidal todos los bordes participan simétricamente.
                 let n = 0;
-                if (x > 0) n += grid[x - 1][y];
-                if (x < width - 1) n += grid[x + 1][y];
-                if (y > 0) n += col[y - 1];
-                if (y < height - 1) n += col[y + 1];
+                if (wrap) {
+                    n += grid[(x - 1 + width) % width][y];
+                    n += grid[(x + 1) % width][y];
+                    n += col[(y - 1 + height) % height];
+                    n += col[(y + 1) % height];
+                } else {
+                    if (x > 0) n += grid[x - 1][y];
+                    if (x < width - 1) n += grid[x + 1][y];
+                    if (y > 0) n += col[y - 1];
+                    if (y < height - 1) n += col[y + 1];
+                }
+
                 if (n === 1) candidates.push(x * height + y);
             }
         }
 
+        // Segunda pasada: aplicar nacimientos
         for (let i = 0; i < candidates.length; i++) {
             const idx = candidates[i];
             const x = (idx / height) | 0;
