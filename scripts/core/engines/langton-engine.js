@@ -1,18 +1,21 @@
 /**
- * LangtonEngine - Motor de la Hormiga de Langton y sus generalizaciones.
+ * LangtonEngine — Motor de la Hormiga de Langton y sus generalizaciones.
  *
  * Modelo: agente(s) con posición y dirección que se desplazan sobre un grid
  * de N colores según una tabla de giros (string de L/R/N/U por estado).
  *
- * Diferencia clave respecto a los CA estándar:
- *   - No es sincrónico — cada hormiga actúa secuencialmente en cada paso.
+ * Diferencias clave respecto a los CA estándar:
+ *   - No es sincrónico: cada hormiga actúa secuencialmente en cada paso.
  *   - El grid almacena estados 0..N-1 (no solo 0/1).
  *   - Reutiliza GridManager, GridRenderer, StateManager y el loop del coordinador.
  *
- * Índice plano: x * gridHeight + y  (column-major, igual que GridRenderer/GridManager).
- * Soporta grids rectangulares: ctx.gridWidth y ctx.gridHeight se usan en lugar
- * del legacy ctx.gridSize (Math.max) para evitar desplazamientos de coordenadas
- * en grillas no cuadradas.
+ * ─── Convención de índice plano ────────────────────────────────────────
+ * Column-major:  index = x * gridHeight + y
+ * Consistente con GridRenderer y GridManager.
+ *
+ * ─── Grids rectangulares ───────────────────────────────────────────────
+ * Lee gridWidth/gridHeight desde _ctx en cada operación; no guarda snapshots
+ * de dimensiones, por lo que funciona tras resize sin reinicialización.
  *
  * Reglas estándar:
  *   RL   → Hormiga de Langton clásica (2 colores)
@@ -28,10 +31,10 @@ class LangtonEngine {
     /**
      * @param {Object} ctx - Contexto inyectado por SpecialEngineManager
      *   ctx.grid       → automaton.grid (Uint8Array[])
-     *   ctx.gridWidth  → ancho del grid en celdas
-     *   ctx.gridHeight → alto del grid en celdas
+     *   ctx.gridWidth  → ancho actual del grid
+     *   ctx.gridHeight → alto actual del grid
      *   ctx.renderer   → GridRenderer activo
-     *   ctx.wrapEdges  → boolean (usa el getter del coordinador)
+     *   ctx.wrapEdges  → boolean, modo toroidal
      */
     constructor(ctx) {
         this._ctx = ctx;
@@ -45,7 +48,7 @@ class LangtonEngine {
 
         // Regla
         this.ruleString = 'RL';
-        this.ruleTable = [];     // char[] indexado por estado → 'L'|'R'|'N'|'U'
+        this.ruleTable = [];    // char[] indexado por estado → 'L'|'R'|'N'|'U'
         this.numColors = 2;
 
         // Paleta de colores CSS por estado (índice 0 = muerta, no se usa)
@@ -53,10 +56,11 @@ class LangtonEngine {
 
         this._changedIndices = [];
 
+        // Vectores de movimiento por dirección: N=0, E=1, S=2, W=3
         this._DIRS = [
             {dx: 0, dy: -1},  // N
-            {dx: 1, dy: 0},   // E
-            {dx: 0, dy: 1},   // S
+            {dx: 1, dy: 0},  // E
+            {dx: 0, dy: 1},  // S
             {dx: -1, dy: 0},  // W
         ];
     }
@@ -68,9 +72,9 @@ class LangtonEngine {
     /**
      * Activa el motor con la configuración dada.
      * @param {Object} options
-     * @param {string}   [options.rule='RL']     - Cadena L/R/N/U
-     * @param {number}   [options.antCount=0]    - Número de hormigas predefinidas
-     * @param {Array}    [options.ants]          - Posiciones manuales [{x,y,dir}]
+     * @param {string}  [options.rule='RL']   - Cadena L/R/N/U
+     * @param {number}  [options.antCount=0]  - Número de hormigas predefinidas
+     * @param {Array}   [options.ants]        - Posiciones manuales [{x,y,dir}]
      */
     activate(options = {}) {
         this.ruleString = ((options.rule) || 'RL').toUpperCase();
@@ -78,14 +82,12 @@ class LangtonEngine {
         this._parseRule();
         this._buildColorPalette();
 
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
-        // Inicializar stateGrid limpio con dimensiones reales del grid
+        // stateGrid dimensionado al grid real (column-major: gw columnas × gh filas)
         this.stateGrid = Array.from({length: gw}, () => new Uint8Array(gh));
 
-        // Limpiar grid principal (el renderer lo usa para alive/dead)
-        const grid = this._ctx.grid;
+        // Limpiar grid principal
         for (let x = 0; x < gw; x++) grid[x].fill(0);
 
         // Colocar hormigas
@@ -101,9 +103,7 @@ class LangtonEngine {
         this.generation = 0;
         this._changedIndices = [];
 
-        // Registrar proveedor de color en el renderer
         this._ctx.renderer.setColorProvider(this._colorProvider.bind(this));
-
         this._ctx.renderer.markAllDirty();
         this.isActive = true;
 
@@ -124,18 +124,15 @@ class LangtonEngine {
      */
     randomize(density = 0.35) {
         if (!this.stateGrid) return 0;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
-        // Limpiar estado previo completamente
         for (let x = 0; x < gw; x++) {
             this.stateGrid[x].fill(0);
-            this._ctx.grid[x].fill(0);
+            grid[x].fill(0);
         }
         this.ants = [];
         this._changedIndices = [];
 
-        // Distribuir hormigas usando addAnt para mantener consistencia
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
                 if (Math.random() < density) {
@@ -149,21 +146,24 @@ class LangtonEngine {
         return this.ants.length;
     }
 
+    /**
+     * Reinicia el grid y las hormigas, conservando la regla activa.
+     * Si las dimensiones del grid cambiaron (ej. tras resizeGrid), recrea
+     * stateGrid al nuevo tamaño antes de limpiar.
+     */
     reset() {
         if (!this.isActive) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
-        // Recrear stateGrid si las dimensiones cambiaron
+        // Recrear buffers si las dimensiones cambiaron
         if (!this.stateGrid || this.stateGrid.length !== gw || this.stateGrid[0]?.length !== gh) {
             this.stateGrid = Array.from({length: gw}, () => new Uint8Array(gh));
         } else {
             for (let x = 0; x < gw; x++) this.stateGrid[x].fill(0);
         }
 
-        for (let x = 0; x < gw; x++) this._ctx.grid[x].fill(0);
+        for (let x = 0; x < gw; x++) grid[x].fill(0);
 
-        // Vaciar hormigas — al limpiar se parte de cero, el usuario dibuja las suyas
         this.ants = [];
         this.generation = 0;
         this._changedIndices = [];
@@ -176,19 +176,13 @@ class LangtonEngine {
 
     /**
      * Avanza una generación (mueve cada hormiga una vez).
-     *
-     * Índice plano: x * gridHeight + y (column-major, igual que GridRenderer).
-     *
      * @returns {boolean} true siempre — la hormiga no se detiene.
      */
     step() {
         if (!this.isActive) return false;
 
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
-        const grid = this._ctx.grid;
+        const {gridWidth: gw, gridHeight: gh, grid, wrapEdges: wrap} = this._ctx;
         const renderer = this._ctx.renderer;
-        const wrap = this._ctx.wrapEdges;
         const dirs = this._DIRS;
         const changed = this._changedIndices;
         changed.length = 0;
@@ -196,12 +190,11 @@ class LangtonEngine {
         for (const ant of this.ants) {
             const {x, y} = ant;
             const state = this.stateGrid[x][y];
-            const turn = this.ruleTable[state];
 
             // 1. Girar según la regla del estado actual
-            ant.dir = this._rotate(ant.dir, turn);
+            ant.dir = this._rotate(ant.dir, this.ruleTable[state]);
 
-            // 2. Cambiar estado de la celda al siguiente color
+            // 2. Avanzar estado de la celda al siguiente color
             const newState = (state + 1) % this.numColors;
             this.stateGrid[x][y] = newState;
             grid[x][y] = newState > 0 ? 1 : 0;
@@ -211,7 +204,7 @@ class LangtonEngine {
             changed.push(idx);
             renderer.markDirtyIndex(idx);
 
-            // 3. Mover la hormiga en su nueva dirección
+            // 3. Mover en la nueva dirección
             const d = dirs[ant.dir];
             let nx = x + d.dx;
             let ny = y + d.dy;
@@ -240,10 +233,13 @@ class LangtonEngine {
     // DESPLAZAMIENTO TOROIDAL (pan)
     // =========================================
 
+    /**
+     * Desplaza el stateGrid y las hormigas (dx, dy) celdas en modo toroidal.
+     * Llamado por shiftGrid() cuando el usuario hace pan con Alt+drag.
+     */
     shift(dx, dy) {
         if (!this.stateGrid) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
         const src = this.stateGrid;
         const dst = Array.from({length: gw}, () => new Uint8Array(gh));
 
@@ -258,35 +254,35 @@ class LangtonEngine {
 
         this.stateGrid = dst;
 
-        // Desplazar también las hormigas ANTES de reconstruir el grid
+        // Desplazar hormigas ANTES de reconstruir grid principal
         for (const ant of this.ants) {
             ant.x = ((ant.x + dx) % gw + gw) % gw;
             ant.y = ((ant.y + dy) % gh + gh) % gh;
         }
 
-        // Reconstruir grid principal desde stateGrid + posiciones de hormigas
-        // (las hormigas en celdas no visitadas tienen stateGrid=0 pero grid=1)
-        const grid = this._ctx.grid;
+        // Reconstruir grid: stateGrid + posiciones de hormigas
+        // (celdas con hormiga pero stateGrid=0 → grid=1)
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
                 grid[x][y] = dst[x][y] > 0 ? 1 : 0;
             }
         }
-        for (const ant of this.ants) {
-            grid[ant.x][ant.y] = 1;
-        }
+        for (const ant of this.ants) grid[ant.x][ant.y] = 1;
     }
 
     // =========================================
     // MULTI-HORMIGA: agregar en tiempo de ejecución
     // =========================================
 
+    /**
+     * Agrega una hormiga en (x, y) si no hay otra ya en esa posición.
+     * La guarda de duplicados centraliza la lógica para todos los callers
+     * (flood fill, drag, presets) sin duplicar la comprobación afuera.
+     */
     addAnt(x, y, dir = 0) {
-        // Evitar duplicados: si ya hay una hormiga en esta posición, no agregar otra.
         if (this.ants.some(a => a.x === x && a.y === y)) return;
         this.ants.push({x, y, dir});
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh} = this._ctx;
         if (x >= 0 && x < gw && y >= 0 && y < gh) {
             this._ctx.grid[x][y] = 1;
         }
@@ -297,18 +293,14 @@ class LangtonEngine {
     }
 
     /**
-     * Borra la hormiga en (x,y) y limpia su celda.
+     * Borra la hormiga en (x, y) y limpia su celda.
      * Usado por el borrador Ctrl+clic en modo Langton.
      */
     eraseAt(x, y) {
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
+        const {gridWidth: gw, gridHeight: gh} = this._ctx;
         if (x < 0 || x >= gw || y < 0 || y >= gh) return;
 
-        // Eliminar cualquier hormiga en esa posición
         this.ants = this.ants.filter(a => !(a.x === x && a.y === y));
-
-        // Limpiar stateGrid y grid en esa celda
         if (this.stateGrid) this.stateGrid[x][y] = 0;
         this._ctx.grid[x][y] = 0;
     }
@@ -316,17 +308,15 @@ class LangtonEngine {
     /**
      * Sincroniza ants[] con el estado actual de grid[][].
      * Llamado después de pegar un patrón o mover una selección:
-     * - Celdas vivas con stateGrid=0 → posiciones de hormiga
-     * - Celdas muertas → se eliminan del array
+     *   - Celdas vivas con stateGrid=0 → posiciones de hormiga
+     *   - Celdas muertas               → eliminadas del array
      * Preserva la dirección de hormigas que no se movieron.
      */
     syncFromGrid() {
         if (!this.stateGrid) return;
-        const gw = this._ctx.gridWidth;
-        const gh = this._ctx.gridHeight;
-        const grid = this._ctx.grid;
+        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
-        // Mapear direcciones de hormigas existentes por índice plano
+        // Clave column-major para preservar direcciones existentes
         const dirMap = new Map(this.ants.map(a => [a.x * gh + a.y, a.dir]));
 
         const newAnts = [];
@@ -360,7 +350,7 @@ class LangtonEngine {
             rule: this.ruleString,
             numColors: this.numColors,
             antCount: this.presetAntCount,  // del slider, no el total dinámico
-            totalAnts: this.ants.length,    // total real incluyendo dibujados
+            totalAnts: this.ants.length,     // total real incluyendo dibujados
         };
     }
 
@@ -374,23 +364,21 @@ class LangtonEngine {
 
     /**
      * Paleta HSL para N estados.
-     * Estado 0 = celda muerta (ignorado por el proveedor).
-     * Estado 1 = verde estándar del autómata (#059669) para 2 colores.
+     * Estado 0 = celda muerta (el renderer usa su propio fondo).
+     * Estado 1 = verde estándar del autómata para reglas de 2 colores (null = default).
      * Estado 1..N-1 = colores distribuidos uniformemente en el círculo HSL.
      */
     _buildColorPalette() {
         this.colorPalette = new Array(this.numColors);
-        this.colorPalette[0] = null;  // muerta — el renderer usa su propio fondo
+        this.colorPalette[0] = null;  // muerta
 
         if (this.numColors === 2) {
-            // Clásico: usar el verde estándar del renderer (null = usar default)
-            this.colorPalette[1] = null;
+            this.colorPalette[1] = null;  // verde estándar del renderer
         } else {
             const aliveCount = this.numColors - 1;
             const hueStep = 360 / aliveCount;
             for (let i = 1; i < this.numColors; i++) {
-                const hue = ((i - 1) * hueStep) | 0;
-                this.colorPalette[i] = `hsl(${hue}, 80%, 55%)`;
+                this.colorPalette[i] = `hsl(${((i - 1) * hueStep) | 0}, 80%, 55%)`;
             }
         }
     }
@@ -398,19 +386,16 @@ class LangtonEngine {
     /**
      * Proveedor de color para GridRenderer.setColorProvider().
      * Recibe un índice plano (x * gridHeight + y) y devuelve color CSS o null.
-     *
-     * IMPORTANTE: la descomposición usa gridHeight como divisor, igual que
-     * GridRenderer, para que la coordenada x/y corresponda a la celda correcta.
      */
     _colorProvider(cellIndex) {
         if (!this.stateGrid) return null;
         const gh = this._ctx.gridHeight;
         const x = (cellIndex / gh) | 0;
         const y = cellIndex % gh;
-        return this.colorPalette[this.stateGrid[x][y]] ?? null;
+        return this.colorPalette[this.stateGrid[x]?.[y]] ?? null;
     }
 
-    /** Rotación de dirección según tipo de giro */
+    /** Rotación de dirección según tipo de giro. */
     _rotate(dir, turn) {
         switch (turn) {
             case 'R':
@@ -419,21 +404,20 @@ class LangtonEngine {
                 return (dir + 3) % 4;
             case 'U':
                 return (dir + 2) % 4;
-            case 'N':
-                return dir;
             default:
-                return dir;
+                return dir;             // 'N' y cualquier valor desconocido
         }
     }
 
     /**
      * Construye N hormigas distribuidas simétricamente alrededor del centro.
-     * 1 hormiga → centro, mirando al Norte.
-     * N > 1     → posicionadas en cruz o círculo, mirando hacia afuera.
+     *   1 hormiga → centro, mirando al Norte.
+     *   N > 1     → distribuidas en círculo con radio proporcional a
+     *               la dimensión menor del grid.
      *
-     * @param {number} gw  - gridWidth
-     * @param {number} gh  - gridHeight
-     * @param {number} count
+     * @param {number} gw    - gridWidth
+     * @param {number} gh    - gridHeight
+     * @param {number} count - número de hormigas
      */
     _buildDefaultAnts(gw, gh, count) {
         if (count === 0) return [];
@@ -445,14 +429,14 @@ class LangtonEngine {
         if (count === 1) {
             ants.push({x: cx, y: cy, dir: 0});
         } else {
-            // Radio proporcional a la dimensión menor para que quepan en grids rectangulares
+            // Radio proporcional a la dimensión menor para grids rectangulares
             const spread = Math.max(2, (Math.min(gw, gh) / 10) | 0);
             const seen = new Set();
             for (let i = 0; i < count; i++) {
                 const angle = (2 * Math.PI * i) / count;
                 const x = Math.max(0, Math.min(gw - 1, cx + Math.round(Math.cos(angle) * spread)));
                 const y = Math.max(0, Math.min(gh - 1, cy + Math.round(Math.sin(angle) * spread)));
-                const key = x * gh + y;   // índice column-major como clave de deduplicación
+                const key = x * gh + y;   // column-major como clave de deduplicación
                 if (!seen.has(key)) {
                     seen.add(key);
                     ants.push({x, y, dir: i % 4});
@@ -460,11 +444,8 @@ class LangtonEngine {
             }
         }
 
-        // Activar el grid para que el renderer las pinte desde el inicio
         const grid = this._ctx.grid;
-        for (const ant of ants) {
-            grid[ant.x][ant.y] = 1;
-        }
+        for (const ant of ants) grid[ant.x][ant.y] = 1;
 
         return ants;
     }

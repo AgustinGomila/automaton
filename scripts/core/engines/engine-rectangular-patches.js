@@ -10,7 +10,7 @@
  *   • Usa el flag `_rectPatched_<method>` en cada prototipo para evitar
  *     doble-aplicación si se invoca varias veces.
  *   • SpecialEngineManager._loadScript() la llama tras cada carga lazy para
- *     que los engines cargados a demanda (Wolfram, RD2D, Langton,
+ *     que los engines cargados a demanda (Wolfram, RD2D,
  *     WireWorld) reciban el parche al estar disponibles.
  *   • GenerationsEngine se carga de forma estática en index.html y recibe
  *     el parche en la llamada inicial al final de este archivo.
@@ -225,81 +225,6 @@ window.patchEnginesForRectangularGrids = function () {
                 }
             }
         }
-    });
-
-    // ─── LangtonEngine ────────────────────────────────────────────────────
-    patch(window.LangtonEngine?.prototype, 'step', (_orig) => function () {
-        if (!this.isActive) return false;
-
-        const width = this._ctx.gridWidth || this._ctx.gridSize;
-        const height = this._ctx.gridHeight || this._ctx.gridSize;
-        const grid = this._ctx.grid;
-        const renderer = this._ctx.renderer;
-        const wrap = this._ctx.wrapEdges;
-        const dirs = this._DIRS;
-        const changed = this._changedIndices;
-        changed.length = 0;
-
-        for (const ant of this.ants) {
-            const {x, y} = ant;
-            const state = this.stateGrid[x][y];
-            ant.dir = this._rotate(ant.dir, this.ruleTable[state]);
-
-            const newState = (state + 1) % this.numColors;
-            this.stateGrid[x][y] = newState;
-            grid[x][y] = newState > 0 ? 1 : 0;
-
-            const idx = x * height + y;
-            changed.push(idx);
-            renderer.markDirtyIndex(idx);
-
-            const d = dirs[ant.dir];
-            let nx = x + d.dx;
-            let ny = y + d.dy;
-            if (wrap) {
-                nx = (nx + width) % width;
-                ny = (ny + height) % height;
-            } else {
-                nx = Math.max(0, Math.min(width - 1, nx));
-                ny = Math.max(0, Math.min(height - 1, ny));
-            }
-            ant.x = nx;
-            ant.y = ny;
-        }
-
-        this.generation++;
-        return true;
-    });
-
-    patch(window.LangtonEngine?.prototype, 'shift', (_orig) => function (dx, dy) {
-        if (!this.stateGrid) return;
-        const width = this._ctx.gridWidth || this._ctx.gridSize;
-        const height = this._ctx.gridHeight || this._ctx.gridSize;
-        const src = this.stateGrid;
-        const dst = Array.from({length: width}, () => new Uint8Array(height));
-
-        for (let x = 0; x < width; x++) {
-            const srcX = ((x - dx) % width + width) % width;
-            const srcCol = src[srcX];
-            const dstCol = dst[x];
-            for (let y = 0; y < height; y++) {
-                dstCol[y] = srcCol[((y - dy) % height + height) % height];
-            }
-        }
-        this.stateGrid = dst;
-
-        for (const ant of this.ants) {
-            ant.x = ((ant.x + dx) % width + width) % width;
-            ant.y = ((ant.y + dy) % height + height) % height;
-        }
-
-        const grid = this._ctx.grid;
-        for (let x = 0; x < width; x++) {
-            for (let y = 0; y < height; y++) {
-                grid[x][y] = dst[x][y] > 0 ? 1 : 0;
-            }
-        }
-        for (const ant of this.ants) grid[ant.x][ant.y] = 1;
     });
 
     // ─── WireWorldEngine ──────────────────────────────────────────────────
