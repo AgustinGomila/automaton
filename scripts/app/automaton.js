@@ -208,7 +208,15 @@ class CellularAutomaton {
     }
 
     set wrapEdges(value) {
+        // Actualizar el core (usado por el path local y por todos los engines especiales
+        // que leen this.automaton.wrapEdges o ctx.wrapEdges en cada step()).
         this.core?.neighborhood?.configure({wrapEdges: value});
+
+        // Propagar al worker en caliente. El worker mantiene su propio estado
+        // interno de wrapEdges (inicializado en 'init') y sin esta notificación
+        // ignoraría el cambio hasta su próxima reinicialización completa.
+        // updateConfig() es un no-op si el worker no está activo.
+        this._workerManager?.updateConfig({wrapEdges: value});
     }
 
     get undoCount() {
