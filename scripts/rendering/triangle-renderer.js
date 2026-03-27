@@ -12,6 +12,14 @@ class TriangleRenderer {
         this.colorDead = options.colorDead || '#0f172a';
         this.colorGrid = options.colorGrid || 'rgba(255,255,255,0.1)';
 
+        // Alto CSS objetivo (= alto del canvas rectangular de origen).
+        // El bitmap del canvas mantiene el alto geométrico correcto (gridHeight × √3/2 × cs)
+        // para que el render y getCellFromMouse funcionen sin distorsión lógica.
+        // El CSS se estira al alto original para que el canvas ocupe el mismo espacio
+        // visual que el modo rectangular. La diferencia es un factor 2/√3 ≈ 1.155
+        // (triángulos ligeramente más altos que equiláteros — imperceptible a cellSizes pequeños).
+        this.targetHeight = options.targetHeight || null;
+
         this.gridManager = null;
         this._dirtyCells = new Set();
         this._activityAges = new Map();
@@ -71,17 +79,23 @@ class TriangleRenderer {
         const size = this.cellSize;
         const h = size * Math.sqrt(3) / 2;
 
+        // Dimensiones geométricas del bitmap (base para render y getCellFromMouse)
         const width = (this.gridManager.width - 1) * (size / 2) + size;
         const height = (this.gridManager.height - 1) * h + h;
 
         this.canvas.width = Math.ceil(width);
         this.canvas.height = Math.ceil(height);
+
+        // Dimensiones CSS: ancho natural, alto al valor objetivo si está disponible.
+        // targetHeight hace que el canvas ocupe el mismo espacio visual que el modo
+        // rectangular. getCellFromMouse compensa el escalado vía getBoundingClientRect.
+        const cssHeight = this.targetHeight || this.canvas.height;
         this.canvas.style.width = this.canvas.width + 'px';
-        this.canvas.style.height = this.canvas.height + 'px';
+        this.canvas.style.height = cssHeight + 'px';
 
         if (this.container) {
             this.container.style.width = (this.canvas.width + 20) + 'px';
-            this.container.style.height = (this.canvas.height + 20) + 'px';
+            this.container.style.height = (cssHeight + 20) + 'px';
         }
     }
 
