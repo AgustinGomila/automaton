@@ -10,7 +10,7 @@
  *   • Usa el flag `_rectPatched_<method>` en cada prototipo para evitar
  *     doble-aplicación si se invoca varias veces.
  *   • SpecialEngineManager._loadScript() la llama tras cada carga lazy para
- *     que los engines cargados a demanda (Wolfram, RD2D, UW, Langton,
+ *     que los engines cargados a demanda (Wolfram, RD2D, Langton,
  *     WireWorld) reciban el parche al estar disponibles.
  *   • GenerationsEngine se carga de forma estática en index.html y recibe
  *     el parche en la llamada inicial al final de este archivo.
@@ -396,97 +396,6 @@ window.patchEnginesForRectangularGrids = function () {
             const gcol = grid[x];
             for (let y = 0; y < height; y++) gcol[y] = col[y] > 0 ? 1 : 0;
         }
-    });
-
-    // ─── UlamWarburtonEngine ──────────────────────────────────────────────
-    patch(window.UlamWarburtonEngine?.prototype, 'step', (_orig) => function () {
-        if (!this.isActive) return false;
-
-        if (!this.initialized) {
-            if (!this._checkUserSeed()) this._initializeSeed();
-            this.initialized = true;
-            this.generation = 0;
-            return true;
-        }
-
-        const automaton = this.automaton;
-        const width = automaton.gridWidth || automaton.gridSize;
-        const height = automaton.gridHeight || automaton.gridSize;
-        const grid = automaton.grid;
-        const wrap = automaton.wrapEdges;
-        this._changedCells.length = 0;
-
-        // Primera pasada: recoger candidatos SIN modificar el grid,
-        // para que el cómputo de vecinos use solo el estado actual.
-        const candidates = [];
-        for (let x = 0; x < width; x++) {
-            const col = grid[x];
-            for (let y = 0; y < height; y++) {
-                if (col[y] === 1) continue;
-
-                // Vecindad Von Neumann (N, S, E, W).
-                // Con wrap toroidal todos los bordes participan simétricamente.
-                let n = 0;
-                if (wrap) {
-                    n += grid[(x - 1 + width) % width][y];
-                    n += grid[(x + 1) % width][y];
-                    n += col[(y - 1 + height) % height];
-                    n += col[(y + 1) % height];
-                } else {
-                    if (x > 0) n += grid[x - 1][y];
-                    if (x < width - 1) n += grid[x + 1][y];
-                    if (y > 0) n += col[y - 1];
-                    if (y < height - 1) n += col[y + 1];
-                }
-
-                if (n === 1) candidates.push(x * height + y);
-            }
-        }
-
-        // Segunda pasada: aplicar nacimientos
-        for (let i = 0; i < candidates.length; i++) {
-            const idx = candidates[i];
-            const x = (idx / height) | 0;
-            const y = idx % height;
-            grid[x][y] = 1;
-            this._changedCells.push(idx);
-            automaton.renderer.markDirtyIndex(idx);
-        }
-
-        this.generation++;
-        return candidates.length > 0;
-    });
-
-    patch(window.UlamWarburtonEngine?.prototype, '_checkUserSeed', (_orig) => function () {
-        const width = this.automaton.gridWidth || this.automaton.gridSize;
-        const height = this.automaton.gridHeight || this.automaton.gridSize;
-        for (let x = 0; x < width; x++) {
-            for (let y = 0; y < height; y++) {
-                if (this.automaton.grid[x][y]) return true;
-            }
-        }
-        return false;
-    });
-
-    patch(window.UlamWarburtonEngine?.prototype, '_initializeSeed', (_orig) => function () {
-        const width = this.automaton.gridWidth || this.automaton.gridSize;
-        const height = this.automaton.gridHeight || this.automaton.gridSize;
-        for (let x = 0; x < width; x++) this.automaton.grid[x].fill(0);
-        this.automaton.grid[(width / 2) | 0][(height / 2) | 0] = 1;
-        this.automaton.renderer.markAllDirty();
-    });
-
-    patch(window.UlamWarburtonEngine?.prototype, 'randomize', (_orig) => function (density = 0.35) {
-        const width = this.automaton.gridWidth || this.automaton.gridSize;
-        const height = this.automaton.gridHeight || this.automaton.gridSize;
-        for (let x = 0; x < width; x++) {
-            for (let y = 0; y < height; y++) {
-                this.automaton.grid[x][y] = Math.random() < density ? 1 : 0;
-            }
-        }
-        this.generation = 0;
-        this._changedCells.length = 0;
-        this.automaton.renderer.markAllDirty();
     });
 
     // ─── WolframEngine ────────────────────────────────────────────────────
