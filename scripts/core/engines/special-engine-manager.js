@@ -182,7 +182,16 @@ class SpecialEngineManager {
             if (typeof TriangleRenderer === 'undefined') await this._loadScript('scripts/rendering/triangle-renderer.js');
             if (typeof TriangleWebGL2Renderer === 'undefined') await this._loadScript('scripts/rendering/triangle-webgl2-renderer.js');
 
-            this._originalRenderer = this._getRenderer();
+            // Destruir el overlay DOM del GridRenderer ANTES del swap de renderer.
+            // El GridRenderer puede tener un canvas overlay de grilla rectangular
+            // insertado en el DOM; si no se retira aquí, permanece visible debajo
+            // del overlay triangular y produce una superposición de ambas grillas.
+            // El GridRenderer recreará su overlay automáticamente al ser restaurado
+            // y se llame a _buildGridCache() con showGrid activo.
+            const currentRenderer = this._getRenderer();
+            currentRenderer?._destroyGridOverlay?.();
+
+            this._originalRenderer = currentRenderer;
             this._originalCore = this._getCore();
 
             this.triangleEngine = new TriangleEngine(this._buildTriangleContext());

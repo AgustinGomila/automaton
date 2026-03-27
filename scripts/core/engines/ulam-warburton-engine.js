@@ -9,6 +9,9 @@
  * en forma de diamante cuya población sigue la fórmula:
  *   P(n) = (2/3)(4^n + 2)  para n ≥ 1
  *
+ * Índice plano: x * gridHeight + y  (column-major, igual que GridRenderer/GridManager).
+ * Soporta grids rectangulares y modo toroidal vía automaton.wrapEdges.
+ *
  * Referencia: Ulam (1962), Warburton (1986).
  */
 class UlamWarburtonEngine {
@@ -19,10 +22,14 @@ class UlamWarburtonEngine {
         this.automaton = automaton;
         this.isActive = false;
         this.generation = 0;
-        this.gridSize = 0;
+
+        // Dimensiones actuales del grid (actualizadas en activate())
+        this.gridWidth = 0;
+        this.gridHeight = 0;
+
         this.initialized = false;
 
-        // Índices planos (x*size + y) de las celdas nacidas en el último paso
+        // Índices planos (x * gridHeight + y) de las celdas nacidas en el último paso
         this._changedCells = [];
     }
 
@@ -34,13 +41,14 @@ class UlamWarburtonEngine {
      * @returns {UlamWarburtonEngine} this
      */
     activate() {
-        this.gridSize = this.automaton.gridSize;
+        this.gridWidth = this.automaton.gridWidth;
+        this.gridHeight = this.automaton.gridHeight;
         this.isActive = true;
         this.generation = 0;
         this.initialized = false;
         this._changedCells.length = 0;
 
-        console.debug(`🔷 Ulam-Warburton activado, tamaño ${this.gridSize}`);
+        console.debug(`🔷 Ulam-Warburton activado, ${this.gridWidth}×${this.gridHeight}`);
         return this;
     }
 
@@ -66,9 +74,12 @@ class UlamWarburtonEngine {
      * @param {number} density - Proporción de celdas vivas (0-1)
      */
     randomize(density = 0.35) {
-        const size = this.gridSize || this.automaton.gridSize;
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
+        // Leer dimensiones actuales (pueden haber cambiado si el grid se redimensionó)
+        const gw = this.gridWidth || this.automaton.gridWidth;
+        const gh = this.gridHeight || this.automaton.gridHeight;
+
+        for (let x = 0; x < gw; x++) {
+            for (let y = 0; y < gh; y++) {
                 this.automaton.grid[x][y] = Math.random() < density ? 1 : 0;
             }
         }
@@ -81,6 +92,12 @@ class UlamWarburtonEngine {
 
     /**
      * Avanza una generación.
+     *
+     * Vecindad Von Neumann ortogonal (N, S, E, W).
+     * Con wrapEdges activo los bordes se tratan de forma toroidal.
+     *
+     * Índice plano: x * gridHeight + y (column-major, igual que GridRenderer).
+     *
      * @returns {boolean} true si nacieron celdas; false si el patrón es estable.
      */
     step() {
@@ -96,34 +113,44 @@ class UlamWarburtonEngine {
             return true;
         }
 
-        const size = this.gridSize;
+        const gw = this.gridWidth;
+        const gh = this.gridHeight;
         const grid = this.automaton.grid;
+        const wrap = this.automaton.wrapEdges;
         this._changedCells.length = 0;
 
         // Primera pasada: recoger candidatos SIN modificar el grid,
         // para que el cómputo de vecinos use solo el estado actual.
         const candidates = [];
 
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
+        for (let x = 0; x < gw; x++) {
+            for (let y = 0; y < gh; y++) {
                 if (grid[x][y] === 1) continue;
 
-                // Contar vecinos ortogonales vivos (Von Neumann)
+                // Contar vecinos ortogonales vivos (Von Neumann).
+                // Con wrap toroidal todos los bordes participan simétricamente.
                 let n = 0;
-                if (x > 0) n += grid[x - 1][y];
-                if (x < size - 1) n += grid[x + 1][y];
-                if (y > 0) n += grid[x][y - 1];
-                if (y < size - 1) n += grid[x][y + 1];
+                if (wrap) {
+                    n += grid[(x - 1 + gw) % gw][y];
+                    n += grid[(x + 1) % gw][y];
+                    n += grid[x][(y - 1 + gh) % gh];
+                    n += grid[x][(y + 1) % gh];
+                } else {
+                    if (x > 0) n += grid[x - 1][y];
+                    if (x < gw - 1) n += grid[x + 1][y];
+                    if (y > 0) n += grid[x][y - 1];
+                    if (y < gh - 1) n += grid[x][y + 1];
+                }
 
-                if (n === 1) candidates.push(x * size + y);
+                if (n === 1) candidates.push(x * gh + y);
             }
         }
 
         // Segunda pasada: aplicar nacimientos
         for (let i = 0; i < candidates.length; i++) {
             const idx = candidates[i];
-            const x = (idx / size) | 0;
-            const y = idx % size;
+            const x = (idx / gh) | 0;
+            const y = idx % gh;
             grid[x][y] = 1;
             this._changedCells.push(idx);
             this.automaton.renderer.markDirtyIndex(idx);
@@ -134,7 +161,7 @@ class UlamWarburtonEngine {
     }
 
     /**
-     * Devuelve los índices planos (x*size + y) de las celdas
+     * Devuelve los índices planos (x * gridHeight + y) de las celdas
      * nacidas en el último paso, listos para updateActivityAges.
      * @returns {number[]}
      */
@@ -150,9 +177,10 @@ class UlamWarburtonEngine {
      * @private
      */
     _checkUserSeed() {
-        const size = this.gridSize;
-        for (let x = 0; x < size; x++) {
-            for (let y = 0; y < size; y++) {
+        const gw = this.gridWidth;
+        const gh = this.gridHeight;
+        for (let x = 0; x < gw; x++) {
+            for (let y = 0; y < gh; y++) {
                 if (this.automaton.grid[x][y]) return true;
             }
         }
@@ -160,16 +188,17 @@ class UlamWarburtonEngine {
     }
 
     /**
-     * Limpia el grid y coloca una única celda viva en el centro.
+     * Limpia el grid y coloca una única celda viva en el centro geométrico.
      * @private
      */
     _initializeSeed() {
-        const size = this.gridSize;
-        for (let x = 0; x < size; x++) {
+        const gw = this.gridWidth;
+        const gh = this.gridHeight;
+        for (let x = 0; x < gw; x++) {
             this.automaton.grid[x].fill(0);
         }
-        const cx = (size / 2) | 0;
-        const cy = (size / 2) | 0;
+        const cx = (gw / 2) | 0;
+        const cy = (gh / 2) | 0;
         this.automaton.grid[cx][cy] = 1;
         this.automaton.renderer.markAllDirty();
     }

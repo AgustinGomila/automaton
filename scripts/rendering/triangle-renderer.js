@@ -303,6 +303,17 @@ class TriangleRenderer {
         return this.showGrid;
     }
 
+    /**
+     * Stub de compatibilidad con GridRenderer.toggleGridHighlights().
+     * El renderer triangular no diferencia entre grilla simple y resaltada
+     * (no tiene concepto de líneas mayores/menores), por lo que esta operación
+     * es un no-op que devuelve false para indicar que el estado no cambió.
+     * @returns {boolean} false — sin estado que conmutar
+     */
+    toggleGridHighlights() {
+        return false;
+    }
+
     getCellFromMouse(clientX, clientY) {
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;

@@ -123,18 +123,18 @@ class GridRenderer {
         return this.config.gridHeight;
     }
 
-    _initActivityBuffers() {
-        const total = this.config.gridWidth * this.config.gridHeight;
-        this._activityAges = new Uint8Array(total).fill(this._activityCooldown);
-        this._dyingAges = new Uint8Array(total).fill(this._activityCooldown);
-    }
-
     get hasDirtyCells() {
         return this._fullDirtyPending || this._dirtyCells.size > 0;
     }
 
     get dirtyCount() {
         return this._dirtyCells.size;
+    }
+
+    _initActivityBuffers() {
+        const total = this.config.gridWidth * this.config.gridHeight;
+        this._activityAges = new Uint8Array(total).fill(this._activityCooldown);
+        this._dyingAges = new Uint8Array(total).fill(this._activityCooldown);
     }
 
     // =========================================

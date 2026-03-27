@@ -562,6 +562,17 @@ class TriangleWebGL2Renderer {
         return this.showGrid;
     }
 
+    /**
+     * Stub de compatibilidad con GridRenderer.toggleGridHighlights().
+     * El renderer triangular no diferencia entre grilla simple y resaltada
+     * (no tiene concepto de líneas mayores/menores), por lo que esta operación
+     * es un no-op que devuelve false para indicar que el estado no cambió.
+     * @returns {boolean} false — sin estado que conmutar
+     */
+    toggleGridHighlights() {
+        return false;
+    }
+
     getCellFromMouse(clientX, clientY) {
         if (!this.gridManager) return null;
 
@@ -608,8 +619,16 @@ class TriangleWebGL2Renderer {
         if (this._overlayCanvas) return;
 
         this._overlayCanvas = document.createElement('canvas');
-        this._overlayCanvas.style.position = 'absolute';
-        this._overlayCanvas.style.pointerEvents = 'none';
+
+        // IMPORTANTE: `background:transparent` sobreescribe la regla global
+        //   canvas { background: #0f172a; }  (main.css)
+        // que de lo contrario convertiría el overlay en un rectángulo opaco
+        // que taparía completamente el canvas WebGL principal.
+        // `cursor:default` evita heredar el crosshair aunque pointer-events:none
+        // lo hace inerte; se declara por claridad.
+        this._overlayCanvas.style.cssText =
+            'position:absolute;pointer-events:none;' +
+            'background:transparent;cursor:default;';
         this._overlayCtx = this._overlayCanvas.getContext('2d', {alpha: true});
 
         // Insertar inmediatamente después del canvas WebGL
