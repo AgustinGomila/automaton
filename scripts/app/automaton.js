@@ -681,32 +681,20 @@ class CellularAutomaton {
 
         // 3. Redimensionar el renderer (según modo especial)
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            this.triangleEngine.resize(Math.max(w, h));
+            // Pasar las dimensiones rectangulares reales para que el engine
+            // calcule triWidth = gw*2, triHeight = gh y preserve las proporciones.
+            this.triangleEngine.resize(w, h);
         } else {
             this.renderer.resize(this.gridWidth, this.gridHeight, this.cellSize);
         }
 
-        // 4. Sincronizar motores especiales que mantienen estado propio.
-        // CRÍTICO: los motores con stateGrid propio (WireWorld, Langton) deben
-        // recrear sus buffers ANTES de la llamada a render() de la línea siguiente.
-        // De lo contrario, _colorProvider descompone el cellIndex con el nuevo
-        // gridHeight pero accede a stateGrid[x] dimensionado con el alto anterior
-        // → TypeError: Cannot read properties of undefined (reading '0').
+        // 4. Sincronizar motores especiales que mantienen estado propio
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridWidth = this.gridWidth;
             this.rd2dEngine.gridHeight = this.gridHeight;
             this.rd2dEngine.gridSize = Math.max(this.gridWidth, this.gridHeight);
             this.rd2dEngine._initStateGrid();
             this.rd2dEngine.initialized = false;
-        }
-        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
-            // reset() ya maneja el caso de dimensiones cambiadas: si stateGrid.length
-            // difiere de gridWidth (o la columna difiere de gridHeight), lo recrea.
-            this.wireworldEngine.reset();
-        }
-        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
-            // reset() preserva la regla y recrea stateGrid a las nuevas dimensiones.
-            this.langtonEngine.reset();
         }
 
         // 5. Forzar repintado completo
@@ -725,7 +713,16 @@ class CellularAutomaton {
     setCellSize(size) {
         const newSize = Math.min(Math.max(size, 1), 20);
         this.cellSize = newSize;
-        this.renderer.resize(this.gridWidth, this.gridHeight, newSize);
+
+        // El renderer triangular acepta (gridSize, cellSize) — 2 parámetros.
+        // La firma estándar (gridWidth, gridHeight, cellSize) pasaría gridHeight
+        // como cellSize, ignorando newSize por completo.
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
+            this.renderer.resize(this.gridWidth, newSize);
+        } else {
+            this.renderer.resize(this.gridWidth, this.gridHeight, newSize);
+        }
+
         this.renderer.resetActivity();
         this.render();
         eventBus.emit('automaton:zoomChanged', {zoom: newSize});
