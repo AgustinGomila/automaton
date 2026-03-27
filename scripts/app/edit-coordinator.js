@@ -419,24 +419,26 @@ class EditCoordinator {
      * @returns {boolean}
      */
     importWireworldState(stateGrid, patternWidth, patternHeight) {
-        const {specialMode, wireworldEngine, gridSize, grid, renderer} = this._a;
+        const {specialMode, wireworldEngine, gridWidth, gridHeight, grid, renderer} = this._a;
         if (specialMode !== SpecialEngineManager.MODES.WIREWORLD || !wireworldEngine?.isActive) return false;
 
-        const size = gridSize;
-        const offsetX = Math.floor((size - patternWidth) / 2);
-        const offsetY = Math.floor((size - patternHeight) / 2);
+        const gw = gridWidth;
+        const gh = gridHeight;
+        // Centrar el patrón en el grid rectangular real
+        const offsetX = Math.floor((gw - patternWidth) / 2);
+        const offsetY = Math.floor((gh - patternHeight) / 2);
 
         // Recrear buffers al tamaño actual del grid (puede diferir tras redimensionado)
-        wireworldEngine.stateGrid = Array.from({length: size}, () => new Uint8Array(size));
-        wireworldEngine._nextState = Array.from({length: size}, () => new Uint8Array(size));
+        wireworldEngine.stateGrid = Array.from({length: gw}, () => new Uint8Array(gh));
+        wireworldEngine._nextState = Array.from({length: gw}, () => new Uint8Array(gh));
 
-        for (let x = 0; x < size; x++) grid[x].fill(0);
+        for (let x = 0; x < gw; x++) grid[x].fill(0);
 
         for (let px = 0; px < patternWidth; px++) {
             for (let py = 0; py < patternHeight; py++) {
                 const gx = offsetX + px;
                 const gy = offsetY + py;
-                if (gx < 0 || gx >= size || gy < 0 || gy >= size) continue;
+                if (gx < 0 || gx >= gw || gy < 0 || gy >= gh) continue;
                 const state = stateGrid[px]?.[py] ?? 0;
                 wireworldEngine.stateGrid[gx][gy] = state;
                 grid[gx][gy] = state > 0 ? 1 : 0;

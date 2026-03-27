@@ -208,15 +208,7 @@ class CellularAutomaton {
     }
 
     set wrapEdges(value) {
-        // Actualizar el core (usado por el path local y por todos los engines especiales
-        // que leen this.automaton.wrapEdges o ctx.wrapEdges en cada step()).
         this.core?.neighborhood?.configure({wrapEdges: value});
-
-        // Propagar al worker en caliente. El worker mantiene su propio estado
-        // interno de wrapEdges (inicializado en 'init') y sin esta notificación
-        // ignoraría el cambio hasta su próxima reinicialización completa.
-        // updateConfig() es un no-op si el worker no está activo.
-        this._workerManager?.updateConfig({wrapEdges: value});
     }
 
     get undoCount() {
@@ -694,13 +686,27 @@ class CellularAutomaton {
             this.renderer.resize(this.gridWidth, this.gridHeight, this.cellSize);
         }
 
-        // 4. Sincronizar motores especiales que mantienen estado propio
+        // 4. Sincronizar motores especiales que mantienen estado propio.
+        // CRÍTICO: los motores con stateGrid propio (WireWorld, Langton) deben
+        // recrear sus buffers ANTES de la llamada a render() de la línea siguiente.
+        // De lo contrario, _colorProvider descompone el cellIndex con el nuevo
+        // gridHeight pero accede a stateGrid[x] dimensionado con el alto anterior
+        // → TypeError: Cannot read properties of undefined (reading '0').
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridWidth = this.gridWidth;
             this.rd2dEngine.gridHeight = this.gridHeight;
             this.rd2dEngine.gridSize = Math.max(this.gridWidth, this.gridHeight);
             this.rd2dEngine._initStateGrid();
             this.rd2dEngine.initialized = false;
+        }
+        if (this.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.wireworldEngine?.isActive) {
+            // reset() ya maneja el caso de dimensiones cambiadas: si stateGrid.length
+            // difiere de gridWidth (o la columna difiere de gridHeight), lo recrea.
+            this.wireworldEngine.reset();
+        }
+        if (this.specialMode === SpecialEngineManager.MODES.LANGTON && this.langtonEngine?.isActive) {
+            // reset() preserva la regla y recrea stateGrid a las nuevas dimensiones.
+            this.langtonEngine.reset();
         }
 
         // 5. Forzar repintado completo

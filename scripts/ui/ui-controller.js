@@ -1102,11 +1102,16 @@ class UIController {
             const codec = new MCLCodec();
             const decoded = codec.decode(text);
 
-            // Auto-resize: si el patrón no cabe en el grid actual, ampliar con margen
-            const needed = Math.max(decoded.width, decoded.height);
-            const current = this.automaton.gridSize;
-            if (needed > current) {
-                // Margen del 20% redondeado a múltiplo de 5, mínimo 20px de margen
+            // Intentar ajustar el patrón al grid actual antes de redimensionar.
+            // Si el patrón cabe en gridWidth × gridHeight no hace falta ningún cambio.
+            // Solo se redimensiona cuando el patrón excede alguna dimensión real.
+            const gw = this.automaton.gridWidth;
+            const gh = this.automaton.gridHeight;
+
+            if (decoded.width > gw || decoded.height > gh) {
+                // Calcular el nuevo tamaño cuadrado mínimo que contenga el patrón
+                // con un margen del 20% (mínimo 20 celdas), redondeado a múltiplos de 5.
+                const needed = Math.max(decoded.width, decoded.height);
                 const margin = Math.max(20, Math.round(needed * 0.2 / 5) * 5);
                 const newSize = Math.min(Math.round((needed + margin) / 5) * 5, 1000);
                 this.automaton.resizeGrid(newSize);
