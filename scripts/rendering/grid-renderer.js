@@ -5,6 +5,18 @@
  * Índice plano: x * gridHeight + y  (column-major, igual que GridManager).
  *
  * Compatibilidad hacia atrás: opción `gridSize` se acepta como cuadrado.
+ *
+ * === OPTIMIZACIÓN DE GRILLA ===
+ * Las líneas de grilla se dibujan en un canvas overlay DOM independiente
+ * (position:absolute, pointer-events:none) ubicado encima del canvas principal.
+ * Este overlay se construye UNA SOLA VEZ y permanece estático entre generaciones,
+ * eliminando el mayor cuello de botella previo:
+ *
+ *   ANTES: O(N_dirty_cells) llamadas a drawImage(subimagen) por frame
+ *   AHORA: 0 llamadas a drawImage en el hot-path de render
+ *
+ * El overlay sólo se reconstruye cuando cambia la configuración de grilla
+ * (toggle, highlights, intervalo, resize).
  */
 class GridRenderer {
     /**
@@ -71,8 +83,20 @@ class GridRenderer {
         this._activityCooldown = 3;
         this._initActivityBuffers();
 
-        // Grilla sutil offscreen (cellSize=2)
+        /**
+         * Flag de validez del overlay. true = overlay DOM está construido y sincronizado.
+         * Se pone a null/false cuando la config cambia para forzar reconstrucción.
+         * Ya NO almacena un canvas offscreen — el overlay vive en el DOM.
+         */
         this._subtleGridCache = null;
+
+        /**
+         * Canvas DOM overlay que contiene las líneas de grilla.
+         * Posicionado con CSS absolute sobre el canvas principal.
+         * Se construye una vez; permanece estático durante la simulación.
+         */
+        this._gridOverlay = null;
+        this._gridOverlayCtx = null;
 
         // Proveedor de color personalizado (LangtonEngine multi-color)
         this._colorProvider = null;
@@ -237,7 +261,7 @@ class GridRenderer {
         this._coolingCells.clear();
         this._dyingCells.clear();
         this._fullDirtyPending = false;
-        this._subtleGridCache = null;
+        this._subtleGridCache = null;  // Fuerza reconstrucción del overlay
 
         this._resizeCanvas();
         this.markAllDirty();
@@ -335,6 +359,7 @@ class GridRenderer {
     // =========================================
 
     destroy() {
+        this._destroyGridOverlay();
         this._dirtyCells.clear();
         this._coolingCells.clear();
         this._dyingCells.clear();
@@ -356,55 +381,72 @@ class GridRenderer {
     // RENDER INTERNO
     // =========================================
 
+    /**
+     * Render completo: fondo → celdas.
+     * Las líneas de grilla las aporta el overlay DOM (no se drawImagean aquí).
+     */
     _forceFullRender() {
-        const {cellSize} = this.config;
+        // Asegurar que el overlay esté construido antes del primer render completo
+        if (!this._subtleGridCache) this._buildGridCache();
 
         this.ctx.fillStyle = '#0f172a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Dibujar grilla desde cache offscreen (siempre, para ambos tamaños de celda)
-        const gridCache = this._getGridCache();
-        if (gridCache) {
-            this.ctx.drawImage(gridCache, 0, 0);
-        }
-
+        // La grilla la dibuja el overlay DOM — ningún drawImage aquí
         this._drawCells((x, y) => this._getCell(x, y));
     }
 
+    /**
+     * Render diferencial: sólo las celdas marcadas como sucias.
+     *
+     * OPTIMIZACIÓN CLAVE (v2):
+     * Se divide en dos pasadas para minimizar cambios de estado del contexto
+     * y eliminar completamente los drawImage de sub-imagen por celda.
+     *
+     * Pasada 1 — borrar con colorDead (un solo setState, N fillRect):
+     *   Antes: clearRect + drawImage(subimagen) × N  → muy costoso
+     *   Ahora: fillRect(colorDead) × N en batch       → muy barato
+     *
+     * Pasada 2 — dibujar contenido de celda:
+     *   Igual que antes, pero sin la restauración de grilla previa.
+     *
+     * El overlay DOM permanece estático; sus líneas aparecen siempre encima
+     * sin coste adicional por frame.
+     */
     _renderDirtyCells() {
-        const {gridHeight, cellSize} = this.config;
-        const gridCache = this._getGridCache();
+        // Asegurar overlay construido (lazy, sólo en el primer render post-toggle)
+        if (!this._subtleGridCache) this._buildGridCache();
 
+        const {gridHeight, cellSize} = this.config;
+
+        // ── Pasada 1: borrar todas las celdas sucias con colorDead ──────────
+        // Un único cambio de fillStyle para todas las celdas → mínimo overhead de estado.
+        this.ctx.fillStyle = this.colorDead;
         for (const index of this._dirtyCells) {
             const x = (index / gridHeight) | 0;
             const y = index % gridHeight;
-            const px = x * cellSize;
-            const py = y * cellSize;
+            this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+        }
 
-            if (gridCache) {
-                // Con grilla: restaurar trozo del cache
-                this.ctx.clearRect(px, py, cellSize, cellSize);
-                this.ctx.drawImage(gridCache, px, py, cellSize, cellSize, px, py, cellSize, cellSize);
-            } else {
-                // Sin grilla: fondo oscuro
-                this.ctx.fillStyle = this.colorDead;
-                this.ctx.fillRect(px, py, cellSize, cellSize);
-            }
-
-            // Encima pintar la celda (solo si tiene actividad)
+        // ── Pasada 2: dibujar contenido de celda encima ─────────────────────
+        for (const index of this._dirtyCells) {
+            const x = (index / gridHeight) | 0;
+            const y = index % gridHeight;
             this._renderCell(x, y);
         }
     }
 
     /**
-     * Devuelve el canvas offscreen de grilla (crea/reconstruye si es necesario).
-     * null si no hay nada que dibujar (grid y highlights ambos desactivados).
+     * Asegura que el overlay esté construido. Devuelve null deliberadamente:
+     * el overlay es un elemento DOM, no una fuente para drawImage.
+     * Mantenido para compatibilidad con código que pudiera llamarlo externamente.
+     * @returns {null}
      */
     _getGridCache() {
         const {showGrid, showGridHighlights} = this.config;
         if (!showGrid && !showGridHighlights) return null;
         if (!this._subtleGridCache) this._buildGridCache();
-        return this._subtleGridCache;
+        return null; // El overlay DOM es el canal de display — no usar drawImage
     }
 
     _renderCell(x, y) {
@@ -443,32 +485,37 @@ class GridRenderer {
 
         if (actColor) {
             const cellSize = this.config.cellSize;
-            const xPos = x * cellSize;
-            const yPos = y * cellSize;
-
             this.ctx.fillStyle = actColor;
-            this.ctx.fillRect(xPos, yPos, cellSize, cellSize);
+            this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
         }
-        // Si no hay actColor, no hacemos nada: la grilla ya está restaurada en _renderDirtyCells
+        // Sin actColor: la pasada 1 ya limpió con colorDead; nada más que hacer
     }
 
+    /**
+     * Dibuja una celda grande (cellSize > 3) con borde de 1px y contenido interior.
+     *
+     * No llama a clearRect: la pasada 1 de _renderDirtyCells ya llenó la celda
+     * entera con colorDead, por lo que el borde de 1px queda automáticamente como
+     * colorDead (el color del "vacío"), y sólo el interior necesita ser pintado.
+     */
     _renderLargeCell(x, y, cellIndex, isAlive) {
         const cellSize = this.config.cellSize;
+        const innerSize = cellSize - 2;
+        const px = x * cellSize + 1;
+        const py = y * cellSize + 1;
 
         if (this._colorProvider) {
             const customColor = this._colorProvider(cellIndex);
             if (customColor) {
-                const innerSize = cellSize - 2;
-                this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+                // Sin clearRect: la pasada 1 ya puso colorDead en toda la celda
                 this.ctx.fillStyle = customColor;
-                this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+                this.ctx.fillRect(px, py, innerSize, innerSize);
             }
             return;
         }
 
         if (isAlive) {
-            const innerSize = cellSize - 2;
-            this.ctx.clearRect(x * cellSize + 1, y * cellSize + 1, innerSize, innerSize);
+            // Sin clearRect: innecesario, pasada 1 ya borró
             this._drawSingleCell(x, y);
         } else {
             const dyingColor = this.config.showActivityEffect &&
@@ -476,13 +523,11 @@ class GridRenderer {
                 ? this.colorDying : null;
 
             if (dyingColor) {
-                const innerSize = cellSize - 2;
-                const px = x * cellSize + 1;
-                const py = y * cellSize + 1;
-                this.ctx.clearRect(px, py, innerSize, innerSize);
+                // Sin clearRect: innecesario, pasada 1 ya borró
                 this.ctx.fillStyle = dyingColor;
                 this.ctx.fillRect(px, py, innerSize, innerSize);
             }
+            // Sin dyingColor: celda muerta sin efecto → colorDead de pasada 1 es suficiente
         }
     }
 
@@ -520,7 +565,7 @@ class GridRenderer {
 
         this.ctx.fillRect(x * cellSize + offset, y * cellSize + offset, drawSize, drawSize);
 
-        // El efecto de brillo de nacimiento condicional
+        // Efecto de brillo en el borde superior al nacer
         if (!customColor && cellSize >= 4) {
             const isBorn = this.config.showActivityEffect
                 && this._activityAges[cellIndex] < this._activityCooldown;
@@ -531,8 +576,71 @@ class GridRenderer {
         }
     }
 
+    // =========================================
+    // GRILLA — OVERLAY DOM
+    // =========================================
+
     /**
-     * Construye el canvas offscreen de grilla.
+     * Crea el canvas overlay para las líneas de grilla si no existe,
+     * y sincroniza su tamaño y posición con el canvas principal.
+     *
+     * El overlay se inserta inmediatamente después del canvas principal dentro
+     * del container (#canvas-container, position:relative), con z-index:1 para
+     * quedar encima de las celdas pero debajo de los overlays de patrón/influencia.
+     * pointer-events:none garantiza que no interfiere con los eventos de mouse.
+     *
+     * IMPORTANTE: `background:transparent` en el cssText es imprescindible.
+     * La regla global `canvas { background: #0f172a; }` de main.css se aplica
+     * a cualquier <canvas> del DOM. Sin este override el overlay aparecería
+     * como una capa opaca oscura que tapa completamente las celdas dibujadas
+     * en el canvas principal.
+     */
+    _ensureGridOverlay() {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+
+        if (!this._gridOverlay) {
+            this._gridOverlay = document.createElement('canvas');
+            // background:transparent sobreescribe la regla global
+            //   canvas { background: #0f172a; }  (main.css)
+            // que de lo contrario convertiría el overlay en un rectángulo opaco.
+            // cursor:default evita heredar el crosshair del canvas principal
+            // aunque pointer-events:none lo hace inerte.
+            this._gridOverlay.style.cssText =
+                'position:absolute;pointer-events:none;z-index:1;' +
+                'image-rendering:pixelated;background:transparent;cursor:default;';
+            // Insertar justo después del canvas principal para herencia de posición
+            this.canvas.insertAdjacentElement('afterend', this._gridOverlay);
+            this._gridOverlayCtx = this._gridOverlay.getContext('2d', {alpha: true});
+        }
+
+        // Sincronizar dimensiones en píxeles
+        if (this._gridOverlay.width !== w || this._gridOverlay.height !== h) {
+            this._gridOverlay.width = w;
+            this._gridOverlay.height = h;
+        }
+
+        // Sincronizar tamaño CSS y posición relativa al container
+        this._gridOverlay.style.width = (this.canvas.style.width || w + 'px');
+        this._gridOverlay.style.height = (this.canvas.style.height || h + 'px');
+        this._gridOverlay.style.left = this.canvas.offsetLeft + 'px';
+        this._gridOverlay.style.top = this.canvas.offsetTop + 'px';
+    }
+
+    /**
+     * Elimina el canvas overlay del DOM y libera referencias.
+     * Llamado desde destroy() y cuando el renderer es reemplazado.
+     */
+    _destroyGridOverlay() {
+        if (this._gridOverlay) {
+            this._gridOverlay.remove();
+            this._gridOverlay = null;
+            this._gridOverlayCtx = null;
+        }
+    }
+
+    /**
+     * Construye (o reconstruye) el overlay de grilla.
      *
      * Combina dos capas según config:
      *   showGrid           → líneas menores en todas las posiciones (trazo tenue 10%)
@@ -541,7 +649,8 @@ class GridRenderer {
      * Las líneas mayores usan opacidad 28% si la grilla menor está activa (contraste),
      * o 10% (igual que las menores) si se muestran solas.
      *
-     * Ambas capas usan strokeStyle para alineación perfecta sin importar cellSize.
+     * Después de construirse, el overlay permanece estático sin coste por frame.
+     * _subtleGridCache actúa como flag boolean de validez del overlay.
      */
     _buildGridCache() {
         const {
@@ -549,93 +658,97 @@ class GridRenderer {
             showGrid, showGridHighlights
         } = this.config;
 
-        // Guard clause: si no hay nada que dibujar, salir temprano
+        // Sin grilla ni highlights: limpiar overlay si existe y salir
         if (!showGrid && !showGridHighlights) {
+            if (this._gridOverlay) {
+                this._gridOverlayCtx.clearRect(
+                    0, 0, this._gridOverlay.width, this._gridOverlay.height
+                );
+            }
             this._subtleGridCache = null;
             return;
         }
 
-        const interval = gridMajorInterval || 10;
+        this._ensureGridOverlay();
+
+        const ctx = this._gridOverlayCtx;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
+        const interval = gridMajorInterval || 10;
 
-        const cache = document.createElement('canvas');
-        cache.width = cw;
-        cache.height = ch;
-        const c = cache.getContext('2d');
+        ctx.clearRect(0, 0, cw, ch);
 
         const minorColor = 'rgba(255, 255, 255, 0.10)';
         const majorColor = showGrid ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.10)';
 
         if (cellSize <= 2) {
-            // ── Pixel-perfect para celdas pequeñas ──────────────────────
+            // ── Pixel-perfect para celdas pequeñas ──────────────────────────
             if (showGrid) {
-                c.fillStyle = minorColor;
-                // Verticales
+                ctx.fillStyle = minorColor;
                 for (let x = 0; x <= gridWidth; x++) {
                     if (showGridHighlights && x % interval === 0) continue;
-                    c.fillRect(x * cellSize, 0, 1, ch);
+                    ctx.fillRect(x * cellSize, 0, 1, ch);
                 }
-                // Horizontales
                 for (let y = 0; y <= gridHeight; y++) {
                     if (showGridHighlights && y % interval === 0) continue;
-                    c.fillRect(0, y * cellSize, cw, 1);
+                    ctx.fillRect(0, y * cellSize, cw, 1);
                 }
             }
 
             if (showGridHighlights) {
-                c.fillStyle = majorColor;
+                ctx.fillStyle = majorColor;
                 for (let x = 0; x <= gridWidth; x++) {
                     if (x % interval !== 0) continue;
-                    c.fillRect(x * cellSize, 0, 1, ch);
+                    ctx.fillRect(x * cellSize, 0, 1, ch);
                 }
                 for (let y = 0; y <= gridHeight; y++) {
                     if (y % interval !== 0) continue;
-                    c.fillRect(0, y * cellSize, cw, 1);
+                    ctx.fillRect(0, y * cellSize, cw, 1);
                 }
             }
         } else {
-            // ── Stroke para celdas grandes ──────────────────────────────
-            c.lineWidth = 1;
+            // ── Stroke para celdas grandes (más exacto que fillRect) ─────────
+            ctx.lineWidth = 1;
 
             if (showGrid) {
-                c.strokeStyle = minorColor;
-                c.beginPath();
+                ctx.strokeStyle = minorColor;
+                ctx.beginPath();
                 for (let i = 0; i <= gridWidth; i++) {
                     if (showGridHighlights && i % interval === 0) continue;
                     const pos = i * cellSize;
-                    c.moveTo(pos, 0);
-                    c.lineTo(pos, ch);
+                    ctx.moveTo(pos, 0);
+                    ctx.lineTo(pos, ch);
                 }
                 for (let j = 0; j <= gridHeight; j++) {
                     if (showGridHighlights && j % interval === 0) continue;
                     const pos = j * cellSize;
-                    c.moveTo(0, pos);
-                    c.lineTo(cw, pos);
+                    ctx.moveTo(0, pos);
+                    ctx.lineTo(cw, pos);
                 }
-                c.stroke();
+                ctx.stroke();
             }
 
             if (showGridHighlights) {
-                c.strokeStyle = majorColor;
-                c.beginPath();
+                ctx.strokeStyle = majorColor;
+                ctx.beginPath();
                 for (let i = 0; i <= gridWidth; i++) {
                     if (i % interval !== 0) continue;
                     const pos = i * cellSize;
-                    c.moveTo(pos, 0);
-                    c.lineTo(pos, ch);
+                    ctx.moveTo(pos, 0);
+                    ctx.lineTo(pos, ch);
                 }
                 for (let j = 0; j <= gridHeight; j++) {
                     if (j % interval !== 0) continue;
                     const pos = j * cellSize;
-                    c.moveTo(0, pos);
-                    c.lineTo(cw, pos);
+                    ctx.moveTo(0, pos);
+                    ctx.lineTo(cw, pos);
                 }
-                c.stroke();
+                ctx.stroke();
             }
         }
 
-        this._subtleGridCache = cache;
+        // Marcar overlay como válido (flag boolean — ya no guarda un canvas offscreen)
+        this._subtleGridCache = true;
     }
 
     _drawCells(predicate) {
@@ -671,19 +784,19 @@ class GridRenderer {
         this.ctx.lineCap = 'round';
         this.ctx.beginPath();
 
-        if ((state >> 3) & 1) {
+        if ((state >> 3) && 1) {
             this.ctx.moveTo(centerX, centerY);
             this.ctx.lineTo(centerX, centerY - half + 1);
         }
-        if ((state >> 2) & 1) {
+        if ((state >> 2) && 1) {
             this.ctx.moveTo(centerX, centerY);
             this.ctx.lineTo(centerX, centerY + half - 1);
         }
-        if ((state >> 1) & 1) {
+        if ((state >> 1) && 1) {
             this.ctx.moveTo(centerX, centerY);
             this.ctx.lineTo(centerX + half - 1, centerY);
         }
-        if (state & 1) {
+        if (state && 1) {
             this.ctx.moveTo(centerX, centerY);
             this.ctx.lineTo(centerX - half + 1, centerY);
         }
@@ -702,6 +815,12 @@ class GridRenderer {
         return ['#000000', '#ef4444', '#f97316', '#eab308', '#22c55e'][count] || '#94a3b8';
     }
 
+    /**
+     * Redimensiona el canvas principal y sincroniza el overlay DOM.
+     * El overlay se invalida (_subtleGridCache = null) para forzar
+     * reconstrucción en el siguiente render, lo que incluye una nueva
+     * llamada a _ensureGridOverlay() que ajusta posición y tamaño.
+     */
     _resizeCanvas() {
         if (!this.canvas) return;
         const {gridWidth, gridHeight, cellSize} = this.config;
@@ -715,6 +834,8 @@ class GridRenderer {
             this.container.style.width = (w + 20) + 'px';
             this.container.style.height = (h + 20) + 'px';
         }
+        // Invalidar overlay: se reconstruirá (con nuevas dimensiones) en el próximo render
+        this._subtleGridCache = null;
     }
 }
 
