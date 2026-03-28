@@ -53,6 +53,24 @@ class UIController {
             addEventListener: (target, event, handler, opts) => this._addEventListener(target, event, handler, opts)
         });
 
+        // Rule controller — selector de reglas B/S y regla custom
+        this._ruleController = new RuleController({
+            automaton: this.automaton,
+            onActivateGenerations: (b, s, c) => this._specialModeController.activateGenerationsMode(b, s, c),
+            onDeactivateGenerations: () => this._specialModeController.deactivateGenerationsMode(),
+            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
+            onUpdateRuleInfo: (rule) => this._displayController.updateRuleInfo(rule),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
+        });
+
+        // Neighborhood controller — grilla visual de vecindad
+        this._neighborhoodController = new NeighborhoodController({
+            automaton: this.automaton,
+            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
+            onUpdateNeighborhood: () => this._displayController.updateNeighborhoodInfo(),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
+        });
+
         this._subscribeToAutomatonEvents();
         this._waitForRulesAndInit().then();
 
@@ -104,14 +122,14 @@ class UIController {
         this._bindAccordionEvents();
         this._bindKeyboardEvents();
         this._bindPatternEvents();
-        this._bindNeighborhoodEvents();
+        this._neighborhoodController.bindEvents();
         this._bindPatternsControls();
 
         this.updateSpeedDisplay();
         this.updateGridSizeDisplay();
         this.updateCellSizeDisplay();
         this._displayController.updateNeighborhoodInfo();
-        this.loadRules();
+        this._ruleController.loadRules();
 
         eventBus.on('automaton:runningChanged', () => this._syncPlayButtonState());
 
@@ -212,32 +230,7 @@ class UIController {
     }
 
     loadRules() {
-        const selector = document.getElementById('ruleSelector');
-        if (!selector) return;
-
-        while (selector.options.length > 0) {
-            selector.removeItem(0);
-        }
-
-        Object.keys(window.RULES).forEach((key, index) => {
-            const rule = window.RULES[key];
-            const option = document.createElement('option');
-            option.value = key;
-
-            // SI ES CUSTOM Y TIENE VALORES, MOSTRAR LA NOTACIÓN REAL
-            if (key === 'custom' && rule.birth.length > 0 && rule.survival.length > 0) {
-                option.textContent = `${t('config.rule.custom')} (${rule.ruleString})`;
-            } else {
-                option.textContent = `${rule.name} (${rule.ruleString})`;
-            }
-
-            selector.appendChild(option);
-        });
-
-        if (window.RULES.conway) {
-            selector.value = 'conway';
-            this._displayController.updateRuleInfo(window.RULES.conway);
-        }
+        this._ruleController.loadRules();
     }
 
     // =========================================
@@ -279,8 +272,7 @@ class UIController {
             }
         });
 
-        this._addEventListener(document.getElementById('ruleSelector'), 'change', () => this.changeRule());
-        this._addEventListener(document.getElementById('applyCustomRuleBtn'), 'click', () => this.applyCustomRule());
+        this._ruleController.bindEvents();
 
         this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
         this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
@@ -1049,80 +1041,11 @@ class UIController {
     }
 
     changeRule() {
-        const selector = document.getElementById('ruleSelector');
-
-        if (selector.value === 'custom') {
-            // Popula los inputs con la regla custom actual
-            document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
-            document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');
-        } else if (window.RULES?.[selector.value]) {
-            const rule = window.RULES[selector.value];
-            // Popula los inputs con la regla predefinida seleccionada
-            document.getElementById('birthInput').value = rule.birth.join(',');
-            document.getElementById('survivalInput').value = rule.survival.join(',');
-
-            if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
-                // En modo Generations: re-activar con la nueva B/S manteniendo C actual
-                const numStates = parseInt(document.getElementById('generationsStates')?.value) || 3;
-                this._specialModeController.activateGenerationsMode(rule.birth, rule.survival, numStates);
-            } else {
-                // Resetear slider C a 2 al cambiar a regla predefinida en modo estándar
-                const statesSlider = document.getElementById('generationsStates');
-                const statesDisplay = document.getElementById('generationsStatesDisplay');
-                if (statesSlider) statesSlider.value = '2';
-                if (statesDisplay) statesDisplay.textContent = '2';
-
-                this.automaton.setRule(rule.survival, rule.birth);
-                this._displayController.updateHeaderInfo();
-                eventBus.emit('automaton:filterChanged', {
-                    mode: SpecialEngineManager.MODES.STANDARD,
-                    rule: rule.ruleString
-                });
-            }
-        }
-
-        selector.blur();
+        this._ruleController.changeRule();
     }
 
     applyCustomRule() {
-        const birthInput = document.getElementById('birthInput').value;
-        const survivalInput = document.getElementById('survivalInput').value;
-        const numStates = parseInt(document.getElementById('generationsStates')?.value) || 2;
-
-        try {
-            const customRule = parseCustomRule(birthInput, survivalInput);
-
-            if (numStates > 2) {
-                // Modo Generaciones
-                this._specialModeController.activateGenerationsMode(customRule.birth, customRule.survival, numStates);
-                return;
-            }
-
-            // Modo estándar binario — desactivar Generations si estaba activo
-            if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
-                this._specialModeController.deactivateGenerationsMode();
-            }
-
-            this.automaton.setRule(customRule.survival, customRule.birth);
-
-            if (window.RULES?.custom) {
-                window.RULES.custom.survival = customRule.survival;
-                window.RULES.custom.birth = customRule.birth;
-                window.RULES.custom.ruleString = `B${customRule.birth.join('')}/S${customRule.survival.join('')}`;
-
-                const selector = document.getElementById('ruleSelector');
-                const selectedOption = selector.options[selector.selectedIndex];
-                selectedOption.textContent = `${t('config.rule.custom')} (${window.RULES.custom.ruleString})`;
-
-                this._displayController.updateRuleInfo(window.RULES.custom);
-                eventBus.emit('automaton:filterChanged', {
-                    mode: SpecialEngineManager.MODES.STANDARD,
-                    rule: window.RULES.custom.ruleString
-                });
-            }
-        } catch (error) {
-            alert(`Error: ${error.message}`);
-        }
+        this._ruleController.applyCustomRule();
     }
 
     /**
@@ -1173,24 +1096,11 @@ class UIController {
     }
 
     changeNeighborhoodType(type) {
-        if (type === 'custom') {
-            // Aplicar la selección visual actual sin cambiar offsets
-            this._applyCustomNeighborhood();
-        } else {
-            this.automaton.setNeighborhoodType(type);
-        }
-        // Sincronizar la grilla visual con el nuevo tipo
-        this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
-        this._displayController.updateHeaderInfo();
+        this._neighborhoodController.changeNeighborhoodType(type);
     }
 
     changeNeighborhoodRadius(radius) {
-        this.automaton.setNeighborhoodRadius(radius);
-        this._displayController.updateHeaderInfo();
-        const radiusValue = document.getElementById('radiusValue');
-        if (radiusValue) radiusValue.textContent = radius;
-        // Reconstruir la grilla con el nuevo radio
-        this._renderNeighborhoodGrid(radius);
+        this._neighborhoodController.changeNeighborhoodRadius(radius);
     }
 
     /**
@@ -1203,102 +1113,7 @@ class UIController {
      * @param {number} radius
      */
     _renderNeighborhoodGrid(radius) {
-        const container = document.getElementById('neighborhoodGrid');
-        if (!container) return;
-
-        const side = 2 * radius + 1;
-
-        // Calcular el tamaño máximo de celda que cabe en el ancho disponible.
-        // El contenedor puede tener clientWidth=0 si el acordeón está cerrado;
-        // en ese caso se usa el ancho del panel lateral o un valor fijo de referencia.
-        const availableWidth =
-            container.parentElement?.clientWidth ||
-            document.getElementById('leftPanel')?.clientWidth ||
-            document.querySelector('.config-section')?.clientWidth ||
-            240;
-        const parentWidth = availableWidth - 16; // descontar padding del accordion-content
-        const gap = 3;
-        const maxCellSize = Math.floor((parentWidth - gap * (side - 1)) / side);
-        // Acotar entre 8px (mínimo legible) y 26px (tamaño cómodo para R pequeños)
-        const cellSize = Math.max(8, Math.min(26, maxCellSize));
-
-        container.style.gridTemplateColumns = `repeat(${side}, ${cellSize}px)`;
-        container.style.gap = `${gap}px`;
-
-        // Propagar el tamaño calculado a las celdas via CSS custom property
-        container.style.setProperty('--nc-size', `${cellSize}px`);
-        container.innerHTML = '';
-
-        const currentType = this.automaton.neighborhoodType;
-        let activeSet;
-
-        if (currentType === 'moore') {
-            activeSet = new Set();
-            for (let dx = -radius; dx <= radius; dx++)
-                for (let dy = -radius; dy <= radius; dy++)
-                    if (dx !== 0 || dy !== 0) activeSet.add(`${dx},${dy}`);
-        } else if (currentType === 'neumann') {
-            activeSet = new Set();
-            for (let dx = -radius; dx <= radius; dx++)
-                for (let dy = -radius; dy <= radius; dy++)
-                    if ((dx !== 0 || dy !== 0) && Math.abs(dx) + Math.abs(dy) <= radius)
-                        activeSet.add(`${dx},${dy}`);
-        } else {
-            // custom: conservar selección existente recortada al nuevo radio
-            activeSet = new Set(
-                this.automaton.core.neighborhood.offsets
-                    .filter(o => Math.abs(o.dx) <= radius && Math.abs(o.dy) <= radius)
-                    .map(o => `${o.dx},${o.dy}`)
-            );
-        }
-
-        // Estado de arrastre: se inicializa en mousedown y se usa en mouseenter
-        let _dragging = false;
-        let _paintActive = false; // true = activar, false = desactivar
-
-        const stopDrag = () => {
-            _dragging = false;
-        };
-        this._addEventListener(document, 'mouseup', stopDrag);
-
-        for (let dy = -radius; dy <= radius; dy++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-                const isCenter = dx === 0 && dy === 0;
-                const cell = document.createElement('div');
-                cell.className = 'neighborhood-cell' + (isCenter ? ' center' : '');
-                cell.dataset.dx = dx;
-                cell.dataset.dy = dy;
-
-                if (isCenter) {
-                    cell.textContent = '●';
-                } else if (activeSet.has(`${dx},${dy}`)) {
-                    cell.classList.add('active');
-                }
-
-                if (!isCenter) {
-                    this._addEventListener(cell, 'mousedown', (e) => {
-                        e.preventDefault();
-                        _dragging = true;
-                        // El estado destino es el opuesto al estado actual de la celda inicial
-                        _paintActive = !cell.classList.contains('active');
-                        cell.classList.toggle('active', _paintActive);
-                        this._onNeighborhoodCellToggled();
-                    });
-
-                    this._addEventListener(cell, 'mouseenter', () => {
-                        if (!_dragging) return;
-                        if (cell.classList.contains('active') !== _paintActive) {
-                            cell.classList.toggle('active', _paintActive);
-                            this._onNeighborhoodCellToggled();
-                        }
-                    });
-                }
-
-                container.appendChild(cell);
-            }
-        }
-
-        this._updateCustomNeighborCount();
+        this._neighborhoodController.renderGrid(radius);
     }
 
     /**
@@ -1306,102 +1121,21 @@ class UIController {
      * Detecta si la selección resultante coincide con Moore o Neumann para
      * actualizar el selector de tipo; si no, marca 'custom'.
      */
-    _onNeighborhoodCellToggled() {
-        const radius = this.automaton.neighborhoodRadius;
-        const detected = this._detectPresetType(radius);
-
-        if (detected === 'moore' || detected === 'neumann') {
-            this.automaton.setNeighborhoodType(detected);
-        } else {
-            this._applyCustomNeighborhood();
-        }
-
-        const typeSelect = document.getElementById('neighborhoodType');
-        if (typeSelect) typeSelect.value = detected;
-
-        this._updateCustomNeighborCount();
-        this._displayController.updateHeaderInfo();
-    }
 
     /**
      * Compara la selección visual actual con los patrones Moore y Neumann.
      * @param {number} radius
      * @returns {'moore' | 'neumann' | 'custom'}
      */
-    _detectPresetType(radius) {
-        const container = document.getElementById('neighborhoodGrid');
-        if (!container) return 'custom';
-
-        const active = new Set();
-        container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
-            if (cell.classList.contains('active')) active.add(`${cell.dataset.dx},${cell.dataset.dy}`);
-        });
-
-        const mooreSet = new Set();
-        const neumannSet = new Set();
-        for (let dx = -radius; dx <= radius; dx++) {
-            for (let dy = -radius; dy <= radius; dy++) {
-                if (dx === 0 && dy === 0) continue;
-                const key = `${dx},${dy}`;
-                mooreSet.add(key);
-                if (Math.abs(dx) + Math.abs(dy) <= radius) neumannSet.add(key);
-            }
-        }
-
-        const eq = (a, b) => a.size === b.size && [...a].every(k => b.has(k));
-        if (eq(active, mooreSet)) return 'moore';
-        if (eq(active, neumannSet)) return 'neumann';
-        return 'custom';
-    }
 
     /**
      * Lee el estado visual y lo aplica al autómata como vecindad custom.
      */
-    _applyCustomNeighborhood() {
-        const container = document.getElementById('neighborhoodGrid');
-        if (!container) return;
-
-        const offsets = [];
-        container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
-            if (cell.classList.contains('active')) {
-                offsets.push({dx: parseInt(cell.dataset.dx), dy: parseInt(cell.dataset.dy)});
-            }
-        });
-
-        this.automaton.core.setNeighborhood({offsets});
-        this._updateCustomNeighborCount();
-        this._displayController.updateNeighborhoodInfo();
-    }
 
     /**
      * Actualiza el contador de vecinos activos en la etiqueta.
      */
-    _updateCustomNeighborCount() {
-        const countEl = document.getElementById('customNeighborCount');
-        if (!countEl) return;
-        const active = document.querySelectorAll('#neighborhoodGrid .neighborhood-cell.active').length;
-        countEl.textContent = active;
-    }
 
-    _bindNeighborhoodEvents() {
-        const typeSelect = document.getElementById('neighborhoodType');
-        const radiusSlider = document.getElementById('neighborhoodRadius');
-
-        if (typeSelect) {
-            this._addEventListener(typeSelect, 'change', (e) => this.changeNeighborhoodType(e.target.value));
-        }
-
-        if (radiusSlider) {
-            this._addEventListener(radiusSlider, 'input', (e) => {
-                this.changeNeighborhoodRadius(parseInt(e.target.value));
-                const radiusValue = document.getElementById('radiusValue');
-                if (radiusValue) radiusValue.textContent = e.target.value;
-            });
-        }
-
-        // Render inicial: la grilla siempre visible al cargar
-        this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
-    }
 
     _bindPatternsControls() {
         const toggleRowsBtn = document.getElementById('patternsToggleRows');
