@@ -73,6 +73,20 @@ class PatternManager {
                 this.setFilter(mode, rule);
             })
         );
+
+        // Actualizar el thumbnail del patrón "random" al mover el slider de densidad
+        const densitySlider = document.getElementById('randomPercentage');
+        if (densitySlider) {
+            const updateThumb = () => {
+                if (!this._randomThumb) return;
+                this._renderRandomThumb(
+                    this._randomThumb.getContext('2d'),
+                    this._getRandomDensity()
+                );
+            };
+            densitySlider.addEventListener('input', updateThumb);
+            this._cleanups.push(() => densitySlider.removeEventListener('input', updateThumb));
+        }
     }
 
     // =========================================
@@ -197,9 +211,14 @@ class PatternManager {
             thumbnail.className = 'pattern-thumb-horizontal';
 
             if (pattern.pattern === 'random') {
-                thumbnail.innerHTML = '🎲';
-                thumbnail.style.fontSize = '1.5rem';
-                thumbnail.style.color = '#8b5cf6';
+                const canvas = document.createElement('canvas');
+                canvas.width = 40;
+                canvas.height = 40;
+                canvas.className = 'pattern-canvas-horizontal';
+                const ctx = canvas.getContext('2d');
+                this._randomThumb = canvas;                 // referencia para actualizaciones
+                this._renderRandomThumb(ctx, this._getRandomDensity());
+                thumbnail.appendChild(canvas);
             } else {
                 const canvas = document.createElement('canvas');
                 canvas.width = 40;
@@ -282,6 +301,57 @@ class PatternManager {
             this._patternState.rotation = 0;
         }
         this._updatePatternInfo();
+    }
+
+    /**
+     * Lee la densidad actual del slider del panel izquierdo (0-1).
+     * @returns {number}
+     */
+    _getRandomDensity() {
+        const slider = document.getElementById('randomPercentage');
+        return slider ? parseFloat(slider.value) / 100 : 0.35;
+    }
+
+    /**
+     * Dibuja un grid aleatorio de 10×10 en el canvas del thumbnail.
+     * Cada celda del grid ocupa 4×4 px (40px / 10 celdas), con 1px de margen.
+     * Se usa una semilla visual fija por densidad para que el thumbnail sea
+     * estable mientras el slider no se mueve.
+     *
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} density — proporción de celdas vivas (0-1)
+     */
+    _renderRandomThumb(ctx, density) {
+        const SIZE = 10;   // celdas
+        const CELL = 4;    // px por celda (40 / 10)
+        const GAP = 0;    // sin hueco — celdas contiguas como en los otros thumbnails
+        const TOTAL = SIZE * (CELL + GAP);
+        const OFFSET = (40 - TOTAL) / 2;
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, 40, 40);
+
+        ctx.fillStyle = '#8b5cf6';  // color canónico del patrón random
+
+        // Semilla determinista basada en densidad para reproducibilidad visual
+        // (el usuario ve el mismo patrón al volver al mismo valor del slider).
+        let seed = Math.round(density * 1000);
+        const rng = () => {
+            seed = (seed * 1664525 + 1013904223) & 0xffffffff;
+            return (seed >>> 0) / 0xffffffff;
+        };
+
+        for (let r = 0; r < SIZE; r++) {
+            for (let c = 0; c < SIZE; c++) {
+                if (rng() < density) {
+                    ctx.fillRect(
+                        OFFSET + c * (CELL + GAP),
+                        OFFSET + r * (CELL + GAP),
+                        CELL, CELL
+                    );
+                }
+            }
+        }
     }
 
     _renderPatternToCanvas(ctx, patternData, color) {

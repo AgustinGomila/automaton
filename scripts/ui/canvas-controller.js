@@ -160,7 +160,10 @@ class CanvasController {
             const {x, y} = this.automaton.getCellFromMouse(touch);
 
             if (this._patternState.pattern) {
-                this.automaton.importPattern(this._patternState.pattern, x, y);
+                const density = this._patternState.pattern?.pattern === 'random'
+                    ? (parseFloat(document.getElementById('randomPercentage')?.value) / 100 || 0.35)
+                    : undefined;
+                this.automaton.importPattern(this._patternState.pattern, x, y, density);
             } else {
                 isTouchDrawing = true;
                 this.automaton.setCell(x, y, !this.automaton.grid[x][y]);
@@ -247,7 +250,12 @@ class CanvasController {
             const wasRunning = this.automaton.isRunning;
             if (wasRunning) this.automaton.stop();
 
-            this.automaton.importPattern(this._patternState.pattern, x, y);
+            // Para el patrón "random", leer la densidad del slider del panel izquierdo.
+            const density = this._patternState.pattern?.pattern === 'random'
+                ? (parseFloat(document.getElementById('randomPercentage')?.value) / 100 || 0.35)
+                : undefined;
+
+            this.automaton.importPattern(this._patternState.pattern, x, y, density);
 
             if (wasRunning) {
                 requestAnimationFrame(() => this.automaton.start());

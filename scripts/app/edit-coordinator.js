@@ -333,12 +333,13 @@ class EditCoordinator {
     // IMPORTAR / EXPORTAR
     // =========================================
 
-    async importPattern(pattern, centerX, centerY) {
+    async importPattern(pattern, centerX, centerY, density) {
         const wasRunning = await this._haltForEditAsync();
 
         const result = this._a.stateManager.importPattern(pattern, centerX, centerY, {
             saveToHistory: true,
-            generation: this._a.generation
+            generation: this._a.generation,
+            density
         });
 
         if (result.changedCells.length > 0) {

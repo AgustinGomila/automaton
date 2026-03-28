@@ -850,8 +850,8 @@ class CellularAutomaton {
         return this._editor.clearArea(minX, minY, maxX, maxY);
     }
 
-    async importPattern(pat, cx, cy) {
-        return this._editor.importPattern(pat, cx, cy);
+    async importPattern(pat, cx, cy, density) {
+        return this._editor.importPattern(pat, cx, cy, density);
     }
 
     exportPattern(bounds) {
