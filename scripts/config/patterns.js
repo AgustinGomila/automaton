@@ -677,7 +677,7 @@ const defaultPatterns = {
     },
     random: {
         name: "Aleatorio",
-        description: "Patrón aleatorio con densidad ~35%",
+        description: "Patrón aleatorio",
         category: "general",
         rule: "general",
         cellCount: 0,
