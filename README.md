@@ -3,8 +3,8 @@
 ![ES](https://flagcdn.com/w20/es.png) Español — ![EN](https://flagcdn.com/w20/gb.png) [English](README_en.md)
 
 Simulador interactivo de autómatas celulares que corre íntegramente en el navegador, sin dependencias ni build system.
-Soporta autómatas 2D clásicos con reglas B/S, seis motores especiales, edición completa del grid e internacionalización
-ES/EN.
+Soporta autómatas 2D clásicos con reglas B/S, siete motores especiales, grids rectangulares independientes, edición
+completa del grid e internacionalización ES/EN.
 
 **[Experimentar en vivo](https://agustingomila.github.io/automaton/)**
 
@@ -17,6 +17,7 @@ ES/EN.
 - Más de 30 reglas B/S predefinidas: Conway B3/S23, HighLife, Day & Night, Kauffman y muchas más
 - Regla personalizada: define tus propios parámetros B/S
 - Vecindad Moore (8 vecinos) o Von Neumann (4 vecinos), con radio configurable (1–10)
+- Grid rectangular: ancho y alto independientes con bloqueo de proporción y presets
 - Wrap toroidal configurable
 
 ### Motores Especiales
@@ -26,6 +27,8 @@ ES/EN.
 - **RD-2D** — Distinción Recursiva 2D con 16 estados codificando bordes N/S/E/W y regla XOR
 - **ETA (Autómata Triangular Elemental)** — Grid triangular con reglas tipo Wolfram adaptadas, modo borde y modo
   vértice, destroboscopio
+- **Generations** — Extensión multiestado de las reglas B/S con N estados de decaimiento y paleta de colores
+  configurable
 - **Ulam-Warburton** — Fractal bidimensional con dibujo libre y randomize
 - **Hormiga de Langton** — Multi-agente y multi-color con reglas configurables y presets
 - **WireWorld** — Simulación de circuitos electrónicos con 4 estados (vacío, cabeza, cola, conductor); dibujo libre,
@@ -76,17 +79,18 @@ ES/EN.
 
 ### Atajos Globales
 
-| Tecla     | Acción                   |
-|-----------|--------------------------|
-| Espacio   | Ejecutar / Pausar        |
-| S         | Paso siguiente           |
-| Z         | Deshacer                 |
-| Shift + Z | Rehacer                  |
-| A         | Aleatorio                |
-| I         | Performance              |
-| C         | Limpiar                  |
-| G         | Mostrar / Ocultar grilla |
-| H / ?     | Ayuda                    |
+| Tecla     | Acción                      |
+|-----------|-----------------------------|
+| Espacio   | Ejecutar / Pausar           |
+| S         | Paso siguiente              |
+| Z         | Deshacer                    |
+| Shift + Z | Rehacer                     |
+| A         | Aleatorio                   |
+| I         | Performance                 |
+| C         | Limpiar                     |
+| G         | Mostrar / Ocultar grilla    |
+| H         | Mostrar / Ocultar resaltado |
+| ?         | Ayuda                       |
 
 ---
 
@@ -103,60 +107,73 @@ ES/EN.
 
 ```
 automaton/
-├── index.html                    # Entrada principal, estructura UI
-├── main.css                      # Estilos globales
+├── index.html                       # Entrada principal, estructura UI
+├── main.css                         # Estilos globales
 │
-├── main.js                       # Bootstrap: instancia y conecta todos los módulos
+├── main.js                          # Bootstrap: instancia y conecta todos los módulos
 │
 ├── -- Nucleo --
-├── automaton.js                  # Coordinador principal de la simulacion
-├── automaton-loop.js             # Bucle de animacion (requestAnimationFrame)
-├── cellular-automaton.js         # Core CA: aplica reglas B/S sobre el grid
-├── grid-manager.js               # Grid bidimensional Uint8Array[], doble buffer
-├── rule-engine.js                # Motor de reglas B/S, parse de cadenas
-├── neighborhood-calculator.js    # Vecindarios Moore y Von Neumann con radio
-├── state-manager.js              # Historial undo/redo, import/export de patrones
-├── simulator-limiter.js          # Limites de generacion y poblacion
-├── circular-array.js             # Buffer circular para historial
-├── event-bus.js                  # Bus de eventos global (pub/sub)
+├── automaton.js                     # Coordinador principal de la simulacion
+├── automaton-loop.js                # Bucle de animacion (requestAnimationFrame)
+├── cellular-automaton.js            # Core CA: aplica reglas B/S sobre el grid
+├── grid-manager.js                  # Grid bidimensional Uint8Array[], doble buffer
+├── rule-engine.js                   # Motor de reglas B/S, parse de cadenas
+├── neighborhood-calculator.js       # Vecindarios Moore y Von Neumann con radio
+├── state-manager.js                 # Historial undo/redo, import/export de patrones
+├── edit-coordinator.js              # Operaciones de edicion del grid (cortar, pegar, etc.)
+├── simulator-limiter.js             # Limites de generacion y poblacion
+├── circular-array.js                # Buffer circular para historial
+├── event-bus.js                     # Bus de eventos global (pub/sub)
 │
 ├── -- Motores Especiales --
-├── special-engine-manager.js     # Orquesta activacion y ciclo de vida de motores
-├── wolfram-engine.js             # Automata 1D de Wolfram (reglas 0-255)
-├── rd2d-engine.js                # Distincion Recursiva 2D (16 estados)
-├── triangle-engine.js            # Automata Triangular Elemental (ETA)
-├── triangle-grid-manager.js      # Grid triangular con logica de vecindad
-├── triangle-worker.js            # Worker para calculo del ETA
-├── triangle-worker-manager.js    # Gestor del worker triangular
-├── ulam-warburton-engine.js      # Fractal de Ulam-Warburton
-├── langton-engine.js             # Hormiga de Langton multi-agente
-├── wireworld-engine.js           # WireWorld (4 estados: vacio, cabeza, cola, conductor)
+├── special-engine-manager.js        # Orquesta activacion y ciclo de vida de motores
+├── wolfram-engine.js                # Automata 1D de Wolfram (reglas 0-255)
+├── rd2d-engine.js                   # Distincion Recursiva 2D (16 estados)
+├── triangle-engine.js               # Automata Triangular Elemental (ETA)
+├── triangle-grid-manager.js         # Grid triangular con logica de vecindad
+├── triangle-worker.js               # Worker para calculo del ETA
+├── triangle-worker-manager.js       # Gestor del worker triangular
+├── generations-engine.js            # Generations: extension multiestado de reglas B/S
+├── ulam-warburton-engine.js         # Fractal de Ulam-Warburton
+├── langton-engine.js                # Hormiga de Langton multi-agente
+├── wireworld-engine.js              # WireWorld (4 estados: vacio, cabeza, cola, conductor)
 │
 ├── -- Renderizado --
-├── grid-renderer.js              # Renderer Canvas 2D con dirty rendering y efectos
-├── triangle-renderer.js          # Renderer Canvas 2D para grid triangular
-├── triangle-webgl2-renderer.js   # Renderer WebGL2 para grid triangular
-├── automaton-worker.js           # Worker para calculo del grid estandar
-├── grid-worker-manager.js        # Gestor del worker estandar
+├── grid-renderer.js                 # Renderer Canvas 2D con dirty rendering y efectos
+├── triangle-renderer.js             # Renderer Canvas 2D para grid triangular
+├── triangle-webgl2-renderer.js      # Renderer WebGL2 para grid triangular
+├── automaton-worker.js              # Worker para calculo del grid estandar
+├── grid-worker-manager.js           # Gestor del worker estandar
 │
 ├── -- Controladores UI --
-├── ui-controller.js              # Controlador principal de UI
-├── canvas-controller.js          # Interaccion con el canvas (dibujo, seleccion, pan)
-├── display-controller.js         # Header: regla activa, vecindad, indicador de modo
-├── special-mode-controller.js    # Toggles y controles de cada motor especial
-├── responsive-controller.js      # Adaptacion a distintos tamanios de pantalla
+├── ui-controller.js                 # Coordinador principal de UI
+├── canvas-controller.js             # Interaccion con el canvas (dibujo, pan, teclas)
+├── drawing-tool.js                  # Pincel con interpolacion Bresenham y flood fill
+├── selection-manager.js             # Seleccion rectangular, arrastre y copia de areas
+├── display-controller.js            # Header: regla activa, vecindad, indicador de modo
+├── special-mode-controller.js       # Coordinacion de activacion de motores especiales
+├── special-mode-ui.js               # Paneles, toggles e indicadores de modos especiales
+├── grid-controller.js               # Dimensiones del grid, zoom y autofit
+├── import-export-controller.js      # Importacion y exportacion de patrones (RLE, MCL)
+├── rule-neighborhood-controller.js  # Selector de reglas B/S y grilla visual de vecindad
+├── effects-controller.js            # Efecto de actividad, area de influencia y colores
+├── responsive-controller.js         # Adaptacion a distintos tamanios de pantalla
+├── welcome-modal.js                 # Modal de bienvenida
+│
+├── -- Utilidades de arranque --
+├── grid-autofit.js                  # Ajuste automatico del grid al espacio disponible
 │
 ├── -- Datos y Codecs --
-├── patterns.js                   # Libreria de patrones con filtrado por modo
-├── pattern-loader.js             # Carga y gestion de la libreria de patrones
-├── rules.js                      # Definicion de reglas B/S predefinidas
-├── rules-loader.js               # Carga de reglas
-├── rle-codec.js                  # Codec RLE para importacion/exportacion de patrones
-├── mcl-codec.js                  # Codec MCL para patrones WireWorld
-├── i18n.js                       # Internacionalizacion ES/EN
+├── patterns.js                      # Libreria de patrones con filtrado por modo
+├── pattern-loader.js                # Carga y gestion de la libreria de patrones
+├── rules.js                         # Definicion de reglas B/S predefinidas
+├── rules-loader.js                  # Carga de reglas
+├── rle-codec.js                     # Codec RLE para importacion/exportacion de patrones
+├── mcl-codec.js                     # Codec MCL para patrones WireWorld
+├── i18n.js                          # Internacionalizacion ES/EN
 │
-├── patterns.json                 # Patrones predefinidos (RLE)
-└── rules.json                    # Reglas predefinidas
+├── patterns.json                    # Patrones predefinidos (RLE)
+└── rules.json                       # Reglas predefinidas
 ```
 
 ---
