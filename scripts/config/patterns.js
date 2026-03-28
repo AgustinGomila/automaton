@@ -83,6 +83,8 @@ class PatternManager {
                     this._randomThumb.getContext('2d'),
                     this._getRandomDensity()
                 );
+                // Si el patrón aleatorio está seleccionado, actualizar también el texto de detalle
+                if (this._patternState.key === 'random') this._updatePatternInfo();
             };
             densitySlider.addEventListener('input', updateThumb);
             this._cleanups.push(() => densitySlider.removeEventListener('input', updateThumb));
@@ -394,6 +396,17 @@ class PatternManager {
 
         if (nameEl && detailsEl && pattern) {
             const originalPattern = window.PATTERNS[this._patternState.key];
+
+            // Patrón aleatorio: mostrar densidad actual en lugar de rotación
+            if (pattern.pattern === 'random') {
+                const density = Math.round(this._getRandomDensity() * 100);
+                nameEl.textContent = pattern.name;
+                detailsEl.textContent = `${density}% densidad`;
+                if (descEl) descEl.textContent = originalPattern.description || '';
+                this._patternState.pattern = pattern;
+                return;
+            }
+
             const rotationText = this._patternState.rotation > 0 ? ` (${this._patternState.rotation}°)` : '';
             nameEl.textContent = `${pattern.name}${rotationText}`;
 

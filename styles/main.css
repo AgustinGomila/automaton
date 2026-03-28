@@ -310,13 +310,18 @@ input[type="range"]::-webkit-slider-thumb {
 
 select {
     width: 100%;
-    padding: 10px 12px;
+    padding: 10px 32px 10px 12px;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--light-text);
     font-size: 0.9rem;
     cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2310b981' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
 }
 
 select option {
@@ -1559,27 +1564,27 @@ canvas {
 .custom-rule-group {
     border: 1px solid var(--warning);
     border-radius: 8px;
-    padding: 12px;
+    padding: 10px;
     background: rgba(245, 158, 11, 0.05);
-    margin-top: 10px;
-    margin-bottom: 20px;
+    margin-top: 8px;
+    margin-bottom: 14px;
 }
 
 .custom-rule-group label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 3px;
     font-weight: 600;
     color: var(--warning);
 }
 
 .custom-rule-group input {
     width: 100%;
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     color: var(--light-text);
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     font-family: 'Courier New', monospace;
 }
 

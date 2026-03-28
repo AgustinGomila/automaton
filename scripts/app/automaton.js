@@ -7,7 +7,7 @@
  * • Worker, renderer y engines especiales reciben dimensiones rectangulares.
  */
 class CellularAutomaton {
-    constructor(gridWidth = 500, gridHeight = gridWidth, cellSize = 2) {
+    constructor(gridWidth = 500, gridHeight = gridWidth, cellSize = 1) {
         // Soportar firma legacy: constructor(gridSize, cellSize)
         // Si gridHeight parece un cellSize (1–20) y gridWidth es grande → API legacy
         if (gridHeight >= 1 && gridHeight <= 20 && gridWidth > 20) {
@@ -54,13 +54,14 @@ class CellularAutomaton {
             gridWidth: this.gridWidth,
             gridHeight: this.gridHeight,
             cellSize: this.cellSize,
-            showGrid: true,
+            showGrid: false,
             showActivityEffect: true,
             getCell: (x, y) => this.core.getCell(x, y),
             getRD2DState: (x, y) => this.rd2dEngine?.stateGrid?.[x]?.[y],
             isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridWidth: () => this.gridWidth,
-            getGridHeight: () => this.gridHeight
+            getGridHeight: () => this.gridHeight,
+            showGridHighlights: false
         });
 
         // === ESTADO DE EJECUCIÓN ===
