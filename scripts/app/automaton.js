@@ -58,6 +58,8 @@ class CellularAutomaton {
             showGrid: true,
             showActivityEffect: true,
             getCell: (x, y) => this.core.getCell(x, y),
+            getRD2DState: (x, y) => this.rd2dEngine?.stateGrid?.[x]?.[y],
+            isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight
         });
@@ -962,6 +964,42 @@ class CellularAutomaton {
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
+    }
+
+    /**
+     * Variante de syncEngineAfterEdit para operaciones de move/drag que ya
+     * relocalizaron los agentes con moveEngineAgents().
+     *
+     * En Langton, syncFromGrid() reconstruye ants[] solo donde stateGrid===0,
+     * matando TODAS las hormigas activas (stateGrid > 0). Por eso se omite:
+     * moveEngineAgents() ya trasladó ants[] al destino correctamente.
+     * Los demás engines (RD2D, WireWorld) no tienen agentes posicionales y
+     * sí necesitan sincronizar su stateGrid desde grid[][].
+     */
+    syncEngineAfterMove() {
+        this.renderer.resetActivity();
+        const {specialMode, rd2dEngine, wireworldEngine} = this;
+        if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
+        if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
+    }
+
+    /**
+     * Relocaliza los agentes del engine activo de un área origen a un área destino.
+     * Actualmente solo Langton tiene agentes (hormigas) con posición propia.
+     * En todos los demás modos es un no-op.
+     *
+     * @param {number} srcX — columna izquierda del área origen
+     * @param {number} srcY — fila superior del área origen
+     * @param {number} srcW — ancho del área (celdas)
+     * @param {number} srcH — alto del área (celdas)
+     * @param {number} dstX — columna izquierda del área destino
+     * @param {number} dstY — fila superior del área destino
+     */
+    moveEngineAgents(srcX, srcY, srcW, srcH, dstX, dstY) {
+        const {specialMode, langtonEngine} = this;
+        if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) {
+            langtonEngine.moveAgents(srcX, srcY, srcW, srcH, dstX, dstY);
+        }
     }
 
     getActiveEngineInfo() {

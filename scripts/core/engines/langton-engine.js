@@ -306,6 +306,44 @@ class LangtonEngine {
     }
 
     /**
+     * Relocaliza hormigas de un área rectangular al destino equivalente.
+     * Llamado por SelectionManager.endDrag() en modo move (no copia) para
+     * trasladar las hormigas del área origen al área destino preservando
+     * sus direcciones exactas.
+     *
+     * No actualiza stateGrid ni grid[][] — eso ya lo hicieron
+     * clearPatternCells() y pasteArea() antes de llamar aquí.
+     *
+     * @param {number} srcX — columna izquierda del área origen
+     * @param {number} srcY — fila superior del área origen
+     * @param {number} srcW — ancho del área (celdas)
+     * @param {number} srcH — alto del área (celdas)
+     * @param {number} dstX — columna izquierda del área destino
+     * @param {number} dstY — fila superior del área destino
+     */
+    moveAgents(srcX, srcY, srcW, srcH, dstX, dstY) {
+        const {gridWidth: gw, gridHeight: gh} = this._ctx;
+        const dx = dstX - srcX;
+        const dy = dstY - srcY;
+
+        this.ants = this.ants
+            .map(ant => {
+                const inSrc = ant.x >= srcX && ant.x < srcX + srcW
+                    && ant.y >= srcY && ant.y < srcY + srcH;
+                if (!inSrc) return ant;              // fuera del área → sin cambio
+
+                const nx = ant.x + dx;
+                const ny = ant.y + dy;
+
+                // Descartar si el destino queda fuera del grid
+                if (nx < 0 || nx >= gw || ny < 0 || ny >= gh) return null;
+
+                return {x: nx, y: ny, dir: ant.dir};
+            })
+            .filter(Boolean);
+    }
+
+    /**
      * Sincroniza ants[] con el estado actual de grid[][].
      * Llamado después de pegar un patrón o mover una selección:
      *   - Celdas vivas con stateGrid=0 → posiciones de hormiga
