@@ -52,22 +52,17 @@ class ResponsiveController {
 
         const defaultW = 200;
         const defaultH = 200;
-        const defaultCellSize = 2;
 
         // ── Grid size ──────────────────────────────────────────────────────
-        // Comprobar las dimensiones reales del autómata (no solo el slider legacy)
-        // para detectar si el grid ya está en el tamaño móvil correcto.
         const currentW = this.automaton.gridWidth;
         const currentH = this.automaton.gridHeight;
 
         if (currentW !== defaultW || currentH !== defaultH) {
-            // Actualizar sliders rectangulares
             const wSlider = document.getElementById('gridWidth');
             const hSlider = document.getElementById('gridHeight');
             if (wSlider) wSlider.value = defaultW;
             if (hSlider) hSlider.value = defaultH;
 
-            // Actualizar displays rectangulares
             const wDisplay = document.getElementById('gridWidthValue');
             const hDisplay = document.getElementById('gridHeightValue');
             const badge = document.getElementById('gridDimensionsBadge');
@@ -77,15 +72,6 @@ class ResponsiveController {
 
             this.uiController?.updateGridSizeDisplay?.();
             this.automaton.resizeGrid(defaultW, defaultH);
-        }
-
-        // ── Cell size ──────────────────────────────────────────────────────
-        const cellSizeInput = document.getElementById('cellSize');
-        const currentCellSize = this.automaton.cellSize;
-        if (currentCellSize !== defaultCellSize) {
-            if (cellSizeInput) cellSizeInput.value = defaultCellSize;
-            this.uiController?.updateCellSizeDisplay?.();
-            this.automaton.setCellSize(defaultCellSize);
         }
 
         this.automaton._markAllDirty();

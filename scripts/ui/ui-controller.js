@@ -612,17 +612,17 @@ class UIController {
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(String(slider.value), 10) - 1;
-        if (value < 1) value = 1;
-        slider.value = value;
+        const value = parseInt(String(slider.value), 10);
+        if (value <= 1) return;
+        slider.value = value - 1;
         slider.dispatchEvent(new Event('input'));
     }
 
     increaseSpeed() {
         const slider = document.getElementById('speedControl');
-        let value = parseInt(String(slider.value), 10) + 1;
-        if (value > 10) value = 10;
-        slider.value = value;
+        const value = parseInt(String(slider.value), 10);
+        if (value >= 10) return;
+        slider.value = value + 1;
         slider.dispatchEvent(new Event('input'));
     }
 

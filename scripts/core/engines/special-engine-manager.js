@@ -225,8 +225,13 @@ class SpecialEngineManager {
             const gh = this._getGridHeight();
             const csFromWidth = origW / (gw + 0.5);
             const csFromHeight = origH / (gh * (Math.sqrt(3) / 2));
-            // Round (no floor): recupera origCellSize con ≤4 px de desborde en ancho
-            const fittedCellSize = Math.max(2, Math.min(20, Math.round(Math.min(csFromWidth, csFromHeight))));
+
+            // Respetar el cellSize actual del usuario: solo ajustar si geométricamente
+            // no cabe (el canvas triangular sería mayor que el espacio disponible).
+            // Math.max(1,…) en lugar de Math.max(2,…): cellSize=1 es válido con ImageData.
+            const currentCs = this._getCellSize();
+            const maxFit = Math.floor(Math.min(csFromWidth, csFromHeight));
+            const fittedCellSize = Math.max(1, Math.min(20, currentCs <= maxFit ? currentCs : maxFit));
 
             const rendererOptions = {
                 canvas, container,
