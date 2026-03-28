@@ -64,18 +64,19 @@ class MCLCodec {
     /**
      * Codifica un grid de estados WireWorld al formato MCL.
      *
-     * @param {Object} options
-     * @param {number[][]} options.stateGrid  — grid [x][y] con estados 0..3
+     * @param {Object}     options
+     * @param {number[][]} options.stateGrid    — grid [x][y] con estados 0..3
      *   (columna-mayor, igual que wireworldEngine.stateGrid)
-     * @param {number}     options.gridSize   — tamaño del grid (NxN)
-     * @param {string}     [options.name]     — nombre del patrón
+     * @param {number}     options.gridWidth    — ancho del grid
+     * @param {number}     options.gridHeight   — alto del grid
+     * @param {string}     [options.name]       — nombre del patrón
      * @param {string}     [options.description] — descripción
-     * @param {boolean}    [options.wrap]     — bordes toroidales
+     * @param {boolean}    [options.wrap]       — bordes toroidales
      * @returns {string} Texto MCL completo
      */
-    encode({stateGrid, gridSize, name, description, wrap = false}) {
+    encode({stateGrid, gridWidth, gridHeight, name, description, wrap = false}) {
         // Calcular bounding box de celdas no vacías
-        const bounds = this._boundingBox(stateGrid, gridSize);
+        const bounds = this._boundingBox(stateGrid, gridWidth, gridHeight);
         if (!bounds) return null; // grid vacío
 
         const {minX, minY, maxX, maxY} = bounds;
@@ -87,7 +88,7 @@ class MCLCodec {
         lines.push('#MCell 4.20');
         lines.push('#GAME WireWorld');
         lines.push('#CCOLORS 4');
-        lines.push(`#BOARD ${gridSize}x${gridSize}`);
+        lines.push(`#BOARD ${gridWidth}x${gridHeight}`);
         lines.push(`#WRAP ${wrap ? 1 : 0}`);
 
         if (name) lines.push(`#D ${name}`);
@@ -117,10 +118,10 @@ class MCLCodec {
      * Calcula el bounding box de celdas con estado > 0 (no vacías).
      * @private
      */
-    _boundingBox(stateGrid, gridSize) {
-        let minX = gridSize, minY = gridSize, maxX = -1, maxY = -1;
-        for (let x = 0; x < gridSize; x++) {
-            for (let y = 0; y < gridSize; y++) {
+    _boundingBox(stateGrid, gridWidth, gridHeight) {
+        let minX = gridWidth, minY = gridHeight, maxX = -1, maxY = -1;
+        for (let x = 0; x < gridWidth; x++) {
+            for (let y = 0; y < gridHeight; y++) {
                 if ((stateGrid[x]?.[y] ?? 0) > 0) {
                     if (x < minX) minX = x;
                     if (x > maxX) maxX = x;

@@ -164,9 +164,9 @@ class EditCoordinator {
     }
 
     _clearBaseGrid() {
-        const {grid, gridSize} = this._a;
-        for (let x = 0; x < gridSize; x++) {
-            for (let y = 0; y < gridSize; y++) {
+        const {grid, gridWidth: gw, gridHeight: gh} = this._a;
+        for (let x = 0; x < gw; x++) {
+            for (let y = 0; y < gh; y++) {
                 grid[x][y] = 0;
             }
         }
@@ -401,14 +401,15 @@ class EditCoordinator {
 
     /**
      * Exporta el estado WireWorld completo.
-     * @returns {{ stateGrid, gridSize, name, description, wrap } | null}
+     * @returns {{ stateGrid, gridWidth, gridHeight, name, description, wrap } | null}
      */
     exportWireworldState(name, description) {
-        const {specialMode, wireworldEngine, gridSize, wrapEdges} = this._a;
+        const {specialMode, wireworldEngine, gridWidth, gridHeight, wrapEdges} = this._a;
         if (specialMode !== SpecialEngineManager.MODES.WIREWORLD || !wireworldEngine?.isActive) return null;
         return {
             stateGrid: wireworldEngine.stateGrid,
-            gridSize,
+            gridWidth,
+            gridHeight,
             name: name || `WireWorld ${new Date().toLocaleDateString()}`,
             description: description || 'Exported from cellular automaton',
             wrap: wrapEdges

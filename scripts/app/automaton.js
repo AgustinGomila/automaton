@@ -696,7 +696,12 @@ class CellularAutomaton {
 
         if (Math.max(w, h) >= this.workerThreshold &&
             this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
+            // Reinicializar worker con las nuevas dimensiones
             this._initWorker();
+        } else {
+            // El nuevo grid es menor que el umbral — terminar el worker existente
+            // para evitar que opere con dimensiones obsoletas.
+            this._cleanupWorker();
         }
 
         eventBus.emit('automaton:resized', {width: w, height: h});
