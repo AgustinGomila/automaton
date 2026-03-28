@@ -86,6 +86,17 @@ class GridRenderer {
         // Proveedor de color personalizado (LangtonEngine multi-color)
         this._colorProvider = null;
 
+        // ── Path ImageData (cellSize ≤ 3) ─────────────────────────────────────
+        // Uint32Array comparte buffer con ImageData; putImageData = 1 call/frame.
+        this._pixelBuf = null;   // Uint32Array — pixels en formato RGBA uint32 LE
+        this._imageData = null;   // ImageData   — vista sobre el mismo buffer
+        this._colorCache = new Map(); // CSS string → uint32, evita re-parseo
+        this._dead32 = 0;      // Base colors pre-parseados para el hot-path
+        this._alive32 = 0;
+        this._born32 = 0;
+        this._dying32 = 0;
+        this._initPixelBuffer();
+
         // Colores configurables por estado
         this.colorDead = '#0f172a';  // 0→0
         this.colorBorn = '#b9b610';  // 0→1
@@ -248,6 +259,7 @@ class GridRenderer {
         this._fullDirtyPending = false;
         this._subtleGridCache = null;  // Fuerza reconstrucción del overlay
 
+        this._initPixelBuffer();       // Reinicializar buffer para nuevas dimensiones/cellSize
         this._resizeCanvas();
         this.markAllDirty();
     }
@@ -318,6 +330,8 @@ class GridRenderer {
 
     setColorProvider(fn) {
         this._colorProvider = fn || null;
+        this._colorCache.clear(); // Invalidar colores parseados del provider anterior
+        this.markAllDirty();
     }
 
     // =========================================
@@ -362,6 +376,184 @@ class GridRenderer {
     }
 
     // =========================================
+    // PIXEL BUFFER — PATH ImageData (cellSize ≤ 3)
+    // =========================================
+
+    /**
+     * Asigna el buffer de píxeles compartido entre Uint32Array e ImageData.
+     * Solo activo para cellSize ≤ 3, donde el overhead de N fillRect por frame
+     * es el cuello de botella dominante.
+     *
+     * Para cellSize > 3 (menos celdas, gradientes, efecto de brillo) se conserva
+     * el path con fillRect, que es más expresivo para esos efectos visuales.
+     */
+    _initPixelBuffer() {
+        const {gridWidth, gridHeight, cellSize} = this.config;
+        if (cellSize > 3) {
+            this._pixelBuf = null;
+            this._imageData = null;
+            return;
+        }
+        const cw = gridWidth * cellSize;
+        const ch = gridHeight * cellSize;
+        const buf = new Uint8ClampedArray(cw * ch * 4);
+        this._imageData = new ImageData(buf, cw, ch);
+        this._pixelBuf = new Uint32Array(buf.buffer);
+        // Precargar con el color muerto para que el primer dirty render sea correcto
+        this._pixelBuf.fill(this._parseCssColor(this.colorDead));
+    }
+
+    /**
+     * Parsea un color CSS a uint32 RGBA little-endian.
+     * Formato en memoria: [R, G, B, 0xFF] → uint32 = 0xFF_BB_GG_RR
+     *
+     * Cachea por string para que los mismos colores (p.ej. paleta de Langton)
+     * no se re-parseen en cada celda de cada frame.
+     *
+     * Soporta #rrggbb directamente; otros formatos CSS (hsl, rgb…) usan
+     * un canvas 1×1 como intermediario.
+     *
+     * @param   {string|null} css
+     * @returns {number} uint32 RGBA LE
+     */
+    _parseCssColor(css) {
+        if (!css) return this._dead32 || 0xFF170F0F;
+
+        let v = this._colorCache.get(css);
+        if (v !== undefined) return v;
+
+        let r, g, b;
+        if (css[0] === '#' && css.length === 7) {
+            r = parseInt(css.slice(1, 3), 16);
+            g = parseInt(css.slice(3, 5), 16);
+            b = parseInt(css.slice(5, 7), 16);
+        } else {
+            // Resolver formato no-hex (hsl, rgb, nombres…) vía canvas temporal
+            const tc = document.createElement('canvas');
+            tc.width = tc.height = 1;
+            const tcx = tc.getContext('2d');
+            tcx.fillStyle = css;
+            tcx.fillRect(0, 0, 1, 1);
+            [r, g, b] = tcx.getImageData(0, 0, 1, 1).data;
+        }
+
+        v = (0xFF000000 | (b << 16) | (g << 8) | r) >>> 0;
+        this._colorCache.set(css, v);
+        return v;
+    }
+
+    /**
+     * Actualiza los 4 colores base pre-parseados.
+     * Llamado al inicio de cada render pixel (coste: ~12 parseInt) para detectar
+     * cambios del usuario sin necesitar setters en las propiedades de color.
+     */
+    _syncBaseColors32() {
+        this._dead32 = this._parseCssColor(this.colorDead);
+        this._alive32 = this._parseCssColor(this.colorAlive);
+        this._born32 = this._parseCssColor(this.colorBorn);
+        this._dying32 = this._parseCssColor(this.colorDying);
+    }
+
+    /**
+     * Devuelve el color uint32 de una celda según estado y efecto de actividad.
+     * Equivalente uint32 de _getCellColor().
+     * @param {number}  cellIndex — índice plano column-major
+     * @param {boolean} isAlive
+     * @returns {number} uint32 RGBA LE
+     */
+    _getCellColor32(cellIndex, isAlive) {
+        if (this._colorProvider) {
+            const custom = this._colorProvider(cellIndex);
+            if (custom) return this._parseCssColor(custom);
+        }
+        if (!this.config.showActivityEffect) {
+            return isAlive ? this._alive32 : this._dead32;
+        }
+        const cooldown = this._activityCooldown;
+        if (isAlive) {
+            return this._activityAges[cellIndex] < cooldown ? this._born32 : this._alive32;
+        }
+        return this._dyingAges[cellIndex] < cooldown ? this._dying32 : this._dead32;
+    }
+
+    /**
+     * Escribe el bloque de cellSize×cellSize píxeles de una celda en _pixelBuf.
+     * El canvas es row-major: pixel(px, py) = buf[py * canvasWidth + px].
+     * @param {number} gx      — columna del grid
+     * @param {number} gy      — fila del grid
+     * @param {number} color32 — uint32 RGBA LE
+     */
+    _writeCellPixels(gx, gy, color32) {
+        const {cellSize, gridWidth} = this.config;
+        if (cellSize === 1) {
+            // Caso más frecuente: 1 píxel exacto por celda
+            this._pixelBuf[gy * gridWidth + gx] = color32;
+            return;
+        }
+        const cw = gridWidth * cellSize;
+        const px0 = gx * cellSize;
+        const py0 = gy * cellSize;
+        for (let r = 0; r < cellSize; r++) {
+            const rowBase = (py0 + r) * cw + px0;
+            for (let c = 0; c < cellSize; c++) {
+                this._pixelBuf[rowBase + c] = color32;
+            }
+        }
+    }
+
+    /**
+     * Render completo vía ImageData:
+     *   1× TypedArray.fill  → fondo completo en O(N) puro WASM/SIMD del engine
+     *   N× Uint32Array write → celdas coloreadas sin llamadas a Canvas API
+     *   1× putImageData     → única transferencia al framebuffer
+     *
+     * Reemplaza la secuencia anterior de N× fillRect (N = gw × gh).
+     */
+    _forceFullRenderPixel() {
+        this._syncBaseColors32();
+        const {gridWidth, gridHeight} = this.config;
+        const dead32 = this._dead32;
+
+        // Pasada 1: fondo completo con fill (internamente SIMD en V8)
+        this._pixelBuf.fill(dead32);
+
+        // Pasada 2: sobreescribir celdas con color ≠ dead
+        for (let x = 0; x < gridWidth; x++) {
+            for (let y = 0; y < gridHeight; y++) {
+                const cellIndex = x * gridHeight + y;
+                const isAlive = this._getCell(x, y);
+                const color32 = this._getCellColor32(cellIndex, isAlive);
+                if (color32 !== dead32) {
+                    this._writeCellPixels(x, y, color32);
+                }
+            }
+        }
+
+        // Una sola transferencia al framebuffer por frame
+        this.ctx.putImageData(this._imageData, 0, 0);
+    }
+
+    /**
+     * Render diferencial vía ImageData:
+     * Actualiza solo las celdas sucias en el buffer persistente y emite
+     * 1× putImageData. El buffer mantiene el estado renderizado entre frames,
+     * por lo que solo se sobreescriben las celdas que cambiaron.
+     */
+    _renderDirtyCellsPixel() {
+        this._syncBaseColors32();
+        const {gridHeight} = this.config;
+
+        for (const index of this._dirtyCells) {
+            const x = (index / gridHeight) | 0;
+            const y = index % gridHeight;
+            const isAlive = this._getCell(x, y);
+            this._writeCellPixels(x, y, this._getCellColor32(index, isAlive));
+        }
+
+        this.ctx.putImageData(this._imageData, 0, 0);
+    }
+
+    // =========================================
     // RENDER INTERNO
     // =========================================
 
@@ -373,10 +565,14 @@ class GridRenderer {
         // Asegurar que el overlay esté construido antes del primer render completo
         if (!this._subtleGridCache) this._buildGridCache();
 
+        if (this._pixelBuf) {
+            this._forceFullRenderPixel();
+            return;
+        }
+
+        // Path fillRect — cellSize > 3 (gradientes, efectos de brillo)
         this.ctx.fillStyle = '#0f172a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // La grilla la dibuja el overlay DOM — ningún drawImage aquí
         this._drawCells((x, y) => this._getCell(x, y));
     }
 
@@ -401,10 +597,15 @@ class GridRenderer {
         // Asegurar overlay construido (lazy, sólo en el primer render post-toggle)
         if (!this._subtleGridCache) this._buildGridCache();
 
+        if (this._pixelBuf) {
+            this._renderDirtyCellsPixel();
+            return;
+        }
+
+        // Path fillRect — cellSize > 3
         const {gridHeight, cellSize} = this.config;
 
         // ── Pasada 1: borrar todas las celdas sucias con colorDead ──────────
-        // Un único cambio de fillStyle para todas las celdas → mínimo overhead de estado.
         this.ctx.fillStyle = this.colorDead;
         for (const index of this._dirtyCells) {
             const x = (index / gridHeight) | 0;
