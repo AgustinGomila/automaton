@@ -83,6 +83,8 @@ completa del grid e internacionalización ES/EN.
 |-----------|-----------------------------|
 | Espacio   | Ejecutar / Pausar           |
 | S         | Paso siguiente              |
+| +         | Aumentar velocidad          |
+| -         | Reducir velocidad           |
 | Z         | Deshacer                    |
 | Shift + Z | Rehacer                     |
 | A         | Aleatorio                   |

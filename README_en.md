@@ -82,6 +82,8 @@ internationalization.
 |-----------|------------------------|
 | Space     | Run / Pause            |
 | S         | Next step              |
+| +         | Increase speed         |
+| -         | Decrease speed         |
 | Z         | Undo                   |
 | Shift + Z | Redo                   |
 | A         | Random                 |

@@ -427,6 +427,12 @@ class UIController {
                     this._canvasController._updateCursor();
                 }
                 break;
+            case '+':
+                this.increaseSpeed();
+                break;
+            case '-':
+                this.decreaseSpeed();
+                break;
             case ' ':
                 e.preventDefault();
                 this.togglePlay();
