@@ -1,24 +1,42 @@
 /**
- * SpecialModeController - Gestiona la UI de los motores especiales.
+ * SpecialModeController — Coordinador de los modos especiales del autómata.
  *
- * Responsabilidad: activación/desactivación de modos Wolfram, RD-2D y
- * Triangular, sus controles propios y el indicador de modo.
+ * Responsabilidad: coordinar la activación/desactivación de modos (Wolfram,
+ * RD-2D, Triangular, Langton, WireWorld, UW, Generations), leyendo la
+ * configuración del DOM y orquestando engines y capa de presentación.
  *
- * No conoce el canvas, la selección ni el bucle de animación.
+ * La presentación pura (indicadores, paneles, selectores) vive en SpecialModeUI.
+ * El acoplamiento a UIController se elimina mediante callbacks inyectados.
  */
 class SpecialModeController {
     /**
      * @param {Object}   options
      * @param {CellularAutomaton} options.automaton
-     * @param {Function} options.onUpdateHeader     - () => void
-     * @param {Function} options.onSyncPlayButton   - () => void
-     * @param {Function} options.onShowNotification - (msg, type, duration) => void
+     * @param {Function} options.onUpdateHeader          — () => void
+     * @param {Function} options.onSyncPlayButton        — () => void
+     * @param {Function} options.onShowNotification      — (msg, type, duration) => void
+     * @param {Function} [options.onSyncActivityColors]  — (generationsActive: boolean) => void
+     * @param {Function} [options.onToggleActivityEffect]— (enabled: boolean) => void
      */
-    constructor({automaton, onUpdateHeader, onSyncPlayButton, onShowNotification}) {
+    constructor({
+                    automaton,
+                    onUpdateHeader,
+                    onSyncPlayButton,
+                    onShowNotification,
+                    onSyncActivityColors = () => {
+                    },
+                    onToggleActivityEffect = () => {
+                    }
+                }) {
         this.automaton = automaton;
         this._onUpdateHeader = onUpdateHeader;
         this._onSyncPlayButton = onSyncPlayButton;
         this._onShowNotification = onShowNotification;
+        this._onSyncActivityColors = onSyncActivityColors;
+        this._onToggleActivityEffect = onToggleActivityEffect;
+
+        // Capa de presentación pura — operaciones DOM sin conocimiento de engines
+        this._ui = new SpecialModeUI(automaton);
 
         this._cleanups = [];
     }
@@ -178,7 +196,7 @@ class SpecialModeController {
             this._addEventListener(destroboscopeToggle, 'change', () => {
                 if (this.automaton.triangleEngine?.isActive) {
                     this.automaton.triangleEngine.destroboscope = destroboscopeToggle.checked;
-                    this._updateTwinRuleInfo();
+                    this._ui.updateTwinRuleInfo();
                 }
             });
         }
@@ -282,8 +300,8 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.WOLFRAM);
 
-            this._toggleWolframControls(true);
-            this._setModeSelectors(true);
+            this._ui.toggleWolframControls(true);
+            this._ui.setModeSelectors(true);
 
             this.automaton.wolframEngine.activate(rule, direction);
             this._finalizeActivation(SpecialEngineManager.MODES.WOLFRAM, t('notif.wolfram.enabled', {rule}));
@@ -301,8 +319,8 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.RD2D);
 
-            this._toggleRD2DControls(true);
-            this._setModeSelectors(true, 'neumann');
+            this._ui.toggleRD2DControls(true);
+            this._ui.setModeSelectors(true, 'neumann');
 
             this.automaton.rd2dEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.RD2D, t('notif.rd2d.enabled'));
@@ -334,8 +352,8 @@ class SpecialModeController {
                 }
             }
 
-            this._toggleTriangleControls(true);
-            this._setModeSelectors(true);
+            this._ui.toggleTriangleControls(true);
+            this._ui.setModeSelectors(true);
 
             const wrapToggle = document.getElementById('wrapToggle');
             const wrap = wrapToggle ? wrapToggle.checked : true;
@@ -353,7 +371,7 @@ class SpecialModeController {
             if (destroboscopeToggle) {
                 this.automaton.triangleEngine.destroboscope = destroboscopeToggle.checked;
             }
-            this._updateTwinRuleInfo();
+            this._ui.updateTwinRuleInfo();
 
             this.automaton._markAllDirty();
             this._finalizeActivation(SpecialEngineManager.MODES.TRIANGLE, t('notif.triangle.enabled', {rule}), true);
@@ -389,8 +407,8 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.LANGTON);
 
-            this._toggleLangtonControls(true);
-            this._setModeSelectors(true);
+            this._ui.toggleLangtonControls(true);
+            this._ui.setModeSelectors(true);
 
             this.automaton.langtonEngine.activate({rule, antCount});
             this._finalizeActivation(SpecialEngineManager.MODES.LANGTON, t('notif.langton.enabled'));
@@ -410,8 +428,8 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.WIREWORLD);
 
-            this._toggleWireworldControls(true);
-            this._setModeSelectors(true, 'moore');
+            this._ui.toggleWireworldControls(true);
+            this._ui.setModeSelectors(true, 'moore');
 
             this.automaton.wireworldEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.WIREWORLD, t('notif.wireworld.enabled'));
@@ -442,7 +460,7 @@ class SpecialModeController {
         } catch (e) {
             this._onShowNotification(`Error en regla: ${e.message}`, 'warning', 3000);
         }
-        window.app?.uiController?._toggleActivityEffect(false);
+        this._onToggleActivityEffect(false);
     }
 
     async activateGenerationsMode(birth, survival, numStates) {
@@ -451,7 +469,7 @@ class SpecialModeController {
 
             // En Generations el ruleSelector permanece habilitado: permite cambiar
             // la regla B/S base seleccionando una predefinida del dropdown.
-            this._setModeSelectors(true);
+            this._ui.setModeSelectors(true);
             document.getElementById('ruleSelector').disabled = false;
 
             this.automaton.generationsEngine.activate({birth, survival, numStates});
@@ -463,7 +481,7 @@ class SpecialModeController {
             // y conmutar sus swatches al modo Generations
             const colorsBlock = document.getElementById('activityColors');
             if (colorsBlock) colorsBlock.style.display = '';
-            window.app?.uiController?._syncActivityColorsBlock(true);
+            this._onSyncActivityColors(true);
         } catch (error) {
             console.error('Error cargando GenerationsEngine:', error);
             this._onShowNotification(t('notif.generations.error'), 'warning', 3000);
@@ -473,15 +491,15 @@ class SpecialModeController {
     deactivateGenerationsMode() {
         this._returnToStandard();
         // Restaurar swatches binarios y respetar estado del toggle de actividad
-        window.app?.uiController?._syncActivityColorsBlock(false);
-        window.app?.uiController?._toggleActivityEffect(true)
+        this._onSyncActivityColors(false);
+        this._onToggleActivityEffect(true)
     }
 
     async activateUWMode() {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.ULAM_WARBURTON);
 
-            this._setModeSelectors(true, 'neumann');
+            this._ui.setModeSelectors(true, 'neumann');
 
             this.automaton.uwEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.ULAM_WARBURTON, t('notif.uw.enabled'));
@@ -493,137 +511,6 @@ class SpecialModeController {
 
     deactivateUWMode() {
         this._returnToStandard();
-    }
-
-    _updateModeIndicator(mode) {
-        const isGenerations = mode === SpecialEngineManager.MODES.GENERATIONS;
-        const isStandard = mode === SpecialEngineManager.MODES.STANDARD;
-        const isStandardLike = isStandard || isGenerations;
-
-        // Emitir evento, pero con cuidado con la regla para Generations
-        // Generations NO debe afectar el selector de reglas estándar
-        if (isGenerations) {
-            // Para Generations: no emitimos rule para no tocar el selector estándar
-            // o emitimos un flag que indique "no tocar la UI de reglas estándar"
-            eventBus.emit('automaton:filterChanged', {
-                mode,
-                rule: undefined, // undefined = no modificar selector estándar
-                skipStandardRuleUpdate: true // flag explícito opcional
-            });
-        } else {
-            eventBus.emit('automaton:filterChanged', {mode, rule: null});
-        }
-
-        // 1. Manejo del acordeón "rules"
-        if (!isStandardLike) {
-            const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
-            if (rulesHeader) {
-                rulesHeader.classList.remove('active');
-            }
-        } else {
-            const rulesHeader = document.querySelector('.accordion-header[data-accordion="rules"]');
-            if (rulesHeader) {
-                rulesHeader.classList.add('active');
-            }
-        }
-
-        // 2. Sincronizar el toggle de modo estándar
-        const standardToggle = document.getElementById('standardToggle');
-        if (standardToggle) {
-            standardToggle.checked = isStandardLike;
-        }
-
-        // 3. Manejo de acordeones de motores especiales
-        for (const engineMode of Object.values(SpecialEngineManager.MODES)) {
-            if (engineMode === SpecialEngineManager.MODES.STANDARD) continue;
-            if (engineMode === SpecialEngineManager.MODES.GENERATIONS) continue;
-
-            const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
-            if (header) {
-                const shouldBeActive = engineMode === mode;
-                header.classList.toggle('active', shouldBeActive);
-            }
-        }
-
-        // 4. Actualizar indicador visual
-        const indicator = document.getElementById('modeIndicator');
-        if (!indicator) return;
-
-        if (mode === SpecialEngineManager.MODES.TRIANGLE) {
-            const info = this.automaton.triangleEngine.getInfo();
-            indicator.className = 'mode-indicator triangle-mode';
-            indicator.innerHTML = `<i class="fa-solid fa-play"></i> ETA R${info.rule}`;
-        } else if (mode === SpecialEngineManager.MODES.WOLFRAM) {
-            const info = this.automaton.wolframEngine.getInfo();
-            indicator.className = 'mode-indicator wolfram-mode';
-            indicator.innerHTML = `<i class="fas fa-arrows-alt-v"></i> Wolfram R${info.rule} ${info.direction === 'vertical' ? '↓' : '→'}`;
-        } else if (mode === SpecialEngineManager.MODES.LANGTON) {
-            const info = this.automaton.langtonEngine?.getInfo() || {rule: 'RL', antCount: 0};
-            const antLabel = info.antCount > 0 ? `×${info.antCount}` : 'custom';
-            indicator.className = 'mode-indicator langton-mode';
-            indicator.innerHTML = `<i class="fas fa-bug"></i> Langton "${info.rule}" ${antLabel}`;
-        } else if (mode === SpecialEngineManager.MODES.WIREWORLD) {
-            indicator.className = 'mode-indicator wireworld-mode';
-            indicator.innerHTML = `<i class="fas fa-bolt"></i> WireWorld`;
-        } else if (mode === SpecialEngineManager.MODES.ULAM_WARBURTON) {
-            indicator.className = 'mode-indicator uw-mode';
-            indicator.innerHTML = `<i class="fas fa-snowflake"></i> Ulam-Warburton`;
-        } else if (mode === SpecialEngineManager.MODES.GENERATIONS) {
-            const info = this.automaton.generationsEngine?.getInfo();
-            indicator.className = 'mode-indicator generations-mode';
-            indicator.innerHTML = `<i class="fas fa-layer-group"></i> Generations ${info?.ruleString ?? ''}`;
-        } else {
-            indicator.className = 'mode-indicator standard-mode';
-            indicator.innerHTML = `<i class="fas fa-th"></i> 2D Cellular`;
-        }
-    }
-
-    /**
-     * Muestra u oculta un panel de controles de modo especial.
-     * @param {string}  selector   — id del elemento (o selector CSS si cssQuery=true)
-     * @param {boolean} show       — true para activar, false para desactivar
-     * @param {boolean} cssQuery   — true para usar querySelector en lugar de getElementById
-     * @param {boolean} toggleClass — true para aplicar la clase 'active' (default true)
-     */
-    _toggleControls(selector, show, {cssQuery = false, toggleClass = true} = {}) {
-        const el = cssQuery
-            ? document.querySelector(selector)
-            : document.getElementById(selector);
-        if (!el) return;
-        if (toggleClass) el.classList.toggle('active', show);
-        el.style.opacity = show ? '1' : '0.5';
-        el.style.pointerEvents = show ? 'all' : 'none';
-    }
-
-    _toggleLangtonControls(show) {
-        this._toggleControls('langtonControls', show);
-    }
-
-    _toggleWireworldControls(show) {
-        this._toggleControls('wireworldControls', show);
-    }
-
-    _toggleWolframControls(show) {
-        this._toggleControls('wolframControls', show);
-    }
-
-    _toggleTriangleControls(show) {
-        this._toggleControls('triangleControls', show);
-    }
-
-    _toggleRD2DControls(show) {
-        this._toggleControls('.rd2d-info', show, {cssQuery: true, toggleClass: false});
-    }
-
-    _updateTwinRuleInfo() {
-        const info = document.getElementById('twinRuleInfo');
-        if (!info || !this.automaton.triangleEngine?.isActive) return;
-        const engine = this.automaton.triangleEngine;
-        if (engine.destroboscope) {
-            info.textContent = `↔ Twin: regla ${engine._twinRuleNumber}`;
-        } else {
-            info.textContent = '';
-        }
     }
 
     // =========================================
@@ -656,7 +543,7 @@ class SpecialModeController {
         }
         this.automaton.render();
         this._onUpdateHeader();
-        this._updateModeIndicator(mode);
+        this._ui.updateModeIndicator(mode);
         this._onShowNotification(successMsg, 'info', 2000);
         this._onSyncPlayButton();
     }
@@ -691,7 +578,7 @@ class SpecialModeController {
                     survival: parsed.survival,
                     numStates
                 });
-                this._updateModeIndicator(SpecialEngineManager.MODES.GENERATIONS);
+                this._ui.updateModeIndicator(SpecialEngineManager.MODES.GENERATIONS);
 
                 // Notificación de Generations (no Standard)
                 const ruleString = `B${parsed.birth.join('')}/S${parsed.survival.join('')}/C${numStates}`;
@@ -702,33 +589,17 @@ class SpecialModeController {
                 );
             } catch (e) {
                 // Si falla el parseo, caer a Standard normal
-                this._updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
+                this._ui.updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
                 this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
             }
         } else {
             // Standard puro
-            this._updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
+            this._ui.updateModeIndicator(SpecialEngineManager.MODES.STANDARD);
             this._onShowNotification(t('notif.standard.enabled'), 'info', 2000);
         }
 
         this._onUpdateHeader();
         this._onSyncPlayButton();
-    }
-
-    /**
-     * Configura ruleSelector y neighborhoodType para la entrada/salida de un modo especial.
-     *
-     * @param {boolean}      disabled      — true al activar un modo, false al volver al estándar
-     * @param {string|null}  neighborhood  — valor a asignar a neighborhoodType ('moore' | 'neumann')
-     *   null → no cambiar el valor, solo aplicar disabled
-     */
-    _setModeSelectors(disabled, neighborhood = null) {
-        document.getElementById('ruleSelector').disabled = disabled;
-        const neighborhoodSelect = document.getElementById('neighborhoodType');
-        if (neighborhoodSelect) {
-            if (neighborhood !== null) neighborhoodSelect.value = neighborhood;
-            neighborhoodSelect.disabled = disabled;
-        }
     }
 
     /**
@@ -747,19 +618,19 @@ class SpecialModeController {
             {
                 name: SpecialEngineManager.MODES.WOLFRAM,
                 toggleId: 'wolframToggle',
-                hideControls: () => this._toggleWolframControls(false),
+                hideControls: () => this._ui.toggleWolframControls(false),
                 deactivate: () => this.automaton.wolframEngine?.deactivate()
             },
             {
                 name: SpecialEngineManager.MODES.RD2D,
                 toggleId: 'rd2dToggle',
-                hideControls: () => this._toggleRD2DControls(false),
+                hideControls: () => this._ui.toggleRD2DControls(false),
                 deactivate: () => this.automaton.rd2dEngine?.deactivate()
             },
             {
                 name: SpecialEngineManager.MODES.TRIANGLE,
                 toggleId: 'triangleToggle',
-                hideControls: () => this._toggleTriangleControls(false),
+                hideControls: () => this._ui.toggleTriangleControls(false),
                 deactivate: () => this._deactivateTriangleEngine()
             },
             {
@@ -772,13 +643,13 @@ class SpecialModeController {
             {
                 name: SpecialEngineManager.MODES.LANGTON,
                 toggleId: 'langtonToggle',
-                hideControls: () => this._toggleLangtonControls(false),
+                hideControls: () => this._ui.toggleLangtonControls(false),
                 deactivate: () => this.automaton.langtonEngine?.deactivate()
             },
             {
                 name: SpecialEngineManager.MODES.WIREWORLD,
                 toggleId: 'wireworldToggle',
-                hideControls: () => this._toggleWireworldControls(false),
+                hideControls: () => this._ui.toggleWireworldControls(false),
                 deactivate: () => this.automaton.wireworldEngine?.deactivate()
             },
             {
@@ -814,7 +685,7 @@ class SpecialModeController {
 
         // Restaurar selectores compartidos al estado neutro.
         // El modo entrante los reconfigurará según sus necesidades.
-        this._setModeSelectors(false, 'moore');
+        this._ui.setModeSelectors(false, 'moore');
     }
 
     /**
@@ -855,7 +726,7 @@ class SpecialModeController {
         this._stopIfRunning();
         const count = antCount ?? (parseInt(document.getElementById('langtonAntCount')?.value) || 0);
         this.automaton.langtonEngine.activate({rule, antCount: count});
-        this._updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
+        this._ui.updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
         this._onUpdateHeader();
         this._onSyncPlayButton();
     }
@@ -893,7 +764,7 @@ class SpecialModeController {
             engine.reset();
             this.automaton.render();
         }
-        this._updateTwinRuleInfo();
+        this._ui.updateTwinRuleInfo();
         this._onUpdateHeader();
         this._onSyncPlayButton();
     }

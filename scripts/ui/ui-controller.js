@@ -33,7 +33,9 @@ class UIController {
             automaton: this.automaton,
             onUpdateHeader: () => this._displayController.updateHeaderInfo(),
             onSyncPlayButton: () => this._syncPlayButtonState(),
-            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur)
+            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
+            onSyncActivityColors: (active) => this._syncActivityColorsBlock(active),
+            onToggleActivityEffect: (enabled) => this._toggleActivityEffect(enabled)
         });
 
         // Grid controller — gestiona dimensiones de grid y zoom
