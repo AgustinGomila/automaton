@@ -24,8 +24,6 @@ class GridRenderer {
      * @param {HTMLCanvasElement} options.canvas
      * @param {HTMLElement}       options.container
      * @param {Function} options.getCell       — (x, y) => 0|1
-     * @param {Function} options.getRD2DState  — (x, y) => 0..15
-     * @param {Function} options.isRD2DActive  — () => boolean
      * @param {Function} options.getGridWidth  — () => number
      * @param {Function} options.getGridHeight — () => number
      * @param {Function} [options.getGridSize] — legacy, () => number
@@ -56,8 +54,6 @@ class GridRenderer {
         this.container = options.container;
 
         this._getCell = options.getCell;
-        this._getRD2DState = options.getRD2DState || (() => undefined);
-        this._isRD2DActive = options.isRD2DActive || (() => false);
         this._getGridWidth = options.getGridWidth;
         this._getGridHeight = options.getGridHeight;
 
@@ -371,8 +367,7 @@ class GridRenderer {
         this.canvas = null;
         this.container = null;
         this._getCell = null;
-        this._getRD2DState = null;
-        this._isRD2DActive = null;
+        this._colorProvider = null;
         this._getGridWidth = null;
         this._getGridHeight = null;
     }
@@ -453,11 +448,6 @@ class GridRenderer {
         const cellSize = this.config.cellSize;
         const cellIndex = x * this.config.gridHeight + y;
         const isAlive = this._getCell(x, y);
-
-        if (this._isRD2DActive() && isAlive) {
-            this._renderRD2DCell(x, y, cellSize, this._getRD2DState(x, y) || 0);
-            return;
-        }
 
         if (cellSize <= 3) {
             this._renderSmallCell(x, y, cellIndex, isAlive);
@@ -770,49 +760,6 @@ class GridRenderer {
                 }
             }
         }
-    }
-
-    _renderRD2DCell(x, y, cellSize, state) {
-        if (state === 0) return;
-
-        const centerX = x * cellSize + cellSize / 2;
-        const centerY = y * cellSize + cellSize / 2;
-        const half = cellSize / 2;
-
-        this.ctx.strokeStyle = this._getRD2DColor(state);
-        this.ctx.lineWidth = Math.max(2, cellSize / 4);
-        this.ctx.lineCap = 'round';
-        this.ctx.beginPath();
-
-        if ((state >> 3) && 1) {
-            this.ctx.moveTo(centerX, centerY);
-            this.ctx.lineTo(centerX, centerY - half + 1);
-        }
-        if ((state >> 2) && 1) {
-            this.ctx.moveTo(centerX, centerY);
-            this.ctx.lineTo(centerX, centerY + half - 1);
-        }
-        if ((state >> 1) && 1) {
-            this.ctx.moveTo(centerX, centerY);
-            this.ctx.lineTo(centerX + half - 1, centerY);
-        }
-        if (state && 1) {
-            this.ctx.moveTo(centerX, centerY);
-            this.ctx.lineTo(centerX - half + 1, centerY);
-        }
-
-        this.ctx.stroke();
-
-        this.ctx.fillStyle = this.ctx.strokeStyle;
-        this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, cellSize / 6, 0, Math.PI * 2);
-        this.ctx.fill();
-    }
-
-    _getRD2DColor(state) {
-        let count = 0;
-        for (let i = 0; i < 4; i++) count += (state >> i) & 1;
-        return ['#000000', '#ef4444', '#f97316', '#eab308', '#22c55e'][count] || '#94a3b8';
     }
 
     /**

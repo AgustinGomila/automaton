@@ -12,9 +12,6 @@ class UIController {
         this.patternsSortByCount = false;
         this.patternsShowAll = false;
 
-        this._gridSizeDebounceTimer = null;
-        this._gridSizePendingValue = null;
-
         this._cleanups = [];
 
         this._patternState = {
@@ -22,8 +19,6 @@ class UIController {
             key: null,
             rotation: 0
         };
-
-        this.showActivityEffect = true;
 
         // Canvas controller — gestiona toda interacción con el canvas
         this._canvasController = new CanvasController({
@@ -37,6 +32,58 @@ class UIController {
             onUpdateHeader: () => this._displayController.updateHeaderInfo(),
             onSyncPlayButton: () => this._syncPlayButtonState(),
             onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur)
+        });
+
+        // Import/Export controller — importación y exportación de patrones
+        // Grid controller — dimensiones de grid y zoom
+        this._gridController = new GridController({
+            automaton: this.automaton,
+            onStopAutomaton: () => this._stopAutomaton(),
+            onSyncPlayButton: () => this._syncPlayButtonState(),
+            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
+        });
+
+        this._importExportController = new ImportExportController({
+            automaton: this.automaton,
+            getSelection: () => this._canvasController?.selection,
+            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
+            onGridResized: (newSize) => {
+                const slider = document.getElementById('gridSize');
+                const display = document.getElementById('gridSizeValue');
+                if (slider) slider.value = newSize;
+                if (display) display.textContent = `${newSize}×${newSize}`;
+            },
+            addEventListener: (target, event, handler, opts) => this._addEventListener(target, event, handler, opts)
+        });
+
+        // Rule controller — selector de reglas B/S y regla custom
+        this._ruleController = new RuleController({
+            automaton: this.automaton,
+            onActivateGenerations: (b, s, c) => this._specialModeController.activateGenerationsMode(b, s, c),
+            onDeactivateGenerations: () => this._specialModeController.deactivateGenerationsMode(),
+            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
+            onUpdateRuleInfo: (rule) => this._displayController.updateRuleInfo(rule),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
+        });
+
+        // Neighborhood controller — grilla visual de vecindad
+        this._neighborhoodController = new NeighborhoodController({
+            automaton: this.automaton,
+            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
+            onUpdateNeighborhood: () => this._displayController.updateNeighborhoodInfo(),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
+        });
+
+        // Effects controller — actividad visual y área de influencia
+        this._effectsController = new EffectsController({
+            automaton: this.automaton,
+            getShowInfluenceArea: () => this._canvasController.showInfluenceArea,
+            setShowInfluenceArea: (v) => {
+                this._canvasController.showInfluenceArea = v;
+            },
+            onHideInfluenceArea: () => window.patternManager?.hideInfluenceArea(),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
         });
 
         this._subscribeToAutomatonEvents();
@@ -90,16 +137,17 @@ class UIController {
         this._bindAccordionEvents();
         this._bindKeyboardEvents();
         this._bindPatternEvents();
-        this._bindNeighborhoodEvents();
+        this._neighborhoodController.bindEvents();
         this._bindPatternsControls();
 
         this.updateSpeedDisplay();
-        this.updateGridSizeDisplay();
-        this.updateCellSizeDisplay();
+        this._gridController.initDisplays();
         this._displayController.updateNeighborhoodInfo();
-        this.loadRules();
+        this._ruleController.loadRules();
 
         eventBus.on('automaton:runningChanged', () => this._syncPlayButtonState());
+
+        eventBus.on('app:ready', () => setTimeout(() => this._gridController.initGridRectUI(), 60));
 
         eventBus.emit('ui:ready');
     }
@@ -109,7 +157,8 @@ class UIController {
     // =========================================
 
     destroy() {
-        if (this._gridSizeDebounceTimer) clearTimeout(this._gridSizeDebounceTimer);
+        this._gridController?.destroy();
+        this._gridController = null;
 
         this._canvasController?.destroy();
         this._canvasController = null;
@@ -198,32 +247,7 @@ class UIController {
     }
 
     loadRules() {
-        const selector = document.getElementById('ruleSelector');
-        if (!selector) return;
-
-        while (selector.options.length > 0) {
-            selector.removeItem(0);
-        }
-
-        Object.keys(window.RULES).forEach((key, index) => {
-            const rule = window.RULES[key];
-            const option = document.createElement('option');
-            option.value = key;
-
-            // SI ES CUSTOM Y TIENE VALORES, MOSTRAR LA NOTACIÓN REAL
-            if (key === 'custom' && rule.birth.length > 0 && rule.survival.length > 0) {
-                option.textContent = `${t('config.rule.custom')} (${rule.ruleString})`;
-            } else {
-                option.textContent = `${rule.name} (${rule.ruleString})`;
-            }
-
-            selector.appendChild(option);
-        });
-
-        if (window.RULES.conway) {
-            selector.value = 'conway';
-            this._displayController.updateRuleInfo(window.RULES.conway);
-        }
+        this._ruleController.loadRules();
     }
 
     // =========================================
@@ -265,13 +289,9 @@ class UIController {
             }
         });
 
-        this._addEventListener(document.getElementById('ruleSelector'), 'change', () => this.changeRule());
-        this._addEventListener(document.getElementById('applyCustomRuleBtn'), 'click', () => this.applyCustomRule());
+        this._ruleController.bindEvents();
 
-        this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
-        this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
-        this._addEventListener(document.getElementById('activityEffectToggle'), 'change', () => this.toggleActivityEffect());
-        this._bindActivityColorPickers();
+        this._effectsController.bindEvents();
 
         const wrapToggle = document.getElementById('wrapToggle');
         if (wrapToggle) {
@@ -305,13 +325,8 @@ class UIController {
         this._addEventListener(document.getElementById('speedControl'), 'input', () => this.updateSpeed());
         this._addEventListener(document.getElementById('speedDown'), 'click', () => this.decreaseSpeed());
         this._addEventListener(document.getElementById('speedUp'), 'click', () => this.increaseSpeed());
-        this._addEventListener(document.getElementById('gridSize'), 'input', () => this.updateGridSize());
-        this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
-        this._addEventListener(document.getElementById('autoSizeBtn'), 'click', () => this.autoSizeGrid());
-        this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
-        this._addEventListener(document.getElementById('gridHighlightsToggle'), 'click', () => this.toggleHighlightsGrid());
-        this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
-        this._addEventListener(document.getElementById('importBtn'), 'click', () => this.importPatternFromFile());
+        this._gridController.bindEvents();
+        this._importExportController.bindEvents();
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
@@ -616,161 +631,31 @@ class UIController {
     }
 
     updateGridSize() {
-        const slider = document.getElementById('gridSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('gridSizeValue');
-        if (display) display.textContent = `${value}×${value}`;
-
-        // Cancelar timer anterior
-        if (this._gridSizeDebounceTimer) {
-            clearTimeout(this._gridSizeDebounceTimer);
-        }
-
-        // Guardar valor pendiente
-        this._gridSizePendingValue = value;
-
-        // Crear nuevo timer de 500ms
-        this._gridSizeDebounceTimer = setTimeout(() => {
-            this._applyGridSizeChange();
-        }, 500);
-    }
-
-    _applyGridSizeChange() {
-        if (this._gridSizePendingValue === null) return;
-
-        const value = this._gridSizePendingValue;
-        this._gridSizePendingValue = null;
-
-        // Detener si está corriendo (sin confirmar, forzar)
-        if (this.automaton.isRunning) {
-            this._stopAutomaton();
-            this._syncPlayButtonState();
-        }
-
-        this.automaton.resizeGrid(value);
-        this._gridSizeDebounceTimer = null;
+        this._gridController.updateGridSize();
     }
 
     updateGridSizeDisplay() {
-        const slider = document.getElementById('gridSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('gridSizeValue');
-        if (display) display.textContent = `${value}×${value}`;
+        this._gridController.updateGridSizeDisplay();
     }
 
     updateCellSize() {
-        const slider = document.getElementById('cellSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('cellSizeValue');
-        if (display) display.textContent = `${value}px`;
-
-        this.automaton.setCellSize(value);
+        this._gridController.updateCellSize();
     }
 
     updateCellSizeDisplay() {
-        const slider = document.getElementById('cellSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('cellSizeValue');
-        if (display) display.textContent = `${value}px`;
+        this._gridController.updateCellSizeDisplay();
     }
 
     autoSizeGrid() {
-        const automaton = this.automaton;
-        const isMobile = window.innerWidth <= 768;
-        const MARGIN = 6;
-        const MIN_CELLS = 20;
-        const MAX_CELLS = 1000;
-
-        let availW, availH;
-        if (isMobile) {
-            const headerH = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
-            const statsH = document.querySelector('.stats')?.getBoundingClientRect().height ?? 40;
-            const patH = document.querySelector('.patterns-horizontal-container')?.getBoundingClientRect().height ?? 120;
-            availW = Math.floor(window.innerWidth - MARGIN * 2);
-            availH = Math.floor(window.innerHeight - headerH - statsH - patH - 40);
-        } else {
-            const wrapper = document.querySelector('.canvas-wrapper');
-            if (!wrapper) return;
-            const rect = wrapper.getBoundingClientRect();
-            availW = Math.floor(rect.width - 20 - MARGIN);
-            availH = Math.floor(rect.height - 20 - MARGIN);
-        }
-
-        if (availW <= 0 || availH <= 0) return;
-
-        const cs = automaton.cellSize;
-        let gw, gh;
-
-        if (automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE
-            && automaton.triangleEngine?.isActive) {
-            // Geometría del canvas triangular:
-            //   canvasWidth  = (gw * 2 - 1) * cs/2 + cs  ≈ (gw + 0.5) * cs
-            //   canvasHeight = gh * (√3/2) * cs
-            //
-            // Despejar gw y gh para que el canvas llene exactamente el espacio:
-            //   gw = floor(availW / cs - 0.5)
-            //   gh = floor(availH / (√3/2 * cs))
-            //
-            // Esto garantiza triángulos equiláteros correctos independientemente
-            // del cellSize — el autofit no deforma la geometría.
-            const sqrt3_2 = Math.sqrt(3) / 2;
-            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs - 0.5)));
-            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / (sqrt3_2 * cs))));
-        } else {
-            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
-            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
-        }
-
-        if (automaton.gridWidth === gw && automaton.gridHeight === gh) return;
-
-        automaton.resizeGrid(gw, gh);
-
-        // Sincronizar sliders rectangulares
-        const _set = (id, prop, val) => {
-            const el = document.getElementById(id);
-            if (el) el[prop] = val;
-        };
-        _set('gridWidth', 'value', gw);
-        _set('gridWidthValue', 'textContent', gw);
-        _set('gridHeight', 'value', gh);
-        _set('gridHeightValue', 'textContent', gh);
-        const badge = document.getElementById('gridDimensionsBadge');
-        if (badge) {
-            badge.textContent = `${gw}×${gh}`;
-            badge.classList.toggle('rect-badge', gw !== gh);
-        }
-        _set('gridSize', 'value', Math.max(gw, gh));
-        _set('gridSizeValue', 'textContent', `${gw}×${gh}`);
-
-        this._showNotification(`Grid: ${gw}×${gh}`, 'info', 1200);
+        this._gridController.autoSizeGrid();
     }
 
     toggleGrid() {
-        // Funciona para ambos modos (estándar y triangular)
-        const newState = this.automaton.toggleGrid();
-
-        // Actualizar visual del botón (iluminado = grilla activa)
-        const gridToggle = document.getElementById('gridToggle');
-        if (gridToggle) {
-            gridToggle.classList.toggle('active', newState);
-        }
-
-        this.automaton.render();
-        return newState;
+        return this._gridController.toggleGrid();
     }
 
     toggleHighlightsGrid() {
-        const newState = this.automaton.toggleGridHighlights();
-        const btn = document.getElementById('gridHighlightsToggle');
-        if (btn) {
-            const icon = btn.querySelector('i');
-            if (icon) {
-                // Alternar entre border-all (visible) y border-none (oculto)
-                icon.className = newState ? 'fa-solid fa-border-all' : 'fa-solid fa-border-none';
-            }
-        }
-        this.automaton.render();
-        return newState;
+        return this._gridController.toggleHighlightsGrid();
     }
 
     _togglePerf() {
@@ -829,42 +714,23 @@ class UIController {
     }
 
     toggleInfluenceArea() {
-        const toggle = document.getElementById('influenceToggle');
-        this._canvasController.showInfluenceArea = toggle.checked;
-
-        const quickToggle = document.getElementById('quickInfluenceToggle');
-        if (quickToggle) {
-            quickToggle.className = this._canvasController.showInfluenceArea ? 'btn-toggle active' : 'btn-toggle';
-            quickToggle.style.color = this._canvasController.showInfluenceArea ? 'var(--secondary)' : '';
-        }
-
-        if (!this._canvasController.showInfluenceArea) window.patternManager?.hideInfluenceArea();
+        this._effectsController.toggleInfluenceArea();
     }
 
     quickToggleInfluenceArea() {
-        this._canvasController.showInfluenceArea = !this._canvasController.showInfluenceArea;
-        const toggle = document.getElementById('influenceToggle');
-        if (toggle) toggle.checked = this._canvasController.showInfluenceArea;
-        this.toggleInfluenceArea();
+        this._effectsController.quickToggleInfluenceArea();
     }
 
     toggleActivityEffect() {
-        const toggle = document.getElementById('activityEffectToggle');
-        const activityEffect = toggle.checked;
-        this._toggleActivityEffect(activityEffect);
+        this._effectsController.toggleActivityEffect();
     }
 
     _toggleActivityEffect(checked) {
-        this.showActivityEffect = checked;
-        this.automaton.setShowActivityEffect(this.showActivityEffect);
-        this.automaton._markAllDirty();
-        this.automaton.render();
-        this.toggleActivityEffectCheckbox()
+        this._effectsController._toggleActivityEffect(checked);
     }
 
     toggleActivityEffectCheckbox() {
-        const toggle = document.getElementById('activityEffectToggle');
-        if (toggle) toggle.checked = this.showActivityEffect;
+        this._effectsController._syncActivityEffectCheckbox();
     }
 
     /**
@@ -873,304 +739,22 @@ class UIController {
      *  - Generations: N swatches dinámicos (uno por estado del engine)
      *
      * Llamado por SpecialModeController al activar/desactivar Generations.
-     * @param {boolean} generationsActive
+     * @param {boolean} active
      */
-    _syncActivityColorsBlock(generationsActive) {
-        const block = document.getElementById('activityColors');
-        if (!block) return;
-
-        const swatchesContainer = block.querySelector('.activity-color-swatches');
-        if (!swatchesContainer) return;
-
-        if (!generationsActive) {
-            // Restaurar swatches binarios originales
-            swatchesContainer.innerHTML = `
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchDead" data-state="dead" style="--swatch-color:#0f172a" title="Muerto (0→0)">
-                        <span class="activity-swatch-label">0</span>
-                        <input type="color" value="#0f172a" id="colorDead">
-                    </div>
-                </div>
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchBorn" data-state="born" style="--swatch-color:#b9b610" title="Naciendo (0→1)">
-                        <span class="activity-swatch-label">+1</span>
-                        <input type="color" value="#b9b610" id="colorBorn">
-                    </div>
-                </div>
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchAlive" data-state="alive" style="--swatch-color:#059669" title="Vivo (1→1)">
-                        <span class="activity-swatch-label">1</span>
-                        <input type="color" value="#059669" id="colorAlive">
-                    </div>
-                </div>
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchDying" data-state="dying" style="--swatch-color:#ef4444" title="Muriendo (1→0)">
-                        <span class="activity-swatch-label">−1</span>
-                        <input type="color" value="#ef4444" id="colorDying">
-                    </div>
-                </div>`;
-            this._bindActivityColorPickers();
-            return;
-        }
-
-        // Modo Generations: swatches dinámicos por estado
-        const engine = this.automaton.generationsEngine;
-        if (!engine?.isActive) return;
-
-        const C = engine.numStates;
-        const stateLabels = [t('config.activity.dead')];
-        stateLabels.push(t('config.activity.alive')); // estado 1 = vivo
-        for (let i = 2; i < C; i++) {
-            stateLabels.push(`${t('generations.states.label')} ${i}`);
-        }
-
-        swatchesContainer.innerHTML = engine._palette.map((color, i) => {
-            const safeColor = color ?? '#0f172a';
-            const label = i === 0 ? '0' : String(i);
-            const title = i === 0 ? 'Muerto' : i === 1 ? 'Vivo' : `Estado ${i}`;
-            return `
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="genSwatch${i}" style="--swatch-color:${safeColor}" title="${title}">
-                        <span class="activity-swatch-label">${label}</span>
-                        <input type="color" value="${this._cssToHex(safeColor)}" id="genColor${i}" data-state-index="${i}">
-                    </div>
-                </div>`;
-        }).join('');
-
-        // Bind de cada picker al índice de estado correspondiente
-        for (let i = 0; i < C; i++) {
-            const input = document.getElementById(`genColor${i}`);
-            const swatch = document.getElementById(`genSwatch${i}`);
-            if (!input || !swatch) continue;
-            this._addEventListener(input, 'input', () => {
-                const color = input.value;
-                swatch.style.setProperty('--swatch-color', color);
-                engine._palette[i] = i === 0 ? null : color;
-                this.automaton._markAllDirty();
-                this.automaton.render();
-            });
-        }
+    _syncActivityColorsBlock(active) {
+        this._effectsController.syncActivityColorsBlock(active);
     }
 
-    /**
-     * Convierte un color CSS (hsl, hex, rgb) a hex #rrggbb para el input[type=color].
-     * Para hsl usa el canvas como intermediario; para hex retorna directamente.
-     * @param {string} css
-     * @returns {string} hex
-     */
-    _cssToHex(css) {
-        if (!css || css === 'null') return '#000000';
-        if (/^#[0-9a-f]{6}$/i.test(css)) return css;
-        // Usar canvas para resolver cualquier formato CSS
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = 1;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = css;
-        ctx.fillRect(0, 0, 1, 1);
-        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-        return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-    }
-
-    _bindActivityColorPickers() {
-        const map = [
-            {id: 'colorDead', swatchId: 'swatchDead', prop: 'colorDead'},
-            {id: 'colorBorn', swatchId: 'swatchBorn', prop: 'colorBorn'},
-            {id: 'colorAlive', swatchId: 'swatchAlive', prop: 'colorAlive'},
-            {id: 'colorDying', swatchId: 'swatchDying', prop: 'colorDying'},
-        ];
-
-        for (const {id, swatchId, prop} of map) {
-            const input = document.getElementById(id);
-            const swatch = document.getElementById(swatchId);
-            if (!input || !swatch) continue;
-
-            this._addEventListener(input, 'input', () => {
-                const color = input.value;
-                swatch.style.setProperty('--swatch-color', color);
-                this.automaton.renderer[prop] = color;
-                this.automaton._markAllDirty();
-                this.automaton.render();
-            });
-        }
-    }
+    // =========================================
+    // IMPORT / EXPORT — delegados a ImportExportController
+    // =========================================
 
     exportPattern() {
-        // WireWorld: exportar en formato MCL (preserva los 4 estados)
-        if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
-            this._exportMCL();
-            return;
-        }
-
-        const sel = this._canvasController?.selection;
-        const bounds = sel ? {
-            minX: Math.min(sel.startX, sel.endX),
-            minY: Math.min(sel.startY, sel.endY),
-            maxX: Math.max(sel.startX, sel.endX),
-            maxY: Math.max(sel.startY, sel.endY)
-        } : null;
-
-        const patternData = this.automaton.exportPattern(bounds);
-        if (!patternData) {
-            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
-            return;
-        }
-
-        const codec = new RLECodec();
-        const ruleString = this.automaton.rule
-            ? `B${this.automaton.rule.birth.join('')}/S${this.automaton.rule.survival.join('')}`
-            : 'B3/S23';
-
-        const rleText = codec.encode({
-            pattern: patternData.pattern,
-            name: patternData.name,
-            description: patternData.description,
-            rule: ruleString
-        });
-
-        const blob = new Blob([rleText], {type: 'text/plain'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `pattern-${Date.now()}.rle`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this._showNotification(t('notif.pattern.exported'), 'info', 2000);
-    }
-
-    _exportMCL() {
-        const state = this.automaton.exportWireworldState();
-        if (!state) {
-            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
-            return;
-        }
-
-        const codec = new MCLCodec();
-        const mclText = codec.encode(state);
-        if (!mclText) {
-            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
-            return;
-        }
-
-        const blob = new Blob([mclText], {type: 'text/plain'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `wireworld-${Date.now()}.mcl`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this._showNotification(t('notif.pattern.exported'), 'info', 2000);
+        this._importExportController.exportPattern();
     }
 
     importPatternFromFile() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.rle,.json,.mcl';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const text = ev.target.result;
-                    // Detectar formato MCL primero (tiene su propia firma)
-                    if (MCLCodec.isFormat(text)) {
-                        this._importMCL(text, file.name);
-                        return;
-                    }
-
-                    const format = RLECodec.detectFormat(text);
-                    let patternData;
-
-                    if (format === 'rle') {
-                        const codec = new RLECodec();
-                        const decoded = codec.decode(text);
-                        patternData = {
-                            pattern: decoded.pattern,
-                            name: decoded.name || file.name.replace(/\.rle$/i, ''),
-                            description: decoded.description || '',
-                        };
-                    } else if (format === 'json') {
-                        patternData = JSON.parse(text);
-                    } else {
-                        this._showNotification(t('notif.pattern.invalidFormat'), 'warning', 2500);
-                        return;
-                    }
-
-                    const center = Math.floor(this.automaton.gridSize / 2);
-                    this.automaton.importPattern(patternData, center, center);
-                    this.automaton.updateStats();
-                    this.automaton.render();
-                    this._showNotification(t('notif.pattern.imported'), 'info', 2000);
-                } catch (err) {
-                    console.error('Error importando patrón:', err);
-                    this._showNotification(t('notif.pattern.importError'), 'warning', 3000);
-                }
-            };
-            reader.readAsText(file);
-        };
-        input.click();
-    }
-
-    _importMCL(text, filename) {
-        try {
-            const codec = new MCLCodec();
-            const decoded = codec.decode(text);
-
-            // Auto-resize: si el patrón no cabe en el grid actual, ampliar con margen
-            const needed = Math.max(decoded.width, decoded.height);
-            const current = this.automaton.gridSize;
-            if (needed > current) {
-                // Margen del 20% redondeado a múltiplo de 5, mínimo 20px de margen
-                const margin = Math.max(20, Math.round(needed * 0.2 / 5) * 5);
-                const newSize = Math.min(Math.round((needed + margin) / 5) * 5, 1000);
-                this.automaton.resizeGrid(newSize);
-
-                // Sincronizar slider y display
-                const slider = document.getElementById('gridSize');
-                const display = document.getElementById('gridSizeValue');
-                if (slider) slider.value = newSize;
-                if (display) display.textContent = `${newSize}×${newSize}`;
-            }
-
-            // Limpiar el grid antes de importar para no superponer circuitos
-            this.automaton.clear();
-
-            // Si WireWorld ya está activo, cargar directamente con estados completos
-            if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
-                this.automaton.importWireworldState(decoded.stateGrid, decoded.width, decoded.height);
-                this._showNotification(t('notif.pattern.imported'), 'info', 2000);
-                return;
-            }
-
-            // Si WireWorld no está activo: importar como patrón binario estándar
-            // (conductor=1, resto=0) y avisar al usuario
-            const pattern = [];
-            for (let y = 0; y < decoded.height; y++) {
-                const row = [];
-                for (let x = 0; x < decoded.width; x++) {
-                    row.push((decoded.stateGrid[x]?.[y] ?? 0) > 0 ? 1 : 0);
-                }
-                pattern.push(row);
-            }
-            const patternData = {
-                pattern,
-                name: decoded.name || filename.replace(/\.mcl$/i, ''),
-                description: decoded.description || ''
-            };
-            const center = Math.floor(this.automaton.gridSize / 2);
-            this.automaton.importPattern(patternData, center, center);
-            this.automaton.updateStats();
-            this.automaton.render();
-            this._showNotification(t('notif.pattern.importedMCLPartial'), 'warning', 3000);
-        } catch (err) {
-            console.error('Error importando MCL:', err);
-            this._showNotification(t('notif.pattern.importError'), 'warning', 3000);
-        }
+        this._importExportController.importPatternFromFile();
     }
 
     updateLimitType() {
@@ -1203,80 +787,11 @@ class UIController {
     }
 
     changeRule() {
-        const selector = document.getElementById('ruleSelector');
-
-        if (selector.value === 'custom') {
-            // Popula los inputs con la regla custom actual
-            document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
-            document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');
-        } else if (window.RULES?.[selector.value]) {
-            const rule = window.RULES[selector.value];
-            // Popula los inputs con la regla predefinida seleccionada
-            document.getElementById('birthInput').value = rule.birth.join(',');
-            document.getElementById('survivalInput').value = rule.survival.join(',');
-
-            if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
-                // En modo Generations: re-activar con la nueva B/S manteniendo C actual
-                const numStates = parseInt(document.getElementById('generationsStates')?.value) || 3;
-                this._specialModeController.activateGenerationsMode(rule.birth, rule.survival, numStates);
-            } else {
-                // Resetear slider C a 2 al cambiar a regla predefinida en modo estándar
-                const statesSlider = document.getElementById('generationsStates');
-                const statesDisplay = document.getElementById('generationsStatesDisplay');
-                if (statesSlider) statesSlider.value = '2';
-                if (statesDisplay) statesDisplay.textContent = '2';
-
-                this.automaton.setRule(rule.survival, rule.birth);
-                this._displayController.updateHeaderInfo();
-                eventBus.emit('automaton:filterChanged', {
-                    mode: SpecialEngineManager.MODES.STANDARD,
-                    rule: rule.ruleString
-                });
-            }
-        }
-
-        selector.blur();
+        this._ruleController.changeRule();
     }
 
     applyCustomRule() {
-        const birthInput = document.getElementById('birthInput').value;
-        const survivalInput = document.getElementById('survivalInput').value;
-        const numStates = parseInt(document.getElementById('generationsStates')?.value) || 2;
-
-        try {
-            const customRule = parseCustomRule(birthInput, survivalInput);
-
-            if (numStates > 2) {
-                // Modo Generaciones
-                this._specialModeController.activateGenerationsMode(customRule.birth, customRule.survival, numStates);
-                return;
-            }
-
-            // Modo estándar binario — desactivar Generations si estaba activo
-            if (this.automaton.specialMode === SpecialEngineManager.MODES.GENERATIONS) {
-                this._specialModeController.deactivateGenerationsMode();
-            }
-
-            this.automaton.setRule(customRule.survival, customRule.birth);
-
-            if (window.RULES?.custom) {
-                window.RULES.custom.survival = customRule.survival;
-                window.RULES.custom.birth = customRule.birth;
-                window.RULES.custom.ruleString = `B${customRule.birth.join('')}/S${customRule.survival.join('')}`;
-
-                const selector = document.getElementById('ruleSelector');
-                const selectedOption = selector.options[selector.selectedIndex];
-                selectedOption.textContent = `${t('config.rule.custom')} (${window.RULES.custom.ruleString})`;
-
-                this._displayController.updateRuleInfo(window.RULES.custom);
-                eventBus.emit('automaton:filterChanged', {
-                    mode: SpecialEngineManager.MODES.STANDARD,
-                    rule: window.RULES.custom.ruleString
-                });
-            }
-        } catch (error) {
-            alert(`Error: ${error.message}`);
-        }
+        this._ruleController.applyCustomRule();
     }
 
     /**
@@ -1327,24 +842,11 @@ class UIController {
     }
 
     changeNeighborhoodType(type) {
-        if (type === 'custom') {
-            // Aplicar la selección visual actual sin cambiar offsets
-            this._applyCustomNeighborhood();
-        } else {
-            this.automaton.setNeighborhoodType(type);
-        }
-        // Sincronizar la grilla visual con el nuevo tipo
-        this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
-        this._displayController.updateHeaderInfo();
+        this._neighborhoodController.changeNeighborhoodType(type);
     }
 
     changeNeighborhoodRadius(radius) {
-        this.automaton.setNeighborhoodRadius(radius);
-        this._displayController.updateHeaderInfo();
-        const radiusValue = document.getElementById('radiusValue');
-        if (radiusValue) radiusValue.textContent = radius;
-        // Reconstruir la grilla con el nuevo radio
-        this._renderNeighborhoodGrid(radius);
+        this._neighborhoodController.changeNeighborhoodRadius(radius);
     }
 
     /**
@@ -1357,204 +859,7 @@ class UIController {
      * @param {number} radius
      */
     _renderNeighborhoodGrid(radius) {
-        const container = document.getElementById('neighborhoodGrid');
-        if (!container) return;
-
-        const side = 2 * radius + 1;
-
-        // Calcular el tamaño máximo de celda que cabe en el ancho disponible.
-        // El contenedor puede tener clientWidth=0 si el acordeón está cerrado;
-        // en ese caso se usa el ancho del panel lateral o un valor fijo de referencia.
-        const availableWidth =
-            container.parentElement?.clientWidth ||
-            document.getElementById('leftPanel')?.clientWidth ||
-            document.querySelector('.config-section')?.clientWidth ||
-            240;
-        const parentWidth = availableWidth - 16; // descontar padding del accordion-content
-        const gap = 3;
-        const maxCellSize = Math.floor((parentWidth - gap * (side - 1)) / side);
-        // Acotar entre 8px (mínimo legible) y 26px (tamaño cómodo para R pequeños)
-        const cellSize = Math.max(8, Math.min(26, maxCellSize));
-
-        container.style.gridTemplateColumns = `repeat(${side}, ${cellSize}px)`;
-        container.style.gap = `${gap}px`;
-
-        // Propagar el tamaño calculado a las celdas via CSS custom property
-        container.style.setProperty('--nc-size', `${cellSize}px`);
-        container.innerHTML = '';
-
-        const currentType = this.automaton.neighborhoodType;
-        let activeSet;
-
-        if (currentType === 'moore') {
-            activeSet = new Set();
-            for (let dx = -radius; dx <= radius; dx++)
-                for (let dy = -radius; dy <= radius; dy++)
-                    if (dx !== 0 || dy !== 0) activeSet.add(`${dx},${dy}`);
-        } else if (currentType === 'neumann') {
-            activeSet = new Set();
-            for (let dx = -radius; dx <= radius; dx++)
-                for (let dy = -radius; dy <= radius; dy++)
-                    if ((dx !== 0 || dy !== 0) && Math.abs(dx) + Math.abs(dy) <= radius)
-                        activeSet.add(`${dx},${dy}`);
-        } else {
-            // custom: conservar selección existente recortada al nuevo radio
-            activeSet = new Set(
-                this.automaton.core.neighborhood.offsets
-                    .filter(o => Math.abs(o.dx) <= radius && Math.abs(o.dy) <= radius)
-                    .map(o => `${o.dx},${o.dy}`)
-            );
-        }
-
-        // Estado de arrastre: se inicializa en mousedown y se usa en mouseenter
-        let _dragging = false;
-        let _paintActive = false; // true = activar, false = desactivar
-
-        const stopDrag = () => {
-            _dragging = false;
-        };
-        this._addEventListener(document, 'mouseup', stopDrag);
-
-        for (let dy = -radius; dy <= radius; dy++) {
-            for (let dx = -radius; dx <= radius; dx++) {
-                const isCenter = dx === 0 && dy === 0;
-                const cell = document.createElement('div');
-                cell.className = 'neighborhood-cell' + (isCenter ? ' center' : '');
-                cell.dataset.dx = dx;
-                cell.dataset.dy = dy;
-
-                if (isCenter) {
-                    cell.textContent = '●';
-                } else if (activeSet.has(`${dx},${dy}`)) {
-                    cell.classList.add('active');
-                }
-
-                if (!isCenter) {
-                    this._addEventListener(cell, 'mousedown', (e) => {
-                        e.preventDefault();
-                        _dragging = true;
-                        // El estado destino es el opuesto al estado actual de la celda inicial
-                        _paintActive = !cell.classList.contains('active');
-                        cell.classList.toggle('active', _paintActive);
-                        this._onNeighborhoodCellToggled();
-                    });
-
-                    this._addEventListener(cell, 'mouseenter', () => {
-                        if (!_dragging) return;
-                        if (cell.classList.contains('active') !== _paintActive) {
-                            cell.classList.toggle('active', _paintActive);
-                            this._onNeighborhoodCellToggled();
-                        }
-                    });
-                }
-
-                container.appendChild(cell);
-            }
-        }
-
-        this._updateCustomNeighborCount();
-    }
-
-    /**
-     * Llamado cada vez que el usuario activa/desactiva una celda manualmente.
-     * Detecta si la selección resultante coincide con Moore o Neumann para
-     * actualizar el selector de tipo; si no, marca 'custom'.
-     */
-    _onNeighborhoodCellToggled() {
-        const radius = this.automaton.neighborhoodRadius;
-        const detected = this._detectPresetType(radius);
-
-        if (detected === 'moore' || detected === 'neumann') {
-            this.automaton.setNeighborhoodType(detected);
-        } else {
-            this._applyCustomNeighborhood();
-        }
-
-        const typeSelect = document.getElementById('neighborhoodType');
-        if (typeSelect) typeSelect.value = detected;
-
-        this._updateCustomNeighborCount();
-        this._displayController.updateHeaderInfo();
-    }
-
-    /**
-     * Compara la selección visual actual con los patrones Moore y Neumann.
-     * @param {number} radius
-     * @returns {'moore' | 'neumann' | 'custom'}
-     */
-    _detectPresetType(radius) {
-        const container = document.getElementById('neighborhoodGrid');
-        if (!container) return 'custom';
-
-        const active = new Set();
-        container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
-            if (cell.classList.contains('active')) active.add(`${cell.dataset.dx},${cell.dataset.dy}`);
-        });
-
-        const mooreSet = new Set();
-        const neumannSet = new Set();
-        for (let dx = -radius; dx <= radius; dx++) {
-            for (let dy = -radius; dy <= radius; dy++) {
-                if (dx === 0 && dy === 0) continue;
-                const key = `${dx},${dy}`;
-                mooreSet.add(key);
-                if (Math.abs(dx) + Math.abs(dy) <= radius) neumannSet.add(key);
-            }
-        }
-
-        const eq = (a, b) => a.size === b.size && [...a].every(k => b.has(k));
-        if (eq(active, mooreSet)) return 'moore';
-        if (eq(active, neumannSet)) return 'neumann';
-        return 'custom';
-    }
-
-    /**
-     * Lee el estado visual y lo aplica al autómata como vecindad custom.
-     */
-    _applyCustomNeighborhood() {
-        const container = document.getElementById('neighborhoodGrid');
-        if (!container) return;
-
-        const offsets = [];
-        container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
-            if (cell.classList.contains('active')) {
-                offsets.push({dx: parseInt(cell.dataset.dx), dy: parseInt(cell.dataset.dy)});
-            }
-        });
-
-        this.automaton.core.setNeighborhood({offsets});
-        this._updateCustomNeighborCount();
-        this._displayController.updateNeighborhoodInfo();
-    }
-
-    /**
-     * Actualiza el contador de vecinos activos en la etiqueta.
-     */
-    _updateCustomNeighborCount() {
-        const countEl = document.getElementById('customNeighborCount');
-        if (!countEl) return;
-        const active = document.querySelectorAll('#neighborhoodGrid .neighborhood-cell.active').length;
-        countEl.textContent = active;
-    }
-
-    _bindNeighborhoodEvents() {
-        const typeSelect = document.getElementById('neighborhoodType');
-        const radiusSlider = document.getElementById('neighborhoodRadius');
-
-        if (typeSelect) {
-            this._addEventListener(typeSelect, 'change', (e) => this.changeNeighborhoodType(e.target.value));
-        }
-
-        if (radiusSlider) {
-            this._addEventListener(radiusSlider, 'input', (e) => {
-                this.changeNeighborhoodRadius(parseInt(e.target.value));
-                const radiusValue = document.getElementById('radiusValue');
-                if (radiusValue) radiusValue.textContent = e.target.value;
-            });
-        }
-
-        // Render inicial: la grilla siempre visible al cargar
-        this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
+        this._neighborhoodController.renderGrid(radius);
     }
 
     _bindPatternsControls() {

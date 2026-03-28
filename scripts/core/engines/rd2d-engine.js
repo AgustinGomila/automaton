@@ -25,6 +25,22 @@
 class RD2DEngine {
 
     /**
+     * Paleta de colores por número de fronteras abiertas (0-4 bits activos).
+     * Reproduce la escala cromática de _getRD2DColor que vivía en GridRenderer.
+     */
+    static COLORS = [
+        null,       // 0 fronteras — vacío (renderer usa fondo)
+        '#ef4444',  // 1 frontera  — rojo
+        '#f97316',  // 2 fronteras — naranja
+        '#eab308',  // 3 fronteras — amarillo
+        '#22c55e',  // 4 fronteras — verde
+    ];
+
+    // =========================================
+    // UTILIDADES ESTÁTICAS
+    // =========================================
+
+    /**
      * @param {Object} automaton — instancia de CellularAutomaton.
      *   Expone: .grid, .gridWidth, .gridHeight, .wrapEdges, .renderer,
      *           ._markAllDirty()
@@ -49,10 +65,6 @@ class RD2DEngine {
         this._changedCells = [];
     }
 
-    // =========================================
-    // UTILIDADES ESTÁTICAS
-    // =========================================
-
     /** Nombre legible del estado para debugging. */
     static getStateName(state) {
         const names = [
@@ -69,6 +81,10 @@ class RD2DEngine {
         return count;
     }
 
+    // =========================================
+    // CICLO DE VIDA
+    // =========================================
+
     /** Convierte estado numérico a objeto de fronteras {N, S, E, W}. */
     static stateToBorders(state) {
         return {
@@ -78,10 +94,6 @@ class RD2DEngine {
             W: state & 1
         };
     }
-
-    // =========================================
-    // CICLO DE VIDA
-    // =========================================
 
     /**
      * Activa el motor RD-2D.
@@ -95,6 +107,11 @@ class RD2DEngine {
         this.initialized = false;
         this._forceReinit = false;
         this._initStateGrid();
+        // Registrar colorProvider: el renderer usará este callback para colorear
+        // cada celda viva según su estado RD (0-15), igual que Langton o WireWorld.
+        // Esto elimina el acoplamiento directo entre GridRenderer y RD2DEngine.
+        this.automaton.renderer.setColorProvider(this._colorProvider.bind(this));
+
         return this;
     }
 
@@ -103,7 +120,13 @@ class RD2DEngine {
         this.stateGrid = null;
         this._backStateGrid = null;
         this.initialized = false;
+        // Retirar el colorProvider al desactivar
+        this.automaton.renderer?.setColorProvider(null);
     }
+
+    // =========================================
+    // PASO DE SIMULACIÓN
+    // =========================================
 
     /**
      * Resetea para reinicio controlado.
@@ -121,10 +144,6 @@ class RD2DEngine {
             }
         }
     }
-
-    // =========================================
-    // PASO DE SIMULACIÓN
-    // =========================================
 
     /**
      * Calcula la siguiente generación aplicando XOR de vecinos cardinales.
@@ -194,12 +213,16 @@ class RD2DEngine {
         return changed;
     }
 
+    // =========================================
+    // SINCRONIZACIÓN TRAS EDICIÓN MANUAL
+    // =========================================
+
     getChangedCells() {
         return this._changedCells;
     }
 
     // =========================================
-    // SINCRONIZACIÓN TRAS EDICIÓN MANUAL
+    // DESPLAZAMIENTO TOROIDAL (pan)
     // =========================================
 
     /**
@@ -222,7 +245,7 @@ class RD2DEngine {
     }
 
     // =========================================
-    // DESPLAZAMIENTO TOROIDAL (pan)
+    // INFO
     // =========================================
 
     /**
@@ -251,7 +274,7 @@ class RD2DEngine {
     }
 
     // =========================================
-    // INFO
+    // PRIVADOS
     // =========================================
 
     getInfo() {
@@ -277,9 +300,24 @@ class RD2DEngine {
         };
     }
 
-    // =========================================
-    // PRIVADOS
-    // =========================================
+    /**
+     * Proveedor de color para GridRenderer.setColorProvider().
+     * Recibe un índice plano (x * gridHeight + y) y devuelve un color CSS
+     * proporcional al número de fronteras abiertas del estado RD (0-15),
+     * o null si la celda está vacía.
+     */
+    _colorProvider(cellIndex) {
+        if (!this.stateGrid) return null;
+        const gh = this.gridHeight;
+        const x = (cellIndex / gh) | 0;
+        const y = cellIndex % gh;
+        const state = this.stateGrid[x]?.[y];
+        if (!state) return null;
+        // Contar bits activos (fronteras abiertas)
+        let count = 0;
+        for (let i = 0; i < 4; i++) count += (state >> i) & 1;
+        return RD2DEngine.COLORS[count] ?? '#94a3b8';
+    }
 
     /**
      * Inicializa los dos buffers de estado (doble buffer para swap sin allocaciones).

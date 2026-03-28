@@ -476,6 +476,43 @@ class SpecialEngineManager {
     // UTILIDADES PRIVADAS
     // =========================================
 
+    /**
+     * Desactiva el engine triangular y restaura el renderer/core originales.
+     *
+     * Centraliza la lógica que antes vivía en SpecialModeController._deactivateTriangleEngine(),
+     * eliminando el acceso directo desde el controlador UI a las propiedades internas
+     * del autómata (triangleEngine, _originalRenderer, _originalCore).
+     *
+     * Pasos:
+     *  1. Limpiar y desactivar el triangleEngine
+     *  2. Restaurar el renderer original y destruir el triangular
+     *  3. Restaurar el core original
+     *  4. Redimensionar el renderer estándar a las dimensiones actuales del grid
+     */
+    deactivateTriangle() {
+        if (this.triangleEngine) {
+            this.triangleEngine.clear?.();
+            this.triangleEngine.deactivate();
+            this.triangleEngine = null;
+        }
+
+        if (this._originalRenderer) {
+            const oldRenderer = this._getRenderer();
+            this._setRenderer(this._originalRenderer);
+            this._originalRenderer = null;
+            oldRenderer?.destroy?.();
+
+            // Redimensionar el renderer estándar con las dimensiones actuales del grid.
+            // Sin argumentos _resizeRenderer usa automaton.gridWidth/gridHeight/cellSize.
+            this._getAutomaton()._resizeRenderer();
+        }
+
+        if (this._originalCore) {
+            this._setCore(this._originalCore);
+            this._originalCore = null;
+        }
+    }
+
     _restoreOriginals() {
         if (this._originalRenderer) {
             this._setRenderer(this._originalRenderer);
