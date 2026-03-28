@@ -12,6 +12,9 @@ class UIController {
         this.patternsSortByCount = false;
         this.patternsShowAll = false;
 
+        this._gridSizeDebounceTimer = null;
+        this._gridSizePendingValue = null;
+
         this._cleanups = [];
 
         this._patternState = {
@@ -33,17 +36,20 @@ class UIController {
             automaton: this.automaton,
             onUpdateHeader: () => this._displayController.updateHeaderInfo(),
             onSyncPlayButton: () => this._syncPlayButtonState(),
-            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
-            onSyncActivityColors: (active) => this._syncActivityColorsBlock(active),
-            onToggleActivityEffect: (enabled) => this._toggleActivityEffect(enabled)
+            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur)
         });
 
-        // Grid controller — gestiona dimensiones de grid y zoom
-        this._gridController = new GridController({
+        // Import/Export controller — importación y exportación de patrones
+        this._importExportController = new ImportExportController({
             automaton: this.automaton,
-            onStopAutomaton: () => this._stopAutomaton(),
-            onSyncPlayButton: () => this._syncPlayButtonState(),
+            getSelection: () => this._canvasController?.selection,
             onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
+            onGridResized: (newSize) => {
+                const slider = document.getElementById('gridSize');
+                const display = document.getElementById('gridSizeValue');
+                if (slider) slider.value = newSize;
+                if (display) display.textContent = `${newSize}×${newSize}`;
+            },
             addEventListener: (target, event, handler, opts) => this._addEventListener(target, event, handler, opts)
         });
 
@@ -102,14 +108,12 @@ class UIController {
         this._bindPatternsControls();
 
         this.updateSpeedDisplay();
-        this._gridController.initDisplays();
+        this.updateGridSizeDisplay();
+        this.updateCellSizeDisplay();
         this._displayController.updateNeighborhoodInfo();
         this.loadRules();
 
         eventBus.on('automaton:runningChanged', () => this._syncPlayButtonState());
-
-        // Inicializar UI rectangular del grid en app:ready
-        eventBus.on('app:ready', () => setTimeout(() => this._gridController.initGridRectUI(), 60));
 
         eventBus.emit('ui:ready');
     }
@@ -119,8 +123,7 @@ class UIController {
     // =========================================
 
     destroy() {
-        this._gridController?.destroy();
-        this._gridController = null;
+        if (this._gridSizeDebounceTimer) clearTimeout(this._gridSizeDebounceTimer);
 
         this._canvasController?.destroy();
         this._canvasController = null;
@@ -316,9 +319,12 @@ class UIController {
         this._addEventListener(document.getElementById('speedControl'), 'input', () => this.updateSpeed());
         this._addEventListener(document.getElementById('speedDown'), 'click', () => this.decreaseSpeed());
         this._addEventListener(document.getElementById('speedUp'), 'click', () => this.increaseSpeed());
-        this._gridController.bindEvents();
-        this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
-        this._addEventListener(document.getElementById('importBtn'), 'click', () => this.importPatternFromFile());
+        this._addEventListener(document.getElementById('gridSize'), 'input', () => this.updateGridSize());
+        this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
+        this._addEventListener(document.getElementById('autoSizeBtn'), 'click', () => this.autoSizeGrid());
+        this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
+        this._addEventListener(document.getElementById('gridHighlightsToggle'), 'click', () => this.toggleHighlightsGrid());
+        this._importExportController.bindEvents();
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
@@ -622,42 +628,162 @@ class UIController {
         if (display) display.textContent = `${speedTexts[index]} (${value}/10)`;
     }
 
-    // =========================================
-    // GRID SIZE & ZOOM — delegados a GridController
-    // Se mantienen como proxies para compatibilidad con ResponsiveController
-    // y cualquier código externo que los llame por nombre en UIController.
-    // =========================================
-
     updateGridSize() {
-        this._gridController.updateGridSize();
+        const slider = document.getElementById('gridSize');
+        const value = parseInt(slider.value);
+        const display = document.getElementById('gridSizeValue');
+        if (display) display.textContent = `${value}×${value}`;
+
+        // Cancelar timer anterior
+        if (this._gridSizeDebounceTimer) {
+            clearTimeout(this._gridSizeDebounceTimer);
+        }
+
+        // Guardar valor pendiente
+        this._gridSizePendingValue = value;
+
+        // Crear nuevo timer de 500ms
+        this._gridSizeDebounceTimer = setTimeout(() => {
+            this._applyGridSizeChange();
+        }, 500);
+    }
+
+    _applyGridSizeChange() {
+        if (this._gridSizePendingValue === null) return;
+
+        const value = this._gridSizePendingValue;
+        this._gridSizePendingValue = null;
+
+        // Detener si está corriendo (sin confirmar, forzar)
+        if (this.automaton.isRunning) {
+            this._stopAutomaton();
+            this._syncPlayButtonState();
+        }
+
+        this.automaton.resizeGrid(value);
+        this._gridSizeDebounceTimer = null;
     }
 
     updateGridSizeDisplay() {
-        this._gridController.updateGridSizeDisplay();
+        const slider = document.getElementById('gridSize');
+        const value = parseInt(slider.value);
+        const display = document.getElementById('gridSizeValue');
+        if (display) display.textContent = `${value}×${value}`;
     }
 
     updateCellSize() {
-        this._gridController.updateCellSize();
+        const slider = document.getElementById('cellSize');
+        const value = parseInt(slider.value);
+        const display = document.getElementById('cellSizeValue');
+        if (display) display.textContent = `${value}px`;
+
+        this.automaton.setCellSize(value);
     }
 
     updateCellSizeDisplay() {
-        this._gridController.updateCellSizeDisplay();
+        const slider = document.getElementById('cellSize');
+        const value = parseInt(slider.value);
+        const display = document.getElementById('cellSizeValue');
+        if (display) display.textContent = `${value}px`;
     }
 
     autoSizeGrid() {
-        this._gridController.autoSizeGrid();
+        const automaton = this.automaton;
+        const isMobile = window.innerWidth <= 768;
+        const MARGIN = 6;
+        const MIN_CELLS = 20;
+        const MAX_CELLS = 1000;
+
+        let availW, availH;
+        if (isMobile) {
+            const headerH = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
+            const statsH = document.querySelector('.stats')?.getBoundingClientRect().height ?? 40;
+            const patH = document.querySelector('.patterns-horizontal-container')?.getBoundingClientRect().height ?? 120;
+            availW = Math.floor(window.innerWidth - MARGIN * 2);
+            availH = Math.floor(window.innerHeight - headerH - statsH - patH - 40);
+        } else {
+            const wrapper = document.querySelector('.canvas-wrapper');
+            if (!wrapper) return;
+            const rect = wrapper.getBoundingClientRect();
+            availW = Math.floor(rect.width - 20 - MARGIN);
+            availH = Math.floor(rect.height - 20 - MARGIN);
+        }
+
+        if (availW <= 0 || availH <= 0) return;
+
+        const cs = automaton.cellSize;
+        let gw, gh;
+
+        if (automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE
+            && automaton.triangleEngine?.isActive) {
+            // Geometría del canvas triangular:
+            //   canvasWidth  = (gw * 2 - 1) * cs/2 + cs  ≈ (gw + 0.5) * cs
+            //   canvasHeight = gh * (√3/2) * cs
+            //
+            // Despejar gw y gh para que el canvas llene exactamente el espacio:
+            //   gw = floor(availW / cs - 0.5)
+            //   gh = floor(availH / (√3/2 * cs))
+            //
+            // Esto garantiza triángulos equiláteros correctos independientemente
+            // del cellSize — el autofit no deforma la geometría.
+            const sqrt3_2 = Math.sqrt(3) / 2;
+            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs - 0.5)));
+            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / (sqrt3_2 * cs))));
+        } else {
+            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
+            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
+        }
+
+        if (automaton.gridWidth === gw && automaton.gridHeight === gh) return;
+
+        automaton.resizeGrid(gw, gh);
+
+        // Sincronizar sliders rectangulares
+        const _set = (id, prop, val) => {
+            const el = document.getElementById(id);
+            if (el) el[prop] = val;
+        };
+        _set('gridWidth', 'value', gw);
+        _set('gridWidthValue', 'textContent', gw);
+        _set('gridHeight', 'value', gh);
+        _set('gridHeightValue', 'textContent', gh);
+        const badge = document.getElementById('gridDimensionsBadge');
+        if (badge) {
+            badge.textContent = `${gw}×${gh}`;
+            badge.classList.toggle('rect-badge', gw !== gh);
+        }
+        _set('gridSize', 'value', Math.max(gw, gh));
+        _set('gridSizeValue', 'textContent', `${gw}×${gh}`);
+
+        this._showNotification(`Grid: ${gw}×${gh}`, 'info', 1200);
     }
 
     toggleGrid() {
-        return this._gridController.toggleGrid();
+        // Funciona para ambos modos (estándar y triangular)
+        const newState = this.automaton.toggleGrid();
+
+        // Actualizar visual del botón (iluminado = grilla activa)
+        const gridToggle = document.getElementById('gridToggle');
+        if (gridToggle) {
+            gridToggle.classList.toggle('active', newState);
+        }
+
+        this.automaton.render();
+        return newState;
     }
 
     toggleHighlightsGrid() {
-        return this._gridController.toggleHighlightsGrid();
-    }
-
-    applyGridPreset(w, h) {
-        this._gridController.applyGridPreset(w, h);
+        const newState = this.automaton.toggleGridHighlights();
+        const btn = document.getElementById('gridHighlightsToggle');
+        if (btn) {
+            const icon = btn.querySelector('i');
+            if (icon) {
+                // Alternar entre border-all (visible) y border-none (oculto)
+                icon.className = newState ? 'fa-solid fa-border-all' : 'fa-solid fa-border-none';
+            }
+        }
+        this.automaton.render();
+        return newState;
     }
 
     _togglePerf() {
@@ -881,183 +1007,16 @@ class UIController {
         }
     }
 
+    // =========================================
+    // IMPORT / EXPORT — delegados a ImportExportController
+    // =========================================
+
     exportPattern() {
-        // WireWorld: exportar en formato MCL (preserva los 4 estados)
-        if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
-            this._exportMCL();
-            return;
-        }
-
-        const sel = this._canvasController?.selection;
-        const bounds = sel ? {
-            minX: Math.min(sel.startX, sel.endX),
-            minY: Math.min(sel.startY, sel.endY),
-            maxX: Math.max(sel.startX, sel.endX),
-            maxY: Math.max(sel.startY, sel.endY)
-        } : null;
-
-        const patternData = this.automaton.exportPattern(bounds);
-        if (!patternData) {
-            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
-            return;
-        }
-
-        const codec = new RLECodec();
-        const ruleString = this.automaton.rule
-            ? `B${this.automaton.rule.birth.join('')}/S${this.automaton.rule.survival.join('')}`
-            : 'B3/S23';
-
-        const rleText = codec.encode({
-            pattern: patternData.pattern,
-            name: patternData.name,
-            description: patternData.description,
-            rule: ruleString
-        });
-
-        const blob = new Blob([rleText], {type: 'text/plain'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `pattern-${Date.now()}.rle`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this._showNotification(t('notif.pattern.exported'), 'info', 2000);
-    }
-
-    _exportMCL() {
-        const state = this.automaton.exportWireworldState();
-        if (!state) {
-            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
-            return;
-        }
-
-        const codec = new MCLCodec();
-        const mclText = codec.encode(state);
-        if (!mclText) {
-            this._showNotification(t('notif.pattern.empty'), 'warning', 2000);
-            return;
-        }
-
-        const blob = new Blob([mclText], {type: 'text/plain'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `wireworld-${Date.now()}.mcl`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        this._showNotification(t('notif.pattern.exported'), 'info', 2000);
+        this._importExportController.exportPattern();
     }
 
     importPatternFromFile() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.rle,.json,.mcl';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                try {
-                    const text = ev.target.result;
-                    // Detectar formato MCL primero (tiene su propia firma)
-                    if (MCLCodec.isFormat(text)) {
-                        this._importMCL(text, file.name);
-                        return;
-                    }
-
-                    const format = RLECodec.detectFormat(text);
-                    let patternData;
-
-                    if (format === 'rle') {
-                        const codec = new RLECodec();
-                        const decoded = codec.decode(text);
-                        patternData = {
-                            pattern: decoded.pattern,
-                            name: decoded.name || file.name.replace(/\.rle$/i, ''),
-                            description: decoded.description || '',
-                        };
-                    } else if (format === 'json') {
-                        patternData = JSON.parse(text);
-                    } else {
-                        this._showNotification(t('notif.pattern.invalidFormat'), 'warning', 2500);
-                        return;
-                    }
-
-                    const center = Math.floor(this.automaton.gridSize / 2);
-                    this.automaton.importPattern(patternData, center, center);
-                    this.automaton.updateStats();
-                    this.automaton.render();
-                    this._showNotification(t('notif.pattern.imported'), 'info', 2000);
-                } catch (err) {
-                    console.error('Error importando patrón:', err);
-                    this._showNotification(t('notif.pattern.importError'), 'warning', 3000);
-                }
-            };
-            reader.readAsText(file);
-        };
-        input.click();
-    }
-
-    _importMCL(text, filename) {
-        try {
-            const codec = new MCLCodec();
-            const decoded = codec.decode(text);
-
-            // Auto-resize: si el patrón no cabe en el grid actual, ampliar con margen
-            const needed = Math.max(decoded.width, decoded.height);
-            const current = this.automaton.gridSize;
-            if (needed > current) {
-                // Margen del 20% redondeado a múltiplo de 5, mínimo 20px de margen
-                const margin = Math.max(20, Math.round(needed * 0.2 / 5) * 5);
-                const newSize = Math.min(Math.round((needed + margin) / 5) * 5, 1000);
-                this.automaton.resizeGrid(newSize);
-
-                // Sincronizar slider y display
-                const slider = document.getElementById('gridSize');
-                const display = document.getElementById('gridSizeValue');
-                if (slider) slider.value = newSize;
-                if (display) display.textContent = `${newSize}×${newSize}`;
-            }
-
-            // Limpiar el grid antes de importar para no superponer circuitos
-            this.automaton.clear();
-
-            // Si WireWorld ya está activo, cargar directamente con estados completos
-            if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive) {
-                this.automaton.importWireworldState(decoded.stateGrid, decoded.width, decoded.height);
-                this._showNotification(t('notif.pattern.imported'), 'info', 2000);
-                return;
-            }
-
-            // Si WireWorld no está activo: importar como patrón binario estándar
-            // (conductor=1, resto=0) y avisar al usuario
-            const pattern = [];
-            for (let y = 0; y < decoded.height; y++) {
-                const row = [];
-                for (let x = 0; x < decoded.width; x++) {
-                    row.push((decoded.stateGrid[x]?.[y] ?? 0) > 0 ? 1 : 0);
-                }
-                pattern.push(row);
-            }
-            const patternData = {
-                pattern,
-                name: decoded.name || filename.replace(/\.mcl$/i, ''),
-                description: decoded.description || ''
-            };
-            const center = Math.floor(this.automaton.gridSize / 2);
-            this.automaton.importPattern(patternData, center, center);
-            this.automaton.updateStats();
-            this.automaton.render();
-            this._showNotification(t('notif.pattern.importedMCLPartial'), 'warning', 3000);
-        } catch (err) {
-            console.error('Error importando MCL:', err);
-            this._showNotification(t('notif.pattern.importError'), 'warning', 3000);
-        }
+        this._importExportController.importPatternFromFile();
     }
 
     updateLimitType() {
