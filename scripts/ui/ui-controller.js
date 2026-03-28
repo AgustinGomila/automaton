@@ -23,8 +23,6 @@ class UIController {
             rotation: 0
         };
 
-        this.showActivityEffect = true;
-
         // Canvas controller — gestiona toda interacción con el canvas
         this._canvasController = new CanvasController({
             automaton: this.automaton,
@@ -68,6 +66,17 @@ class UIController {
             automaton: this.automaton,
             onUpdateHeader: () => this._displayController.updateHeaderInfo(),
             onUpdateNeighborhood: () => this._displayController.updateNeighborhoodInfo(),
+            addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
+        });
+
+        // Effects controller — actividad visual y área de influencia
+        this._effectsController = new EffectsController({
+            automaton: this.automaton,
+            getShowInfluenceArea: () => this._canvasController.showInfluenceArea,
+            setShowInfluenceArea: (v) => {
+                this._canvasController.showInfluenceArea = v;
+            },
+            onHideInfluenceArea: () => window.patternManager?.hideInfluenceArea(),
             addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
         });
 
@@ -274,10 +283,7 @@ class UIController {
 
         this._ruleController.bindEvents();
 
-        this._addEventListener(document.getElementById('influenceToggle'), 'change', () => this.toggleInfluenceArea());
-        this._addEventListener(document.getElementById('quickInfluenceToggle'), 'click', () => this.quickToggleInfluenceArea());
-        this._addEventListener(document.getElementById('activityEffectToggle'), 'change', () => this.toggleActivityEffect());
-        this._bindActivityColorPickers();
+        this._effectsController.bindEvents();
 
         const wrapToggle = document.getElementById('wrapToggle');
         if (wrapToggle) {
@@ -834,42 +840,23 @@ class UIController {
     }
 
     toggleInfluenceArea() {
-        const toggle = document.getElementById('influenceToggle');
-        this._canvasController.showInfluenceArea = toggle.checked;
-
-        const quickToggle = document.getElementById('quickInfluenceToggle');
-        if (quickToggle) {
-            quickToggle.className = this._canvasController.showInfluenceArea ? 'btn-toggle active' : 'btn-toggle';
-            quickToggle.style.color = this._canvasController.showInfluenceArea ? 'var(--secondary)' : '';
-        }
-
-        if (!this._canvasController.showInfluenceArea) window.patternManager?.hideInfluenceArea();
+        this._effectsController.toggleInfluenceArea();
     }
 
     quickToggleInfluenceArea() {
-        this._canvasController.showInfluenceArea = !this._canvasController.showInfluenceArea;
-        const toggle = document.getElementById('influenceToggle');
-        if (toggle) toggle.checked = this._canvasController.showInfluenceArea;
-        this.toggleInfluenceArea();
+        this._effectsController.quickToggleInfluenceArea();
     }
 
     toggleActivityEffect() {
-        const toggle = document.getElementById('activityEffectToggle');
-        const activityEffect = toggle.checked;
-        this._toggleActivityEffect(activityEffect);
+        this._effectsController.toggleActivityEffect();
     }
 
     _toggleActivityEffect(checked) {
-        this.showActivityEffect = checked;
-        this.automaton.setShowActivityEffect(this.showActivityEffect);
-        this.automaton._markAllDirty();
-        this.automaton.render();
-        this.toggleActivityEffectCheckbox()
+        this._effectsController._toggleActivityEffect(checked);
     }
 
     toggleActivityEffectCheckbox() {
-        const toggle = document.getElementById('activityEffectToggle');
-        if (toggle) toggle.checked = this.showActivityEffect;
+        this._effectsController._syncActivityEffectCheckbox();
     }
 
     /**
@@ -878,125 +865,10 @@ class UIController {
      *  - Generations: N swatches dinámicos (uno por estado del engine)
      *
      * Llamado por SpecialModeController al activar/desactivar Generations.
-     * @param {boolean} generationsActive
+     * @param {boolean} active
      */
-    _syncActivityColorsBlock(generationsActive) {
-        const block = document.getElementById('activityColors');
-        if (!block) return;
-
-        const swatchesContainer = block.querySelector('.activity-color-swatches');
-        if (!swatchesContainer) return;
-
-        if (!generationsActive) {
-            // Restaurar swatches binarios originales
-            swatchesContainer.innerHTML = `
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchDead" data-state="dead" style="--swatch-color:#0f172a" title="Muerto (0→0)">
-                        <span class="activity-swatch-label">0</span>
-                        <input type="color" value="#0f172a" id="colorDead">
-                    </div>
-                </div>
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchBorn" data-state="born" style="--swatch-color:#b9b610" title="Naciendo (0→1)">
-                        <span class="activity-swatch-label">+1</span>
-                        <input type="color" value="#b9b610" id="colorBorn">
-                    </div>
-                </div>
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchAlive" data-state="alive" style="--swatch-color:#059669" title="Vivo (1→1)">
-                        <span class="activity-swatch-label">1</span>
-                        <input type="color" value="#059669" id="colorAlive">
-                    </div>
-                </div>
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="swatchDying" data-state="dying" style="--swatch-color:#ef4444" title="Muriendo (1→0)">
-                        <span class="activity-swatch-label">−1</span>
-                        <input type="color" value="#ef4444" id="colorDying">
-                    </div>
-                </div>`;
-            this._bindActivityColorPickers();
-            return;
-        }
-
-        // Modo Generations: swatches dinámicos por estado
-        const engine = this.automaton.generationsEngine;
-        if (!engine?.isActive) return;
-
-        const C = engine.numStates;
-        const stateLabels = [t('config.activity.dead')];
-        stateLabels.push(t('config.activity.alive')); // estado 1 = vivo
-        for (let i = 2; i < C; i++) {
-            stateLabels.push(`${t('generations.states.label')} ${i}`);
-        }
-
-        swatchesContainer.innerHTML = engine._palette.map((color, i) => {
-            const safeColor = color ?? '#0f172a';
-            const label = i === 0 ? '0' : String(i);
-            const title = i === 0 ? 'Muerto' : i === 1 ? 'Vivo' : `Estado ${i}`;
-            return `
-                <div class="activity-swatch-item">
-                    <div class="activity-swatch" id="genSwatch${i}" style="--swatch-color:${safeColor}" title="${title}">
-                        <span class="activity-swatch-label">${label}</span>
-                        <input type="color" value="${this._cssToHex(safeColor)}" id="genColor${i}" data-state-index="${i}">
-                    </div>
-                </div>`;
-        }).join('');
-
-        // Bind de cada picker al índice de estado correspondiente
-        for (let i = 0; i < C; i++) {
-            const input = document.getElementById(`genColor${i}`);
-            const swatch = document.getElementById(`genSwatch${i}`);
-            if (!input || !swatch) continue;
-            this._addEventListener(input, 'input', () => {
-                const color = input.value;
-                swatch.style.setProperty('--swatch-color', color);
-                engine._palette[i] = i === 0 ? null : color;
-                this.automaton._markAllDirty();
-                this.automaton.render();
-            });
-        }
-    }
-
-    /**
-     * Convierte un color CSS (hsl, hex, rgb) a hex #rrggbb para el input[type=color].
-     * Para hsl usa el canvas como intermediario; para hex retorna directamente.
-     * @param {string} css
-     * @returns {string} hex
-     */
-    _cssToHex(css) {
-        if (!css || css === 'null') return '#000000';
-        if (/^#[0-9a-f]{6}$/i.test(css)) return css;
-        // Usar canvas para resolver cualquier formato CSS
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = 1;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = css;
-        ctx.fillRect(0, 0, 1, 1);
-        const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-        return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-    }
-
-    _bindActivityColorPickers() {
-        const map = [
-            {id: 'colorDead', swatchId: 'swatchDead', prop: 'colorDead'},
-            {id: 'colorBorn', swatchId: 'swatchBorn', prop: 'colorBorn'},
-            {id: 'colorAlive', swatchId: 'swatchAlive', prop: 'colorAlive'},
-            {id: 'colorDying', swatchId: 'swatchDying', prop: 'colorDying'},
-        ];
-
-        for (const {id, swatchId, prop} of map) {
-            const input = document.getElementById(id);
-            const swatch = document.getElementById(swatchId);
-            if (!input || !swatch) continue;
-
-            this._addEventListener(input, 'input', () => {
-                const color = input.value;
-                swatch.style.setProperty('--swatch-color', color);
-                this.automaton.renderer[prop] = color;
-                this.automaton._markAllDirty();
-                this.automaton.render();
-            });
-        }
+    _syncActivityColorsBlock(active) {
+        this._effectsController.syncActivityColorsBlock(active);
     }
 
     // =========================================
@@ -1115,27 +987,6 @@ class UIController {
     _renderNeighborhoodGrid(radius) {
         this._neighborhoodController.renderGrid(radius);
     }
-
-    /**
-     * Llamado cada vez que el usuario activa/desactiva una celda manualmente.
-     * Detecta si la selección resultante coincide con Moore o Neumann para
-     * actualizar el selector de tipo; si no, marca 'custom'.
-     */
-
-    /**
-     * Compara la selección visual actual con los patrones Moore y Neumann.
-     * @param {number} radius
-     * @returns {'moore' | 'neumann' | 'custom'}
-     */
-
-    /**
-     * Lee el estado visual y lo aplica al autómata como vecindad custom.
-     */
-
-    /**
-     * Actualiza el contador de vecinos activos en la etiqueta.
-     */
-
 
     _bindPatternsControls() {
         const toggleRowsBtn = document.getElementById('patternsToggleRows');
