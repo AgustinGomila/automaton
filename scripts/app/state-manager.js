@@ -330,7 +330,7 @@ class StateManager {
         const {saveToHistory = true, generation = 0} = options;
 
         if (patternData?.pattern === 'random') {
-            return this.randomize({density: 0.35, saveToHistory, generation});
+            return this.randomize({density: options.density ?? 0.35, saveToHistory, generation});
         }
         if (!patternData?.pattern || !Array.isArray(patternData.pattern)) {
             return {changedCells: [], stats: this.gridManager.getStats()};
