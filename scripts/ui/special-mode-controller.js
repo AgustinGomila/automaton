@@ -692,28 +692,13 @@ class SpecialModeController {
      * Limpia el engine triangular y restaura el renderer/core estándar.
      * Extraído para evitar duplicación entre _deactivateAllModes y deactivateTriangleMode.
      */
+    /**
+     * Limpia el engine triangular y restaura el renderer/core estándar.
+     * Delegado a SpecialEngineManager.deactivateTriangle() para centralizar
+     * la lógica de desactivación lejos del controlador UI.
+     */
     _deactivateTriangleEngine() {
-        if (this.automaton.triangleEngine) {
-            this.automaton.triangleEngine.clear?.();
-            this.automaton.triangleEngine.deactivate();
-            this.automaton.triangleEngine = null;
-        }
-        if (this.automaton._originalRenderer) {
-            const oldRenderer = this.automaton.renderer;
-            this.automaton.renderer = this.automaton._originalRenderer;
-            this.automaton._originalRenderer = null;
-            oldRenderer?.destroy?.();
-            // Sin argumentos: _resizeRenderer usa automaton.gridWidth, gridHeight y cellSize
-            // como defaults, que son los valores reales del grid rectangular.
-            // La firma antigua _resizeRenderer(gridSize, cellSize) era incorrecta:
-            // pasaba gridSize como gw y cellSize (~4) como gh, generando dimensiones
-            // absurdas (ej. 500×4 en lugar de 300×200).
-            this.automaton._resizeRenderer();
-        }
-        if (this.automaton._originalCore) {
-            this.automaton.core = this.automaton._originalCore;
-            this.automaton._originalCore = null;
-        }
+        this.automaton._engineManager.deactivateTriangle();
     }
 
     /**
