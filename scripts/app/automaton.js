@@ -58,8 +58,6 @@ class CellularAutomaton {
             showGrid: true,
             showActivityEffect: true,
             getCell: (x, y) => this.core.getCell(x, y),
-            getRD2DState: (x, y) => this.rd2dEngine?.stateGrid?.[x]?.[y],
-            isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight
         });
@@ -850,8 +848,8 @@ class CellularAutomaton {
         return this._editor.clearArea(minX, minY, maxX, maxY);
     }
 
-    async importPattern(pat, cx, cy, density) {
-        return this._editor.importPattern(pat, cx, cy, density);
+    async importPattern(pat, cx, cy) {
+        return this._editor.importPattern(pat, cx, cy);
     }
 
     exportPattern(bounds) {
