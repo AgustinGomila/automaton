@@ -12,9 +12,6 @@ class UIController {
         this.patternsSortByCount = false;
         this.patternsShowAll = false;
 
-        this._gridSizeDebounceTimer = null;
-        this._gridSizePendingValue = null;
-
         this._cleanups = [];
 
         this._patternState = {
@@ -37,6 +34,15 @@ class UIController {
             onUpdateHeader: () => this._displayController.updateHeaderInfo(),
             onSyncPlayButton: () => this._syncPlayButtonState(),
             onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur)
+        });
+
+        // Grid controller — gestiona dimensiones de grid y zoom
+        this._gridController = new GridController({
+            automaton: this.automaton,
+            onStopAutomaton: () => this._stopAutomaton(),
+            onSyncPlayButton: () => this._syncPlayButtonState(),
+            onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
+            addEventListener: (target, event, handler, opts) => this._addEventListener(target, event, handler, opts)
         });
 
         this._subscribeToAutomatonEvents();
@@ -94,12 +100,14 @@ class UIController {
         this._bindPatternsControls();
 
         this.updateSpeedDisplay();
-        this.updateGridSizeDisplay();
-        this.updateCellSizeDisplay();
+        this._gridController.initDisplays();
         this._displayController.updateNeighborhoodInfo();
         this.loadRules();
 
         eventBus.on('automaton:runningChanged', () => this._syncPlayButtonState());
+
+        // Inicializar UI rectangular del grid en app:ready
+        eventBus.on('app:ready', () => setTimeout(() => this._gridController.initGridRectUI(), 60));
 
         eventBus.emit('ui:ready');
     }
@@ -109,7 +117,8 @@ class UIController {
     // =========================================
 
     destroy() {
-        if (this._gridSizeDebounceTimer) clearTimeout(this._gridSizeDebounceTimer);
+        this._gridController?.destroy();
+        this._gridController = null;
 
         this._canvasController?.destroy();
         this._canvasController = null;
@@ -305,11 +314,7 @@ class UIController {
         this._addEventListener(document.getElementById('speedControl'), 'input', () => this.updateSpeed());
         this._addEventListener(document.getElementById('speedDown'), 'click', () => this.decreaseSpeed());
         this._addEventListener(document.getElementById('speedUp'), 'click', () => this.increaseSpeed());
-        this._addEventListener(document.getElementById('gridSize'), 'input', () => this.updateGridSize());
-        this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
-        this._addEventListener(document.getElementById('autoSizeBtn'), 'click', () => this.autoSizeGrid());
-        this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
-        this._addEventListener(document.getElementById('gridHighlightsToggle'), 'click', () => this.toggleHighlightsGrid());
+        this._gridController.bindEvents();
         this._addEventListener(document.getElementById('exportBtn'), 'click', () => this.exportPattern());
         this._addEventListener(document.getElementById('importBtn'), 'click', () => this.importPatternFromFile());
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
@@ -615,162 +620,42 @@ class UIController {
         if (display) display.textContent = `${speedTexts[index]} (${value}/10)`;
     }
 
+    // =========================================
+    // GRID SIZE & ZOOM — delegados a GridController
+    // Se mantienen como proxies para compatibilidad con ResponsiveController
+    // y cualquier código externo que los llame por nombre en UIController.
+    // =========================================
+
     updateGridSize() {
-        const slider = document.getElementById('gridSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('gridSizeValue');
-        if (display) display.textContent = `${value}×${value}`;
-
-        // Cancelar timer anterior
-        if (this._gridSizeDebounceTimer) {
-            clearTimeout(this._gridSizeDebounceTimer);
-        }
-
-        // Guardar valor pendiente
-        this._gridSizePendingValue = value;
-
-        // Crear nuevo timer de 500ms
-        this._gridSizeDebounceTimer = setTimeout(() => {
-            this._applyGridSizeChange();
-        }, 500);
-    }
-
-    _applyGridSizeChange() {
-        if (this._gridSizePendingValue === null) return;
-
-        const value = this._gridSizePendingValue;
-        this._gridSizePendingValue = null;
-
-        // Detener si está corriendo (sin confirmar, forzar)
-        if (this.automaton.isRunning) {
-            this._stopAutomaton();
-            this._syncPlayButtonState();
-        }
-
-        this.automaton.resizeGrid(value);
-        this._gridSizeDebounceTimer = null;
+        this._gridController.updateGridSize();
     }
 
     updateGridSizeDisplay() {
-        const slider = document.getElementById('gridSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('gridSizeValue');
-        if (display) display.textContent = `${value}×${value}`;
+        this._gridController.updateGridSizeDisplay();
     }
 
     updateCellSize() {
-        const slider = document.getElementById('cellSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('cellSizeValue');
-        if (display) display.textContent = `${value}px`;
-
-        this.automaton.setCellSize(value);
+        this._gridController.updateCellSize();
     }
 
     updateCellSizeDisplay() {
-        const slider = document.getElementById('cellSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('cellSizeValue');
-        if (display) display.textContent = `${value}px`;
+        this._gridController.updateCellSizeDisplay();
     }
 
     autoSizeGrid() {
-        const automaton = this.automaton;
-        const isMobile = window.innerWidth <= 768;
-        const MARGIN = 6;
-        const MIN_CELLS = 20;
-        const MAX_CELLS = 1000;
-
-        let availW, availH;
-        if (isMobile) {
-            const headerH = document.querySelector('header')?.getBoundingClientRect().height ?? 60;
-            const statsH = document.querySelector('.stats')?.getBoundingClientRect().height ?? 40;
-            const patH = document.querySelector('.patterns-horizontal-container')?.getBoundingClientRect().height ?? 120;
-            availW = Math.floor(window.innerWidth - MARGIN * 2);
-            availH = Math.floor(window.innerHeight - headerH - statsH - patH - 40);
-        } else {
-            const wrapper = document.querySelector('.canvas-wrapper');
-            if (!wrapper) return;
-            const rect = wrapper.getBoundingClientRect();
-            availW = Math.floor(rect.width - 20 - MARGIN);
-            availH = Math.floor(rect.height - 20 - MARGIN);
-        }
-
-        if (availW <= 0 || availH <= 0) return;
-
-        const cs = automaton.cellSize;
-        let gw, gh;
-
-        if (automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE
-            && automaton.triangleEngine?.isActive) {
-            // Geometría del canvas triangular:
-            //   canvasWidth  = (gw * 2 - 1) * cs/2 + cs  ≈ (gw + 0.5) * cs
-            //   canvasHeight = gh * (√3/2) * cs
-            //
-            // Despejar gw y gh para que el canvas llene exactamente el espacio:
-            //   gw = floor(availW / cs - 0.5)
-            //   gh = floor(availH / (√3/2 * cs))
-            //
-            // Esto garantiza triángulos equiláteros correctos independientemente
-            // del cellSize — el autofit no deforma la geometría.
-            const sqrt3_2 = Math.sqrt(3) / 2;
-            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs - 0.5)));
-            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / (sqrt3_2 * cs))));
-        } else {
-            gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
-            gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
-        }
-
-        if (automaton.gridWidth === gw && automaton.gridHeight === gh) return;
-
-        automaton.resizeGrid(gw, gh);
-
-        // Sincronizar sliders rectangulares
-        const _set = (id, prop, val) => {
-            const el = document.getElementById(id);
-            if (el) el[prop] = val;
-        };
-        _set('gridWidth', 'value', gw);
-        _set('gridWidthValue', 'textContent', gw);
-        _set('gridHeight', 'value', gh);
-        _set('gridHeightValue', 'textContent', gh);
-        const badge = document.getElementById('gridDimensionsBadge');
-        if (badge) {
-            badge.textContent = `${gw}×${gh}`;
-            badge.classList.toggle('rect-badge', gw !== gh);
-        }
-        _set('gridSize', 'value', Math.max(gw, gh));
-        _set('gridSizeValue', 'textContent', `${gw}×${gh}`);
-
-        this._showNotification(`Grid: ${gw}×${gh}`, 'info', 1200);
+        this._gridController.autoSizeGrid();
     }
 
     toggleGrid() {
-        // Funciona para ambos modos (estándar y triangular)
-        const newState = this.automaton.toggleGrid();
-
-        // Actualizar visual del botón (iluminado = grilla activa)
-        const gridToggle = document.getElementById('gridToggle');
-        if (gridToggle) {
-            gridToggle.classList.toggle('active', newState);
-        }
-
-        this.automaton.render();
-        return newState;
+        return this._gridController.toggleGrid();
     }
 
     toggleHighlightsGrid() {
-        const newState = this.automaton.toggleGridHighlights();
-        const btn = document.getElementById('gridHighlightsToggle');
-        if (btn) {
-            const icon = btn.querySelector('i');
-            if (icon) {
-                // Alternar entre border-all (visible) y border-none (oculto)
-                icon.className = newState ? 'fa-solid fa-border-all' : 'fa-solid fa-border-none';
-            }
-        }
-        this.automaton.render();
-        return newState;
+        return this._gridController.toggleHighlightsGrid();
+    }
+
+    applyGridPreset(w, h) {
+        this._gridController.applyGridPreset(w, h);
     }
 
     _togglePerf() {
