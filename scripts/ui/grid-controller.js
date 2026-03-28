@@ -2,7 +2,7 @@
  * GridController — Controlador de tamaño de grid y zoom.
  *
  * Responsabilidades:
- *   - Sliders de gridSize (legacy cuadrado), gridWidth, gridHeight, cellSize
+ *   - Sliders de gridWidth, gridHeight y cellSize
  *   - Autofit del grid al espacio disponible del canvas
  *   - Aspect lock y presets de dimensiones
  *   - Toggle de grilla visual y highlights
@@ -56,7 +56,6 @@ class GridController {
      * Llamado desde UIController._bindEvents().
      */
     bindEvents() {
-        this._addEventListener(document.getElementById('gridSize'), 'input', () => this.updateGridSize());
         this._addEventListener(document.getElementById('cellSize'), 'input', () => this.updateCellSize());
         this._addEventListener(document.getElementById('autoSizeBtn'), 'click', () => this.autoSizeGrid());
         this._addEventListener(document.getElementById('gridToggle'), 'click', () => this.toggleGrid());
@@ -101,48 +100,10 @@ class GridController {
     }
 
     // =========================================
-    // GRID SIZE — SLIDER LEGACY (cuadrado)
+    // GRID SIZE DISPLAY
     // =========================================
 
-    updateGridSize() {
-        const slider = document.getElementById('gridSize');
-        const value = parseInt(slider.value);
-        const display = document.getElementById('gridSizeValue');
-        if (display) display.textContent = `${value}×${value}`;
-
-        if (this._gridSizeDebounceTimer) clearTimeout(this._gridSizeDebounceTimer);
-        this._gridSizePendingValue = value;
-        this._gridSizeDebounceTimer = setTimeout(() => this._applyGridSizeChange(), 500);
-    }
-
-    _applyGridSizeChange() {
-        // Si hay dimensiones rectangulares pendientes, delegar al path rect
-        if (this._gridSizePendingHeight !== undefined) {
-            this._applyRectGridSizeChange();
-            return;
-        }
-
-        if (this._gridSizePendingValue === null) return;
-
-        const value = this._gridSizePendingValue;
-        this._gridSizePendingValue = null;
-
-        if (this.automaton.isRunning) {
-            this._stopAutomaton();
-            this._syncPlayButton();
-        }
-
-        this.automaton.resizeGrid(value);
-        this._gridSizeDebounceTimer = null;
-    }
-
     updateGridSizeDisplay() {
-        // Slider legacy (cuadrado)
-        const slider = document.getElementById('gridSize');
-        const display = document.getElementById('gridSizeValue');
-        if (slider && display) display.textContent = `${parseInt(slider.value)}×${parseInt(slider.value)}`;
-
-        // Sliders rectangulares
         this._updateRectDisplays();
     }
 
@@ -397,8 +358,6 @@ class GridController {
             badge.textContent = `${gw}×${gh}`;
             badge.classList.toggle('rect-badge', gw !== gh);
         }
-        _set('gridSize', 'value', Math.max(gw, gh));
-        _set('gridSizeValue', 'textContent', `${gw}×${gh}`);
     }
 
     // =========================================

@@ -172,8 +172,8 @@ class ImportExportController {
                 return;
             }
 
-            const center = Math.floor(this.automaton.gridSize / 2);
-            this.automaton.importPattern(patternData, center, center);
+            const cx = Math.floor(this.automaton.gridWidth / 2);
+            this.automaton.importPattern(patternData, cx, cy);
             this.automaton.updateStats();
             this.automaton.render();
             this._showNotification(t('notif.pattern.imported'), 'info', 2000);
@@ -204,7 +204,7 @@ class ImportExportController {
 
             // Auto-resize: ampliar el grid si el patrón no cabe
             const needed = Math.max(decoded.width, decoded.height);
-            const current = this.automaton.gridSize;
+            const current = Math.max(this.automaton.gridWidth, this.automaton.gridHeight);
             if (needed > current) {
                 const margin = Math.max(20, Math.round(needed * 0.2 / 5) * 5);
                 const newSize = Math.min(Math.round((needed + margin) / 5) * 5, 1000);
@@ -238,8 +238,8 @@ class ImportExportController {
                 name: decoded.name || filename.replace(/\.mcl$/i, ''),
                 description: decoded.description || ''
             };
-            const center = Math.floor(this.automaton.gridSize / 2);
-            this.automaton.importPattern(patternData, center, center);
+            const cx = Math.floor(this.automaton.gridWidth / 2);
+            this.automaton.importPattern(patternData, cx, Math.floor(this.automaton.gridHeight / 2));
             this.automaton.updateStats();
             this.automaton.render();
             this._showNotification(t('notif.pattern.importedMCLPartial'), 'warning', 3000);

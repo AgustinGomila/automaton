@@ -7,7 +7,6 @@
  *   'custom'  — lista arbitraria de offsets [{dx,dy}]
  *
  * Soporta grids rectangulares: gridWidth para el eje X, gridHeight para Y.
- * Compatibilidad hacia atrás: acepta `gridSize` como alias de ambos.
  */
 class NeighborhoodCalculator {
     /**
@@ -17,17 +16,14 @@ class NeighborhoodCalculator {
      * @param {boolean} options.wrapEdges     — modo toroidal (default true)
      * @param {number}  options.gridWidth     — ancho del grid
      * @param {number}  options.gridHeight    — alto del grid
-     * @param {number}  [options.gridSize]    — alias legacy (cuadrado)
      */
     constructor(options = {}) {
         this.type = options.type || 'moore';
         this.radius = Math.max(1, Math.min(options.radius || 1, 10));
         this.wrapEdges = options.wrapEdges !== false;
 
-        // Dimensiones del grid: gridWidth/gridHeight tienen prioridad sobre gridSize
-        const legacySize = options.gridSize || 200;
-        this.gridWidth = options.gridWidth || legacySize;
-        this.gridHeight = options.gridHeight || legacySize;
+        this.gridWidth = options.gridWidth || 200;
+        this.gridHeight = options.gridHeight || 200;
 
         this._offsets = this._computeOffsets();
     }
@@ -62,7 +58,7 @@ class NeighborhoodCalculator {
      *
      * Para presets (moore/neumann): pasar type y/o radius.
      * Para personalizada: pasar offsets como [{dx,dy}].
-     * gridWidth/gridHeight (o gridSize legacy) actualizan las dimensiones.
+     * gridWidth/gridHeight actualizan las dimensiones.
      *
      * @param {Object} options
      * @param {string}  [options.type]
@@ -70,17 +66,11 @@ class NeighborhoodCalculator {
      * @param {boolean} [options.wrapEdges]
      * @param {number}  [options.gridWidth]
      * @param {number}  [options.gridHeight]
-     * @param {number}  [options.gridSize]   — alias legacy (cuadrado)
      * @param {Array<{dx:number,dy:number}>} [options.offsets]
      */
     configure(options) {
-        // Actualizar dimensiones (gridWidth/gridHeight tienen prioridad)
         if (options.gridWidth !== undefined) this.gridWidth = options.gridWidth;
         if (options.gridHeight !== undefined) this.gridHeight = options.gridHeight;
-        if (options.gridSize !== undefined) {
-            this.gridWidth = this.gridWidth || options.gridSize;
-            this.gridHeight = this.gridHeight || options.gridSize;
-        }
 
         if (options.offsets !== undefined) {
             // Vecindad personalizada: offsets directos desde la UI.

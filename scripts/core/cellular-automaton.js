@@ -10,15 +10,13 @@ class CellularAutomatonCore {
      * @param {Object}  options
      * @param {number}  [options.width]             — columnas (default 500)
      * @param {number}  [options.height]            — filas    (default width)
-     * @param {number}  [options.size]              — alias legacy (cuadrado)
      * @param {Object}  options.rule                — { birth: number[], survival: number[] }
      * @param {string}  options.neighborhoodType    — 'moore' | 'neumann'
      * @param {number}  options.neighborhoodRadius
      * @param {boolean} options.wrapEdges
      */
     constructor(options = {}) {
-        const legacySize = options.size || 500;
-        const w = Math.min(Math.max(options.width ?? legacySize, 20), 1000);
+        const w = Math.min(Math.max(options.width ?? 500, 20), 1000);
         const h = Math.min(Math.max(options.height ?? w, 20), 1000);
 
         this.width = w;

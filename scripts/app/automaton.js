@@ -2,8 +2,7 @@
  * CellularAutomaton — Coordinador del autómata celular.
  *
  * Actualizado para grids rectangulares (width × height).
- * • gridWidth / gridHeight reemplazan a gridSize como fuente de verdad.
- * • gridSize se mantiene como getter (Math.max) para compatibilidad legacy.
+ * • gridWidth / gridHeight son la fuente de verdad dimensional del grid.
  * • resizeGrid acepta (width, height) con height opcional (cuadrado por defecto).
  * • Worker, renderer y engines especiales reciben dimensiones rectangulares.
  */
@@ -120,7 +119,6 @@ class CellularAutomaton {
             },
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight,
-            getGridSize: () => this.gridSize,
             getCellSize: () => this.cellSize,
             getAutomaton: () => this
         });
@@ -169,11 +167,6 @@ class CellularAutomaton {
 
     set grid(value) {
         if (this.core?.gridManager) this.core.gridManager.grid = value;
-    }
-
-    /** Alias legacy: dimensión mayor del grid. */
-    get gridSize() {
-        return Math.max(this.gridWidth, this.gridHeight);
     }
 
     get limitType() {
@@ -482,7 +475,7 @@ class CellularAutomaton {
     }
 
     _stepStandardMode(t0) {
-        const result = (this.worker && this.gridSize >= this.workerThreshold)
+        const result = (this.worker && Math.max(this.gridWidth, this.gridHeight) >= this.workerThreshold)
             ? this._nextGenerationWorker()
             : this._nextGenerationCore();
         this._pendingStepT0 = t0;
@@ -692,7 +685,6 @@ class CellularAutomaton {
         if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
             this.rd2dEngine.gridWidth = this.gridWidth;
             this.rd2dEngine.gridHeight = this.gridHeight;
-            this.rd2dEngine.gridSize = Math.max(this.gridWidth, this.gridHeight);
             this.rd2dEngine._initStateGrid();
             this.rd2dEngine.initialized = false;
         }

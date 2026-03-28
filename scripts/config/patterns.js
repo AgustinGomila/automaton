@@ -435,7 +435,8 @@ class PatternManager {
         if (!ctx) return;
 
         const cellSize = this.automaton.cellSize;
-        const gridSize = this.automaton.gridSize;
+        const gw = this.automaton.gridWidth;
+        const gh = this.automaton.gridHeight;
         const patternOffX = Math.floor(patternData[0].length / 2);
         const patternOffY = Math.floor(patternData.length / 2);
 
@@ -447,7 +448,7 @@ class PatternManager {
                 if (!patternData[row][col]) continue;
                 const gx = x - patternOffX + col;
                 const gy = y - patternOffY + row;
-                if (gx >= 0 && gx < gridSize && gy >= 0 && gy < gridSize) {
+                if (gx >= 0 && gx < gw && gy >= 0 && gy < gh) {
                     ctx.fillRect(gx * cellSize, gy * cellSize, cellSize, cellSize);
                 }
             }
@@ -480,7 +481,8 @@ class PatternManager {
         if (!ctx) return;
 
         const cellSize = this.automaton.cellSize;
-        const gridSize = this.automaton.gridSize;
+        const gw = this.automaton.gridWidth;
+        const gh = this.automaton.gridHeight;
         const radius = this.automaton.neighborhoodRadius;
         const type = this.automaton.neighborhoodType;
 
@@ -492,8 +494,8 @@ class PatternManager {
                     if (i === 0 && j === 0) continue;
                     if (type === 'neumann' && Math.abs(i) + Math.abs(j) > radius) continue;
                     neighbors.push({
-                        x: (cx + i + gridSize) % gridSize,
-                        y: (cy + j + gridSize) % gridSize
+                        x: (cx + i + gw) % gw,
+                        y: (cy + j + gh) % gh
                     });
                 }
             }
@@ -523,8 +525,8 @@ class PatternManager {
                     if (!pattern[row][col]) continue;
                     const gx = x - patternOffX + col;
                     const gy = y - patternOffY + row;
-                    if (gx >= 0 && gx < gridSize && gy >= 0 && gy < gridSize) {
-                        patternSet.add(gx * gridSize + gy);
+                    if (gx >= 0 && gx < gw && gy >= 0 && gy < gh) {
+                        patternSet.add(gx * gh + gy);   // column-major: x*height + y
                     }
                 }
             }
@@ -532,17 +534,17 @@ class PatternManager {
             // Set de influencia
             const influenceSet = new Set();
             for (const key of patternSet) {
-                const cx = (key / gridSize) | 0;
-                const cy = key % gridSize;
+                const cx = (key / gh) | 0;
+                const cy = key % gh;
                 for (const {x: nx, y: ny} of getNeighborhood(cx, cy)) {
-                    const nk = nx * gridSize + ny;
+                    const nk = nx * gh + ny;            // column-major
                     if (!patternSet.has(nk)) influenceSet.add(nk);
                 }
             }
 
             for (const key of influenceSet) {
-                const nx = (key / gridSize) | 0;
-                const ny = key % gridSize;
+                const nx = (key / gh) | 0;
+                const ny = key % gh;
                 ctx.fillRect(nx * cellSize, ny * cellSize, cellSize, cellSize);
             }
         }

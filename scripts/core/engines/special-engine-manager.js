@@ -20,17 +20,15 @@ class SpecialEngineManager {
     });
 
     constructor({
-                    getRenderer, setRenderer, getCore, setCore, getGridSize,
+                    getRenderer, setRenderer, getCore, setCore,
                     getGridWidth, getGridHeight, getCellSize, getAutomaton
                 }) {
         this._getRenderer = getRenderer;
         this._setRenderer = setRenderer;
         this._getCore = getCore;
         this._setCore = setCore;
-        // Soporte para API rectangular y legacy
-        this._getGridWidth = getGridWidth || getGridSize || (() => 500);
-        this._getGridHeight = getGridHeight || getGridSize || (() => 500);
-        this._getGridSize = getGridSize || (() => Math.max(this._getGridWidth(), this._getGridHeight()));
+        this._getGridWidth = getGridWidth || (() => 500);
+        this._getGridHeight = getGridHeight || (() => 500);
         this._getCellSize = getCellSize;
         this._getAutomaton = getAutomaton;
 
@@ -394,10 +392,6 @@ class SpecialEngineManager {
             },
             get gridHeight() {
                 return self._getGridHeight();
-            },
-            /** Legacy: para engines que aún usen ctx.gridSize */
-            get gridSize() {
-                return Math.max(self._getGridWidth(), self._getGridHeight());
             },
             get renderer() {
                 return self._getRenderer();

@@ -83,7 +83,7 @@ class EditCoordinator {
         this._a.updateStats();
         if (full) r.markAllDirty();
         this._a.render();
-        if (full && this._a.gridSize >= this._a.workerThreshold) {
+        if (full && Math.max(this._a.gridWidth, this._a.gridHeight) >= this._a.workerThreshold) {
             this._a._initWorker();
         } else {
             this._a._syncWorkerGrid();
@@ -207,13 +207,14 @@ class EditCoordinator {
         if (stateGrid) {
             const {width, height} = area;
             const engineStates = Array.from({length: width}, () => new Array(height).fill(0));
-            const size = this._a.gridSize;
+            const gw = this._a.gridWidth;
+            const gh = this._a.gridHeight;
             for (let x = 0; x < width; x++) {
                 const gx = minX + x;
-                if (gx < 0 || gx >= size) continue;
+                if (gx < 0 || gx >= gw) continue;
                 for (let y = 0; y < height; y++) {
                     const gy = minY + y;
-                    if (gy < 0 || gy >= size) continue;
+                    if (gy < 0 || gy >= gh) continue;
                     const s = stateGrid[gx]?.[gy] ?? 0;
                     engineStates[x][y] = s;
                     // Marcar como "viva" en el grid binario cualquier celda con estado >0
@@ -239,14 +240,15 @@ class EditCoordinator {
             // Restaurar estados extendidos del engine si el área los tenía capturados
             const stateGrid = this._getEngineStateGrid();
             if (stateGrid && area.engineStates) {
-                const size = this._a.gridSize;
+                const gw = this._a.gridWidth;
+                const gh = this._a.gridHeight;
                 const grid = this._a.grid;
                 for (let x = 0; x < area.width; x++) {
                     const gx = offsetX + x;
-                    if (gx < 0 || gx >= size) continue;
+                    if (gx < 0 || gx >= gw) continue;
                     for (let y = 0; y < area.height; y++) {
                         const gy = offsetY + y;
-                        if (gy < 0 || gy >= size) continue;
+                        if (gy < 0 || gy >= gh) continue;
                         const s = area.engineStates[x]?.[y] ?? 0;
                         if (s > 0) {
                             stateGrid[gx][gy] = s;
@@ -277,24 +279,26 @@ class EditCoordinator {
         // pero sí deben limpiarse de stateGrid para evitar estados fantasma.
         const stateGrid = this._getEngineStateGrid();
         if (stateGrid && area.engineStates) {
-            const size = this._a.gridSize;
+            const gw = this._a.gridWidth;
+            const gh = this._a.gridHeight;
             for (let x = 0; x < area.width; x++) {
                 const gx = offsetX + x;
-                if (gx < 0 || gx >= size) continue;
+                if (gx < 0 || gx >= gw) continue;
                 for (let y = 0; y < area.height; y++) {
                     const s = area.engineStates[x]?.[y] ?? 0;
                     if (s <= 0) continue; // celda muerta en el área — no tocar
                     const gy = offsetY + y;
-                    if (gy < 0 || gy >= size) continue;
+                    if (gy < 0 || gy >= gh) continue;
                     stateGrid[gx][gy] = 0;
                     this._a.renderer.markDirty(gx, gy);
                 }
             }
         } else if (stateGrid && result.changedCells.length > 0) {
             // Fallback sin engineStates: borrar por changedCells binario
-            const size = this._a.gridSize;
+            const gw = this._a.gridWidth;
+            const gh = this._a.gridHeight;
             for (const {x, y} of result.changedCells) {
-                if (x >= 0 && x < size && y >= 0 && y < size) {
+                if (x >= 0 && x < gw && y >= 0 && y < gh) {
                     stateGrid[x][y] = 0;
                 }
             }
@@ -333,13 +337,12 @@ class EditCoordinator {
     // IMPORTAR / EXPORTAR
     // =========================================
 
-    async importPattern(pattern, centerX, centerY, density) {
+    async importPattern(pattern, centerX, centerY) {
         const wasRunning = await this._haltForEditAsync();
 
         const result = this._a.stateManager.importPattern(pattern, centerX, centerY, {
             saveToHistory: true,
-            generation: this._a.generation,
-            density
+            generation: this._a.generation
         });
 
         if (result.changedCells.length > 0) {

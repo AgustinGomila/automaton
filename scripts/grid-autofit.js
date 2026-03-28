@@ -116,11 +116,6 @@
             badge.classList.toggle('rect-badge', gridWidth !== gridHeight);
         }
 
-        // ── Slider legacy (#gridSize) ─────────────────────────────────────
-        const maxDim = Math.max(gridWidth, gridHeight);
-        _setEl('gridSize', 'value', maxDim);
-        _setEl('gridSizeValue', 'textContent', `${gridWidth}×${gridHeight}`);
-
         console.info(
             `🔲 Grid autofit: ${gridWidth}×${gridHeight} ` +
             `(cellSize=${automaton.cellSize}, ` +

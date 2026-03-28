@@ -120,8 +120,10 @@ class RD2DEngine {
         this.stateGrid = null;
         this._backStateGrid = null;
         this.initialized = false;
-        // Retirar el colorProvider al desactivar
-        this.automaton.renderer?.setColorProvider(null);
+        // Retirar el colorProvider al desactivar.
+        // Usar ?. doble: el renderer puede ser el triangular (sin setColorProvider)
+        // si RD2D se desactiva mientras Triangle aún no restauró el renderer estándar.
+        this.automaton.renderer?.setColorProvider?.(null);
     }
 
     // =========================================

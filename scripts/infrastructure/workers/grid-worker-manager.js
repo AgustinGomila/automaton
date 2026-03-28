@@ -1,12 +1,8 @@
 /**
  * GridWorkerManager — Worker stateful con doble buffer.
  *
- * Soporta grids rectangulares: usa getGridWidth y getGridHeight en lugar
- * del anterior getGridSize. La serialización/deserialización emplea el
- * índice plano x * height + y (column-major).
- *
- * Compatibilidad hacia atrás: si sólo se pasa getGridSize, se usa para
- * ambas dimensiones.
+ * Usa getGridWidth y getGridHeight para grids rectangulares.
+ * La serialización/deserialización emplea el índice plano x * height + y (column-major).
  */
 class GridWorkerManager {
     /**
@@ -15,22 +11,19 @@ class GridWorkerManager {
      * @param {number}   options.threshold     — máx(width,height) mínimo para activar worker
      * @param {Function} options.getGridWidth  — () => number
      * @param {Function} options.getGridHeight — () => number
-     * @param {Function} [options.getGridSize] — legacy: alias cuadrado
      * @param {Function} options.getCore       — () => CellularAutomatonCore
      * @param {Function} options.onResult
      * @param {Function} options.onError
      */
-    constructor({workerPath, threshold, getGridWidth, getGridHeight, getGridSize, getCore, onResult, onError}) {
+    constructor({workerPath, threshold, getGridWidth, getGridHeight, getCore, onResult, onError}) {
         this._workerPath = workerPath;
         this.threshold = threshold ?? 600;
         this._getCore = getCore;
         this._onResult = onResult;
         this._onError = onError;
 
-        // Soporte para API legacy (sólo getGridSize)
-        const legacyFn = getGridSize || (() => 500);
-        this._getGridWidth = getGridWidth || legacyFn;
-        this._getGridHeight = getGridHeight || legacyFn;
+        this._getGridWidth = getGridWidth || (() => 500);
+        this._getGridHeight = getGridHeight || (() => 500);
 
         this._worker = null;
         this._handlerId = null;

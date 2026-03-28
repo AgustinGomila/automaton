@@ -4,8 +4,6 @@
  * Soporta grids rectangulares (gridWidth × gridHeight).
  * Índice plano: x * gridHeight + y  (column-major, igual que GridManager).
  *
- * Compatibilidad hacia atrás: opción `gridSize` se acepta como cuadrado.
- *
  * === OPTIMIZACIÓN DE GRILLA ===
  * Las líneas de grilla se dibujan en un canvas overlay DOM independiente
  * (position:absolute, pointer-events:none) ubicado encima del canvas principal.
@@ -26,10 +24,8 @@ class GridRenderer {
      * @param {Function} options.getCell       — (x, y) => 0|1
      * @param {Function} options.getGridWidth  — () => number
      * @param {Function} options.getGridHeight — () => number
-     * @param {Function} [options.getGridSize] — legacy, () => number
-     * @param {number}   [options.gridWidth]
-     * @param {number}   [options.gridHeight]
-     * @param {number}   [options.gridSize]    — legacy alias (cuadrado)
+     * @param {number}   [options.gridWidth]   — valor inicial (sincronizado al primer resize)
+     * @param {number}   [options.gridHeight]  — valor inicial
      * @param {number}   [options.cellSize]
      * @param {boolean}  [options.showGrid]
      * @param {boolean}  [options.showActivityEffect]
@@ -39,13 +35,6 @@ class GridRenderer {
     constructor(options) {
         if (!options.canvas) throw new Error('GridRenderer: canvas requerido');
         if (typeof options.getCell !== 'function') throw new Error('GridRenderer: getCell requerido');
-
-        // Soporte para dimensiones rectangulares y compatibilidad legacy
-        const legacySize = options.gridSize || 200;
-        if (!options.getGridWidth && typeof options.getGridSize === 'function') {
-            options.getGridWidth = options.getGridSize;
-            options.getGridHeight = options.getGridSize;
-        }
         if (typeof options.getGridWidth !== 'function') throw new Error('GridRenderer: getGridWidth requerido');
         if (typeof options.getGridHeight !== 'function') throw new Error('GridRenderer: getGridHeight requerido');
 
@@ -61,8 +50,8 @@ class GridRenderer {
             showGrid: options.showGrid !== false,
             showActivityEffect: options.showActivityEffect !== false,
             cellSize: Math.max(1, Math.min(options.cellSize || 4, 20)),
-            gridWidth: Math.max(20, Math.min(options.gridWidth || legacySize, 1000)),
-            gridHeight: Math.max(20, Math.min(options.gridHeight || legacySize, 1000)),
+            gridWidth: Math.max(20, Math.min(options.gridWidth || 200, 1000)),
+            gridHeight: Math.max(20, Math.min(options.gridHeight || 200, 1000)),
             /** Intervalo entre líneas de énfasis. 0 = desactivado. */
             gridMajorInterval: options.gridMajorInterval ?? 10,
             /** Mostrar líneas mayores de énfasis independientemente de showGrid. */

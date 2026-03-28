@@ -636,10 +636,6 @@ class UIController {
         if (display) display.textContent = `${speedTexts[index]} (${value}/10)`;
     }
 
-    updateGridSize() {
-        this._gridController.updateGridSize();
-    }
-
     updateGridSizeDisplay() {
         this._gridController.updateGridSizeDisplay();
     }

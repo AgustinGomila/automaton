@@ -75,12 +75,6 @@ class ResponsiveController {
             if (hDisplay) hDisplay.textContent = defaultH;
             if (badge) badge.textContent = `${defaultW}×${defaultH}`;
 
-            // Mantener slider legacy sincronizado
-            const legacySlider = document.getElementById('gridSize');
-            const legacyDisplay = document.getElementById('gridSizeValue');
-            if (legacySlider) legacySlider.value = defaultW;
-            if (legacyDisplay) legacyDisplay.textContent = `${defaultW}×${defaultH}`;
-
             this.uiController?.updateGridSizeDisplay?.();
             this.automaton.resizeGrid(defaultW, defaultH);
         }
