@@ -270,7 +270,12 @@ h3 i {
 
 .value-display {
     padding: 2px 8px;
-    font-size: 0.8rem;
+    font-size: 0.7rem;
+}
+
+/* Texto del span dentro de los toggle-label del sidebar */
+.toggle-label span:not(.toggle-switch-slider) {
+    font-size: 0.75rem;
 }
 
 /* Ocultar botón en desktop */
