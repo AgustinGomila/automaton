@@ -312,7 +312,28 @@ class UIController {
 
         const workerToggle = document.getElementById('workerToggle');
         if (workerToggle) {
-            workerToggle.checked = this.automaton.worker !== null;
+            /**
+             * Activa/desactiva el worker según el tamaño actual del grid y
+             * sincroniza el toggle visual. Llamado al inicializar y tras cada
+             * resize de grid (el autofit puede subir el grid por encima del umbral).
+             */
+            const syncWorkerToggle = () => {
+                const exceedsThreshold = Math.max(this.automaton.gridWidth, this.automaton.gridHeight)
+                    >= AppConfig.WORKER.THRESHOLD;
+                if (exceedsThreshold && !this.automaton.worker) {
+                    this.automaton._initWorker();
+                } else if (!exceedsThreshold && this.automaton.worker) {
+                    // El grid se redujo bajo el umbral — el worker ya no aporta
+                    this.automaton._cleanupWorker();
+                }
+                workerToggle.checked = this.automaton.worker !== null;
+            };
+
+            syncWorkerToggle();
+
+            // Re-evaluar tras cada resize (autofit, cambio manual de dimensiones)
+            this._cleanups.push(eventBus.on('automaton:resized', syncWorkerToggle));
+
             this._addEventListener(workerToggle, 'change', (e) => {
                 if (e.target.checked) {
                     this.automaton._initWorker();
