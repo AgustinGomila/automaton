@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Benchmark — Cellular Automaton</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+        :root {
+            --bg: #080c12;
+            --surface: #0d1520;
+            --border: rgba(255, 255, 255, 0.07);
+            --primary: #10b981;
+            --primary-d: #059669;
+            --accent: #f59e0b;
+            --danger: #ef4444;
+            --text: #e2e8f0;
+            --muted: #64748b;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Syne', sans-serif;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 13px;
+            min-height: 100vh;
+            padding: 32px 24px 64px;
+        }
+
+        /* ── Header ─────────────────────────────────────────────── */
+        header {
+            display: flex;
+            align-items: baseline;
+            gap: 16px;
+            margin-bottom: 32px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+        }
+
+        header h1 {
+            font-family: var(--sans);
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: var(--primary);
+        }
+
+        header span {
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        /* ── Config bar ─────────────────────────────────────────── */
+        .config-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .config-bar label {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-right: 4px;
+        }
+
+        .config-bar select,
+        .config-bar input[type=number] {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .config-bar input[type=number] {
+            width: 72px;
+        }
+
+        .config-bar select:focus,
+        .config-bar input:focus {
+            border-color: var(--primary);
+        }
+
+        #runBtn {
+            background: var(--primary);
+            color: #000;
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: 13px;
+            border: none;
+            border-radius: 4px;
+            padding: 7px 20px;
+            cursor: pointer;
+            letter-spacing: 0.03em;
+            transition: background 0.15s;
+            margin-left: auto;
+        }
+
+        #runBtn:hover {
+            background: var(--primary-d);
+        }
+
+        #runBtn:disabled {
+            background: var(--muted);
+            cursor: not-allowed;
+        }
+
+        /* ── Status bar ─────────────────────────────────────────── */
+        #status {
+            font-size: 11px;
+            color: var(--muted);
+            margin-bottom: 20px;
+            height: 16px;
+            letter-spacing: 0.03em;
+        }
+
+        #status .running {
+            color: var(--accent);
+        }
+
+        #status .done {
+            color: var(--primary);
+        }
+
+        /* ── Progress bar ───────────────────────────────────────── */
+        #progress-wrap {
+            height: 2px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-bottom: 24px;
+            overflow: hidden;
+            display: none;
+        }
+
+        #progress-bar {
+            height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.1s;
+        }
+
+        /* ── Results table ──────────────────────────────────────── */
+        .table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        thead th {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            font-weight: 400;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        td {
+            padding: 10px 14px;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        td.engine-name {
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text);
+        }
+
+        td.engine-name small {
+            display: block;
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--muted);
+            font-weight: 400;
+            margin-top: 2px;
+        }
+
+        td.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        td.bar-cell {
+            width: 120px;
+            padding-right: 14px;
+        }
+
+        .bar {
+            height: 4px;
+            border-radius: 2px;
+            background: var(--primary);
+            transition: width 0.4s ease;
+            min-width: 2px;
+        }
+
+        .bar.step-bar {
+            background: var(--primary);
+        }
+
+        .bar.render-bar {
+            background: var(--accent);
+            opacity: 0.7;
+        }
+
+        /* Path badge */
+        .badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 3px;
+            line-height: 1.4;
+        }
+
+        .badge-wasm {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .badge-js {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .badge-webgl {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .badge-worker {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .badge-core {
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--muted);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+        }
+
+        .badge-na {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+
+        /* Running shimmer */
+        @keyframes shimmer {
+            0% {
+                opacity: 0.3;
+            }
+            50% {
+                opacity: 0.9;
+            }
+            100% {
+                opacity: 0.3;
+            }
+        }
+
+        .pending {
+            animation: shimmer 1.2s ease infinite;
+            color: var(--muted);
+        }
+
+        /* ── Legend ─────────────────────────────────────────────── */
+        .legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            font-size: 10px;
+            color: var(--muted);
+            letter-spacing: 0.04em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        .legend-dot.step {
+            background: var(--primary);
+        }
+
+        .legend-dot.render {
+            background: var(--accent);
+            opacity: 0.7;
+        }
+
+        /* ── Error ──────────────────────────────────────────────── */
+        .error-row td {
+            color: var(--danger);
+            font-style: italic;
+        }
+
+        /* ── Offscreen canvas (hidden) ─────────────────────────── */
+        #offscreen {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>ENGINE BENCHMARK</h1>
+    <span>Cellular Automaton — Performance Suite</span>
+</header>
+
+<div class="config-bar">
+    <label>Warm-up</label>
+    <input type="number" id="cfgWarmup" value="20" min="0" max="200" step="10" title="Warmup steps (discarded)">
+
+    <label style="margin-left:8px">Steps</label>
+    <input type="number" id="cfgSteps" value="200" min="10" max="2000" step="50" title="Measured steps">
+
+    <label style="margin-left:8px">Grid</label>
+    <select id="cfgGrid">
+        <option value="200">200 × 200</option>
+        <option value="400" selected>400 × 400</option>
+        <option value="600">600 × 600</option>
+        <option value="800">800 × 800</option>
+        <option value="1000">1000 × 1000</option>
+    </select>
+
+    <button id="runBtn">▶ Run Benchmark</button>
+</div>
+
+<div id="status">Ready — configure and press Run.</div>
+<div id="progress-wrap">
+    <div id="progress-bar"></div>
+</div>
+
+<div class="table-wrap">
+    <table id="resultsTable">
+        <thead>
+        <tr>
+            <th>Engine</th>
+            <th class="num">Grid</th>
+            <th class="num">Step avg</th>
+            <th class="num">Step p95</th>
+            <th></th>
+            <th class="num">Render avg</th>
+            <th></th>
+            <th class="num">Gen/s</th>
+            <th>Render path</th>
+            <th>Step path</th>
+        </tr>
+        </thead>
+        <tbody id="resultsBody">
+        <tr>
+            <td colspan="10" style="padding:24px;color:var(--muted);text-align:center">Press Run to start benchmark.
+            </td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="legend">
+    <div class="legend-item">
+        <div class="legend-dot step"></div>
+        Step time
+    </div>
+    <div class="legend-item">
+        <div class="legend-dot render"></div>
+        Render time
+    </div>
+</div>
+
+<!-- Hidden canvas for off-screen rendering -->
+<canvas id="offscreen" width="400" height="400"></canvas>
+
+<!-- ── Core dependencies (order matters) ────────────────── -->
+<script src="scripts/utils/config.js"></script>
+<script src="scripts/utils/circular-array.js"></script>
+<script src="scripts/infrastructure/event-bus.js"></script>
+<script src="scripts/infrastructure/workers/triangle-worker-manager.js"></script>
+<script src="scripts/core/grid-manager.js"></script>
+<script src="scripts/core/triangle-grid-manager.js"></script>
+<script src="scripts/core/neighborhood-calculator.js"></script>
+<script src="scripts/core/engines/rule-engine.js"></script>
+<script src="scripts/config/rules.js"></script>
+<script src="scripts/core/cellular-automaton.js"></script>
+<script src="scripts/rendering/wasm-renderer.js"></script>
+<script src="scripts/rendering/grid-renderer.js"></script>
+<script src="scripts/core/engines/wolfram-engine.js"></script>
+<script src="scripts/core/engines/langton-engine.js"></script>
+<script src="scripts/core/engines/wireworld-engine.js"></script>
+<script src="scripts/core/engines/ulam-warburton-engine.js"></script>
+<script src="scripts/core/engines/rd2d-engine.js"></script>
+<script src="scripts/core/engines/generations-engine.js"></script>
+<script src="scripts/core/engines/triangle-engine.js"></script>
+
+<script>
+    'use strict';
+
+    // ── Null i18n stub (benchmark doesn't need translations) ────────────────────
+    window.t = (key) => key;
+
+    // ── Null eventBus if not loaded ──────────────────────────────────────────────
+    if (!window.eventBus) {
+        window.eventBus = {
+            on: () => (() => {
+            }),
+            emit: () => {
+            },
+            off: () => {
+            }
+        };
+    }
+
+    // ============================================================================
+    // ENGINE SUITE — one entry per engine to benchmark
+    // ============================================================================
+
+    /**
+     * Builds a minimal renderer mock + real GridManager for off-screen rendering.
+     * Uses GridRenderer when WASM/ImageData path is wanted, otherwise a null renderer.
+     * @returns {{ grid, renderer, canvas }}
+     */
+    function buildContext(gw, gh, useRenderer = true) {
+        const canvas = document.getElementById('offscreen');
+        canvas.width = gw;
+        canvas.height = gh;
+
+        const gridManager = new GridManager(gw, gh);
+
+        const renderer = useRenderer ? new GridRenderer({
+            canvas,
+            container: null,
+            getCell: (x, y) => gridManager.getCell(x, y),
+            getGridWidth: () => gw,
+            getGridHeight: () => gh,
+            getGridColumns: () => gridManager.grid,
+            gridWidth: gw,
+            gridHeight: gh,
+            cellSize: 1,
+            showGrid: false,
+            showGridHighlights: false,
+            showActivityEffect: false,
+        }) : {
+            markAllDirty: () => {
+            },
+            markDirty: () => {
+            },
+            markDirtyIndex: () => {
+            },
+            updateActivityAges: () => {
+            },
+            render: () => {
+            },
+            setColorProvider: () => {
+            },
+            getConfig: () => false,
+            setConfig: () => {
+            },
+            _wasmR: null,
+        };
+
+        return {gridManager, renderer, canvas};
+    }
+
+    /**
+     * Detects the active render path label.
+     * @param {GridRenderer} renderer
+     * @returns {string}
+     */
+    function detectRenderPath(renderer) {
+        if (!renderer || typeof renderer.render !== 'function') return 'none';
+        if (renderer._wasmR?.available && !renderer._colorProvider) return 'wasm';
+        if (renderer._pixelBuf) return 'js-imagdata';
+        return 'js-fillrect';
+    }
+
+    // Builds the automaton-like context object that special engines expect
+    function buildAutomatonCtx(gw, gh, useRenderer = true) {
+        const {gridManager, renderer} = buildContext(gw, gh, useRenderer);
+        return {
+            gridWidth: gw,
+            gridHeight: gh,
+            grid: gridManager.grid,
+            renderer,
+            gridManager,
+            generation: 0,
+            wrapEdges: true,
+            _markAllDirty: () => renderer.markAllDirty?.(),
+        };
+    }
+
+    // ── Engine definitions ───────────────────────────────────────────────────────
+
+    const ENGINES = [
+        // ── Conway B3/S23 ─────────────────────────────────────────────────────
+        {
+            id: 'conway',
+            name: 'Conway B3/S23',
+            detail: 'Standard 2D — Moore r1 — toroidal wrap',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const core = new CellularAutomatonCore({
+                    width: gw, height: gh,
+                    rule: {birth: [3], survival: [2, 3]},
+                    wrapEdges: true,
+                });
+                // Seed ~35% density
+                for (let x = 0; x < gw; x++)
+                    for (let y = 0; y < gh; y++)
+                        if (Math.random() < 0.35) core.gridManager.setCell(x, y, 1);
+
+                const {gridManager, renderer} = buildContext(gw, gh);
+                // Sync renderer grid pointer
+                this._renderer = renderer;
+                this._core = core;
+                this._ctx = {gridManager: core.gridManager, renderer};
+            },
+            step() {
+                return this._core.step();
+            },
+            render() {
+                this._renderer.markAllDirty();
+                this._renderer.render();
+            },
+            renderPath() {
+                return detectRenderPath(this._renderer);
+            },
+        },
+
+        // ── HighLife B36/S23 ───────────────────────────────────────────────────
+        {
+            id: 'highlife',
+            name: 'HighLife B36/S23',
+            detail: 'Standard 2D — Moore r1 — toroidal wrap',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const core = new CellularAutomatonCore({
+                    width: gw, height: gh,
+                    rule: {birth: [3, 6], survival: [2, 3]},
+                    wrapEdges: true,
+                });
+                for (let x = 0; x < gw; x++)
+                    for (let y = 0; y < gh; y++)
+                        if (Math.random() < 0.35) core.gridManager.setCell(x, y, 1);
+                const {renderer} = buildContext(gw, gh);
+                this._renderer = renderer;
+                this._core = core;
+            },
+            step() {
+                return this._core.step();
+            },
+            render() {
+                this._renderer.markAllDirty();
+                this._renderer.render();
+            },
+            renderPath() {
+                return detectRenderPath(this._renderer);
+            },
+        },
+
+        // ── Conway — large radius r3 ────────────────────────────────────────────
+        {
+            id: 'conway-r3',
+            name: 'Conway B3/S23 r3',
+            detail: 'Standard 2D — Moore r3 — toroidal wrap',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const nc = new NeighborhoodCalculator({type: 'moore', radius: 3, wrapEdges: true});
+                const offsets = nc.offsets;  // getter — nc.calculate() no existe
+                const core = new CellularAutomatonCore({
+                    width: gw, height: gh,
+                    rule: {birth: [3], survival: [2, 3]},
+                    wrapEdges: true,
+                    neighborOffsets: offsets,
+                });
+                for (let x = 0; x < gw; x++)
+                    for (let y = 0; y < gh; y++)
+                        if (Math.random() < 0.35) core.gridManager.setCell(x, y, 1);
+                const {renderer} = buildContext(gw, gh);
+                this._renderer = renderer;
+                this._core = core;
+            },
+            step() {
+                return this._core.step();
+            },
+            render() {
+                this._renderer.markAllDirty();
+                this._renderer.render();
+            },
+            renderPath() {
+                return detectRenderPath(this._renderer);
+            },
+        },
+
+        // ── Generations ─────────────────────────────────────────────────────────
+        {
+            id: 'generations',
+            name: 'Generations B36/S23/C4',
+            detail: 'Multi-state — 4 decay states',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const ctx = buildAutomatonCtx(gw, gh, false);
+                // Generations.activate() llama renderer.setColorProvider — stub completo
+                ctx.renderer = {
+                    markAllDirty: () => {
+                    }, markDirty: () => {
+                    },
+                    markDirtyIndex: () => {
+                    }, updateActivityAges: () => {
+                    },
+                    render: () => {
+                    }, setColorProvider: () => {
+                    },
+                    getConfig: () => false, setConfig: () => {
+                    },
+                };
+                const engine = new GenerationsEngine(ctx);
+                // activate() inicializa los buffers internos y aplica birth/survival/numStates
+                engine.activate({birth: [3, 6], survival: [2, 3], numStates: 4});
+                // Seed después del activate (los buffers ya existen)
+                for (let x = 0; x < gw; x++)
+                    for (let y = 0; y < gh; y++)
+                        if (Math.random() < 0.3) ctx.grid[x][y] = 1;
+                this._engine = engine;
+                this._ctx = ctx;
+            },
+            step() {
+                const r = this._engine.step();
+                this._ctx.generation++;
+                return r;
+            },
+            render() {
+                this._ctx.renderer.markAllDirty();
+                this._ctx.renderer.render();
+            },
+            renderPath() {
+                return detectRenderPath(this._ctx.renderer);
+            },
+        },
+
+        // ── Wolfram 1D Rule 110 ─────────────────────────────────────────────────
+        {
+            id: 'wolfram',
+            name: 'Wolfram 1D Rule 110',
+            detail: '1D elementary — vertical evolution',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const ctx = buildAutomatonCtx(gw, gh);
+                ctx.ruleNumber = 110;
+                ctx.wolframMode = 'vertical';
+                ctx.setCellSize = () => {
+                };
+                const engine = new WolframEngine(ctx);
+                engine.isActive = true;
+                this._engine = engine;
+                this._ctx = ctx;
+            },
+            step() {
+                try {
+                    return this._engine.step();
+                } catch (e) {
+                    return {changedCells: [], population: 0};
+                }
+            },
+            render() {
+                this._ctx.renderer.markAllDirty();
+                this._ctx.renderer.render();
+            },
+            renderPath() {
+                return detectRenderPath(this._ctx.renderer);
+            },
+        },
+
+        // ── Ulam-Warburton ──────────────────────────────────────────────────────
+        {
+            id: 'ulam',
+            name: 'Ulam-Warburton',
+            detail: '2D fractal — Von Neumann neighborhood',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const ctx = buildAutomatonCtx(gw, gh);
+                const engine = new UlamWarburtonEngine(ctx);
+                engine.isActive = true;
+                this._engine = engine;
+                this._ctx = ctx;
+            },
+            step() {
+                return this._engine.step();
+            },
+            render() {
+                this._ctx.renderer.markAllDirty();
+                this._ctx.renderer.render();
+            },
+            renderPath() {
+                return detectRenderPath(this._ctx.renderer);
+            },
+        },
+
+        // ── Langton's Ant — 4 colors ────────────────────────────────────────────
+        {
+            id: 'langton',
+            name: "Langton's Ant",
+            detail: '4-color LLRR rule — 200 agents',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                // Langton necesita renderer.setColorProvider() — usamos stub completo
+                const ctx = buildAutomatonCtx(gw, gh, false);
+                ctx.renderer = {
+                    markAllDirty: () => {
+                    }, markDirty: () => {
+                    },
+                    markDirtyIndex: () => {
+                    }, updateActivityAges: () => {
+                    },
+                    render: () => {
+                    }, setColorProvider: () => {
+                    },
+                    getConfig: () => false, setConfig: () => {
+                    },
+                };
+
+                const engine = new LangtonEngine(ctx);
+                // activate() inicializa stateGrid y coloca hormigas via antCount
+                engine.activate({rule: 'LLRR', antCount: 200});
+                this._engine = engine;
+                this._ctx = ctx;
+            },
+            step() {
+                return this._engine.step();
+            },
+            render() { /* colorProvider path — renderer is null stub */
+            },
+            renderPath() {
+                return 'js-callback';
+            },
+        },
+
+        // ── RD-2D ───────────────────────────────────────────────────────────────
+        {
+            id: 'rd2d',
+            name: 'RD-2D',
+            detail: '16 states — N/S/E/W boundaries — XOR rule',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const ctx = buildAutomatonCtx(gw, gh, false);
+                ctx.renderer = {
+                    markAllDirty: () => {
+                    }, markDirty: () => {
+                    },
+                    markDirtyIndex: () => {
+                    }, updateActivityAges: () => {
+                    },
+                    render: () => {
+                    }, setColorProvider: () => {
+                    },
+                    getConfig: () => false,
+                };
+                const engine = new RD2DEngine(ctx);
+                engine.isActive = true;
+                // Seed with random cells
+                for (let x = 0; x < gw; x++)
+                    for (let y = 0; y < gh; y++)
+                        if (Math.random() < 0.3) ctx.grid[x][y] = Math.floor(Math.random() * 16);
+                this._engine = engine;
+                this._ctx = ctx;
+            },
+            step() {
+                return this._engine.step();
+            },
+            render() {
+            },
+            renderPath() {
+                return 'js-callback';
+            },
+        },
+
+
+        // ── ETA Rule 50 (síncrono — sin worker) ─────────────────────────────────
+        {
+            id: 'eta-50',
+            name: 'ETA Rule 50',
+            detail: 'Triangular grid — Rule 50 — sync (_stepSync)',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const gridManager = new GridManager(gw, gh);
+                // Mock del autómata con la interfaz mínima que TriangleEngine usa
+                const automaton = {
+                    gridWidth: gw,
+                    gridHeight: gh,
+                    grid: gridManager.grid,
+                    render: () => {
+                    },
+                    renderer: {
+                        setGridManager: () => {
+                        },
+                        resize: () => {
+                        },
+                        updateActivityAges: () => {
+                        },
+                        markDirty: () => {
+                        },
+                        markAllDirty: () => {
+                        },
+                        markDirtyIndex: () => {
+                        },
+                        setColorProvider: () => {
+                        },
+                        getConfig: () => false,
+                        setConfig: () => {
+                        },
+                        render: () => {
+                        },
+                    },
+                };
+
+                const engine = new TriangleEngine(automaton);
+                // Desactivar worker explícitamente para benchmarking síncrono
+                engine.useWorker = false;
+                engine.activate({rule: 50, wrap: true});
+                // Forzar inicialización inmediata (normalmente en el primer step)
+                engine._initializeFromAutomaton?.();
+                engine.initialized = true;
+
+                this._engine = engine;
+            },
+            step() {
+                return this._engine._stepSync();
+            },
+            render() { /* triangular renderer no disponible en benchmark */
+            },
+            renderPath() {
+                return 'n/a (triangular)';
+            },
+        },
+
+        // ── ETA Rule 110 ─────────────────────────────────────────────────────────
+        {
+            id: 'eta-110',
+            name: 'ETA Rule 110',
+            detail: 'Triangular grid — Rule 110 — sync (_stepSync)',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const gridManager = new GridManager(gw, gh);
+                const automaton = {
+                    gridWidth: gw,
+                    gridHeight: gh,
+                    grid: gridManager.grid,
+                    render: () => {
+                    },
+                    renderer: {
+                        setGridManager: () => {
+                        },
+                        resize: () => {
+                        },
+                        updateActivityAges: () => {
+                        },
+                        markDirty: () => {
+                        },
+                        markAllDirty: () => {
+                        },
+                        markDirtyIndex: () => {
+                        },
+                        setColorProvider: () => {
+                        },
+                        getConfig: () => false,
+                        setConfig: () => {
+                        },
+                        render: () => {
+                        },
+                    },
+                };
+
+                const engine = new TriangleEngine(automaton);
+                engine.useWorker = false;
+                engine.activate({rule: 110, wrap: true});
+                engine._initializeFromAutomaton?.();
+                engine.initialized = true;
+
+                this._engine = engine;
+            },
+            step() {
+                return this._engine._stepSync();
+            },
+            render() {
+            },
+            renderPath() {
+                return 'n/a (triangular)';
+            },
+        },
+        // ── WireWorld ───────────────────────────────────────────────────────────
+        {
+            id: 'wireworld',
+            name: 'WireWorld',
+            detail: '4 states — electron head/tail simulation',
+            stepPath: 'core',
+
+            setup(gw, gh) {
+                const ctx = buildAutomatonCtx(gw, gh, false);
+                ctx.renderer = {
+                    markAllDirty: () => {
+                    }, markDirty: () => {
+                    },
+                    markDirtyIndex: () => {
+                    }, updateActivityAges: () => {
+                    },
+                    render: () => {
+                    }, setColorProvider: () => {
+                    },
+                    getConfig: () => false, setConfig: () => {
+                    },
+                };
+                // Seed conductores en el grid base ANTES de activate()
+                // activate() promueve celdas vivas a conductor en stateGrid
+                for (let x = 0; x < gw; x++)
+                    for (let y = 0; y < gh; y++)
+                        if (Math.random() < 0.25) ctx.grid[x][y] = 1;
+                // Algunos electron heads
+                for (let i = 0; i < 50; i++)
+                    ctx.grid[Math.floor(Math.random() * gw)][Math.floor(Math.random() * gh)] = 1;
+
+                const engine = new WireWorldEngine(ctx);
+                // activate() inicializa stateGrid a partir del grid actual
+                engine.activate();
+                this._engine = engine;
+                this._ctx = ctx;
+            },
+            step() {
+                return this._engine.step();
+            },
+            render() {
+            },
+            renderPath() {
+                return 'js-callback';
+            },
+        },
+    ];
+
+    // ============================================================================
+    // BENCHMARK RUNNER
+    // ============================================================================
+
+    const RENDER_PATH_LABELS = {
+        'wasm': '<span class="badge badge-wasm">WASM</span>',
+        'js-imagdata': '<span class="badge badge-js">ImageData</span>',
+        'js-fillrect': '<span class="badge badge-js">fillRect</span>',
+        'js-callback': '<span class="badge badge-js">JS callback</span>',
+        'webgl': '<span class="badge badge-webgl">WebGL2</span>',
+        'none': '<span class="badge badge-na">—</span>',
+        'n/a (triangular)': '<span class="badge badge-na">WebGL2/Canvas</span>',
+    };
+
+    function msStr(v) {
+        return v == null ? '—' : v.toFixed(2) + ' ms';
+    }
+
+    function gpsStr(v) {
+        if (v == null) return '—';
+        return v >= 1000
+            ? (v / 1000).toFixed(1) + ' k/s'
+            : Math.round(v) + ' /s';
+    }
+
+    /**
+     * Runs one engine benchmark.
+     * @returns {{stepAvg, stepP95, renderAvg, genPerSec, renderPath, error?}}
+     */
+    async function runEngine(eng, gw, gh, warmupN, stepsN) {
+        try {
+            eng.setup(gw, gh);
+            // Yield after setup so the browser can paint
+            await new Promise(r => setTimeout(r, 0));
+
+            // ── Warmup ──────────────────────────────────────────
+            for (let i = 0; i < warmupN; i++) eng.step();
+            await new Promise(r => setTimeout(r, 0));
+
+            // ── Measured run ─────────────────────────────────────
+            const stepTimes = new Float64Array(stepsN);
+            const renderTimes = new Float64Array(stepsN);
+
+            for (let i = 0; i < stepsN; i++) {
+                const t0 = performance.now();
+                eng.step();
+                const t1 = performance.now();
+                eng.render();
+                const t2 = performance.now();
+
+                stepTimes[i] = t1 - t0;
+                renderTimes[i] = t2 - t1;
+            }
+
+            const stepSorted = Float64Array.from(stepTimes).sort();
+            const stepAvg = stepTimes.reduce((a, b) => a + b, 0) / stepsN;
+            const stepP95 = stepSorted[Math.floor(stepsN * 0.95)];
+            const renderAvg = renderTimes.reduce((a, b) => a + b, 0) / stepsN;
+            const genPerSec = 1000 / stepAvg;
+            const rPath = eng.renderPath?.() ?? 'none';
+
+            return {stepAvg, stepP95, renderAvg, genPerSec, renderPath: rPath};
+        } catch (err) {
+            return {error: err.message};
+        }
+    }
+
+    // ── UI helpers ───────────────────────────────────────────────────────────────
+
+    function setStatus(msg, cls = '') {
+        const el = document.getElementById('status');
+        el.innerHTML = cls ? `<span class="${cls}">${msg}</span>` : msg;
+    }
+
+    function buildInitialTable(engines, gw, gh) {
+        const tbody = document.getElementById('resultsBody');
+        tbody.innerHTML = '';
+        for (const eng of engines) {
+            const tr = document.createElement('tr');
+            tr.id = `row-${eng.id}`;
+            tr.innerHTML = `
+            <td class="engine-name">${eng.name}<small>${eng.detail}</small></td>
+            <td class="num">${gw}×${gh}</td>
+            <td class="num pending" colspan="8">waiting…</td>
+        `;
+            tbody.appendChild(tr);
+        }
+    }
+
+    function updateRow(eng, result, maxStep, maxRender) {
+        const tr = document.getElementById(`row-${eng.id}`);
+        if (!tr) return;
+
+        if (result.error) {
+            tr.className = 'error-row';
+            tr.innerHTML = `
+            <td class="engine-name">${eng.name}<small>${eng.detail}</small></td>
+            <td class="num">—</td>
+            <td colspan="8">${result.error}</td>
+        `;
+            return;
+        }
+
+        const stepPct = Math.min(100, (result.stepAvg / maxStep) * 100);
+        const renderPct = Math.min(100, (result.renderAvg / maxRender) * 100);
+        const rLabel = RENDER_PATH_LABELS[result.renderPath] ?? result.renderPath;
+        const sLabel = `<span class="badge badge-core">Core</span>`;
+
+        tr.innerHTML = `
+        <td class="engine-name">${eng.name}<small>${eng.detail}</small></td>
+        <td class="num">${tr.querySelector?.('td.num')?.textContent || ''}</td>
+        <td class="num">${msStr(result.stepAvg)}</td>
+        <td class="num">${msStr(result.stepP95)}</td>
+        <td class="bar-cell"><div class="bar step-bar" style="width:${stepPct.toFixed(1)}%"></div></td>
+        <td class="num">${msStr(result.renderAvg)}</td>
+        <td class="bar-cell"><div class="bar render-bar" style="width:${renderPct.toFixed(1)}%"></div></td>
+        <td class="num">${gpsStr(result.genPerSec)}</td>
+        <td>${rLabel}</td>
+        <td>${sLabel}</td>
+    `;
+        // Re-fill grid cell (lost in innerHTML replacement)
+        tr.cells[1].textContent = tr._gw ? `${tr._gw}×${tr._gh}` : '';
+    }
+
+    // ── Main runner ──────────────────────────────────────────────────────────────
+
+    async function runBenchmark() {
+        const gw = parseInt(document.getElementById('cfgGrid').value);
+        const gh = gw;
+        const warmup = parseInt(document.getElementById('cfgWarmup').value);
+        const steps = parseInt(document.getElementById('cfgSteps').value);
+
+        document.getElementById('runBtn').disabled = true;
+        document.getElementById('progress-wrap').style.display = 'block';
+        const bar = document.getElementById('progress-bar');
+
+        buildInitialTable(ENGINES, gw, gh);
+        // Store grid dims on rows for updateRow
+        for (const eng of ENGINES) {
+            const tr = document.getElementById(`row-${eng.id}`);
+            if (tr) {
+                tr._gw = gw;
+                tr._gh = gh;
+            }
+        }
+
+        setStatus(`Warming up + running ${steps} steps per engine on ${gw}×${gh} grid…`, 'running');
+
+        const results = [];
+        for (let i = 0; i < ENGINES.length; i++) {
+            const eng = ENGINES[i];
+            setStatus(`[${i + 1}/${ENGINES.length}] Running ${eng.name}…`, 'running');
+
+            const result = await runEngine(eng, gw, gh, warmup, steps);
+            result._eng = eng;
+            results.push(result);
+
+            // Update bar progress
+            bar.style.width = `${Math.round(((i + 1) / ENGINES.length) * 100)}%`;
+
+            // Partial update of this row with temporary max values
+            const validResults = results.filter(r => !r.error);
+            const maxS = Math.max(1, ...validResults.map(r => r.stepAvg));
+            const maxR = Math.max(1, ...validResults.map(r => r.renderAvg));
+            updateRow(eng, result, maxS, maxR);
+
+            await new Promise(r => setTimeout(r, 8));
+        }
+
+        // Final pass — normalize bars against global max
+        const valid = results.filter(r => !r.error);
+        const maxS = Math.max(1, ...valid.map(r => r.stepAvg));
+        const maxR = Math.max(1, ...valid.map(r => r.renderAvg));
+        for (const r of results) updateRow(r._eng, r, maxS, maxR);
+
+        // Re-fill grid cell (updateRow lost it due to innerHTML)
+        for (const eng of ENGINES) {
+            const tr = document.getElementById(`row-${eng.id}`);
+            if (tr && tr._gw) tr.cells[1].textContent = `${tr._gw}×${tr._gh}`;
+        }
+
+        setStatus(`Done — ${ENGINES.length} engines × ${steps} steps on ${gw}×${gh}. (${new Date().toLocaleTimeString()})`, 'done');
+        document.getElementById('runBtn').disabled = false;
+    }
+
+    document.getElementById('runBtn').addEventListener('click', runBenchmark);
+</script>
+</body>
+</html>
