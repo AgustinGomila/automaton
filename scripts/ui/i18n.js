@@ -329,6 +329,7 @@ class I18n {
 
                 // Footer
                 'footer.github': 'Código en GitHub',
+                'footer.benchmark': '',
 
                 // Botones móviles
                 'mobile.close': 'Cerrar',
@@ -626,6 +627,7 @@ class I18n {
 
                 // Footer
                 'footer.github': 'Code on GitHub',
+                'footer.benchmark': '',
 
                 // Botones móviles
                 'mobile.close': 'Close',

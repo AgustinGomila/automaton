@@ -1320,7 +1320,7 @@ canvas {
 
 .modal-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     padding: 8px 20px 18px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
