@@ -19,11 +19,11 @@ class NeighborhoodCalculator {
      */
     constructor(options = {}) {
         this.type = options.type || 'moore';
-        this.radius = Math.max(1, Math.min(options.radius || 1, 10));
+        this.radius = Math.max(1, Math.min(options.radius || AppConfig.NEIGHBORHOOD.MIN_RADIUS, AppConfig.NEIGHBORHOOD.MAX_RADIUS));
         this.wrapEdges = options.wrapEdges !== false;
 
-        this.gridWidth = options.gridWidth || 200;
-        this.gridHeight = options.gridHeight || 200;
+        this.gridWidth = options.gridWidth || AppConfig.GRID.DEFAULT_WIDTH;
+        this.gridHeight = options.gridHeight || AppConfig.GRID.DEFAULT_HEIGHT;
 
         this._offsets = this._computeOffsets();
     }

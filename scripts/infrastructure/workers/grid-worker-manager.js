@@ -17,13 +17,13 @@ class GridWorkerManager {
      */
     constructor({workerPath, threshold, getGridWidth, getGridHeight, getCore, onResult, onError}) {
         this._workerPath = workerPath;
-        this.threshold = threshold ?? 600;
+        this.threshold = threshold ?? AppConfig.WORKER.THRESHOLD;
         this._getCore = getCore;
         this._onResult = onResult;
         this._onError = onError;
 
-        this._getGridWidth = getGridWidth || (() => 500);
-        this._getGridHeight = getGridHeight || (() => 500);
+        this._getGridWidth = getGridWidth || (() => AppConfig.GRID.DEFAULT_WIDTH);
+        this._getGridHeight = getGridHeight || (() => AppConfig.GRID.DEFAULT_HEIGHT);
 
         this._worker = null;
         this._handlerId = null;

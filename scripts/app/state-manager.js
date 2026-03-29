@@ -10,8 +10,8 @@ class StateManager {
     constructor(gridManager, options = {}) {
         this.gridManager = gridManager;
 
-        this.maxHistory = options.maxHistory || 50;
-        this.maxPopulationHistory = options.maxPopulationHistory || 100;
+        this.maxHistory = options.maxHistory || AppConfig.STATE.MAX_HISTORY;
+        this.maxPopulationHistory = options.maxPopulationHistory || AppConfig.STATE.MAX_POPULATION_HISTORY;
 
         this.undoStack = [];
         this.redoStack = [];

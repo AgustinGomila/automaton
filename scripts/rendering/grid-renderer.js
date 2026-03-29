@@ -49,11 +49,11 @@ class GridRenderer {
         this.config = {
             showGrid: options.showGrid !== false,
             showActivityEffect: options.showActivityEffect !== false,
-            cellSize: Math.max(1, Math.min(options.cellSize || 4, 20)),
-            gridWidth: Math.max(20, Math.min(options.gridWidth || 200, 1000)),
-            gridHeight: Math.max(20, Math.min(options.gridHeight || 200, 1000)),
+            cellSize: Math.max(AppConfig.GRID.MIN_CELL_SIZE, Math.min(options.cellSize || 4, AppConfig.GRID.MAX_CELL_SIZE)),
+            gridWidth: Math.max(AppConfig.GRID.MIN_CELLS, Math.min(options.gridWidth || 200, AppConfig.GRID.MAX_CELLS)),
+            gridHeight: Math.max(AppConfig.GRID.MIN_CELLS, Math.min(options.gridHeight || 200, AppConfig.GRID.MAX_CELLS)),
             /** Intervalo entre líneas de énfasis. 0 = desactivado. */
-            gridMajorInterval: options.gridMajorInterval ?? 10,
+            gridMajorInterval: options.gridMajorInterval ?? AppConfig.GRID.MAJOR_INTERVAL,
             /** Mostrar líneas mayores de énfasis independientemente de showGrid. */
             showGridHighlights: options.showGridHighlights !== false
         };
@@ -65,7 +65,7 @@ class GridRenderer {
         // Efecto de actividad
         this._coolingCells = new Set();
         this._dyingCells = new Set();
-        this._activityCooldown = 3;
+        this._activityCooldown = AppConfig.RENDER.ACTIVITY_COOLDOWN;
         this._initActivityBuffers();
 
         /**
@@ -98,10 +98,10 @@ class GridRenderer {
         this._initPixelBuffer();
 
         // Colores configurables por estado
-        this.colorDead = '#0f172a';  // 0→0
-        this.colorBorn = '#b9b610';  // 0→1
-        this.colorAlive = '#059669';  // 1→1
-        this.colorDying = '#ef4444';  // 1→0
+        this.colorDead = AppConfig.RENDER.COLOR_DEAD;   // 0→0
+        this.colorBorn = AppConfig.RENDER.COLOR_BORN;   // 0→1
+        this.colorAlive = AppConfig.RENDER.COLOR_ALIVE;  // 1→1
+        this.colorDying = AppConfig.RENDER.COLOR_DYING;  // 1→0
 
         this._resizeCanvas();
     }
@@ -167,7 +167,7 @@ class GridRenderer {
 
         // UMBRAL: Si más del 15% del grid está sucio, hacer render completo
         const totalCells = this.config.gridWidth * this.config.gridHeight;
-        if (!this._fullDirtyPending && this._dirtyCells.size > totalCells * 0.15) {
+        if (!this._fullDirtyPending && this._dirtyCells.size > totalCells * AppConfig.RENDER.FULL_RENDER_THRESHOLD) {
             this._fullDirtyPending = true;
         }
 
@@ -246,10 +246,10 @@ class GridRenderer {
      * @param {number} [cellSize]             — omitir para no cambiar
      */
     resize(gridWidth, gridHeight = gridWidth, cellSize) {
-        this.config.gridWidth = Math.max(20, Math.min(gridWidth, 1000));
-        this.config.gridHeight = Math.max(20, Math.min(gridHeight, 1000));
+        this.config.gridWidth = Math.max(AppConfig.GRID.MIN_CELLS, Math.min(gridWidth, AppConfig.GRID.MAX_CELLS));
+        this.config.gridHeight = Math.max(AppConfig.GRID.MIN_CELLS, Math.min(gridHeight, AppConfig.GRID.MAX_CELLS));
         if (cellSize !== undefined) {
-            this.config.cellSize = Math.max(1, Math.min(cellSize, 20));
+            this.config.cellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE, Math.min(cellSize, AppConfig.GRID.MAX_CELL_SIZE));
         }
 
         this._initActivityBuffers();
@@ -854,7 +854,7 @@ class GridRenderer {
         const ctx = this._gridOverlayCtx;
         const cw = this.canvas.width;
         const ch = this.canvas.height;
-        const interval = gridMajorInterval || 10;
+        const interval = gridMajorInterval || AppConfig.GRID.MAJOR_INTERVAL;
 
         ctx.clearRect(0, 0, cw, ch);
 

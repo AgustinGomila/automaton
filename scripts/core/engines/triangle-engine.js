@@ -28,7 +28,7 @@ class TriangleEngine {
         // Worker: gestionado por TriangleWorkerManager (composición)
         this._workerManager = null;
         this.useWorker = false;
-        this.workerThreshold = 100;
+        this.workerThreshold = AppConfig.WORKER.TRIANGLE_THRESHOLD;
         this._pendingStep = false;
     }
 

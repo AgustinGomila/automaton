@@ -49,31 +49,6 @@ class ResponsiveController {
      */
     adjustForMobile() {
         if (!this.isMobile || !this.automaton) return;
-
-        const defaultW = 200;
-        const defaultH = 200;
-
-        // ── Grid size ──────────────────────────────────────────────────────
-        const currentW = this.automaton.gridWidth;
-        const currentH = this.automaton.gridHeight;
-
-        if (currentW !== defaultW || currentH !== defaultH) {
-            const wSlider = document.getElementById('gridWidth');
-            const hSlider = document.getElementById('gridHeight');
-            if (wSlider) wSlider.value = defaultW;
-            if (hSlider) hSlider.value = defaultH;
-
-            const wDisplay = document.getElementById('gridWidthValue');
-            const hDisplay = document.getElementById('gridHeightValue');
-            const badge = document.getElementById('gridDimensionsBadge');
-            if (wDisplay) wDisplay.textContent = defaultW;
-            if (hDisplay) hDisplay.textContent = defaultH;
-            if (badge) badge.textContent = `${defaultW}×${defaultH}`;
-
-            this.uiController?.updateGridSizeDisplay?.();
-            this.automaton.resizeGrid(defaultW, defaultH);
-        }
-
         this.automaton._markAllDirty();
         this.automaton.render();
     }

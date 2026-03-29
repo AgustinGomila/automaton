@@ -16,8 +16,8 @@ class CellularAutomatonCore {
      * @param {boolean} options.wrapEdges
      */
     constructor(options = {}) {
-        const w = Math.min(Math.max(options.width ?? 500, 20), 1000);
-        const h = Math.min(Math.max(options.height ?? w, 20), 1000);
+        const w = Math.min(Math.max(options.width ?? AppConfig.GRID.DEFAULT_WIDTH, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
+        const h = Math.min(Math.max(options.height ?? AppConfig.GRID.DEFAULT_HEIGHT, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
 
         this.width = w;
         this.height = h;

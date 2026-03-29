@@ -7,17 +7,17 @@
  * • Worker, renderer y engines especiales reciben dimensiones rectangulares.
  */
 class CellularAutomaton {
-    constructor(gridWidth = 500, gridHeight = gridWidth, cellSize = 1) {
+    constructor(gridWidth = AppConfig.GRID.DEFAULT_WIDTH, gridHeight = gridWidth, cellSize = AppConfig.GRID.DEFAULT_CELL_SIZE) {
         // Soportar firma legacy: constructor(gridSize, cellSize)
         // Si gridHeight parece un cellSize (1–20) y gridWidth es grande → API legacy
-        if (gridHeight >= 1 && gridHeight <= 20 && gridWidth > 20) {
+        if (gridHeight >= 1 && gridHeight <= AppConfig.GRID.MAX_CELL_SIZE && gridWidth > AppConfig.GRID.MAX_CELL_SIZE) {
             cellSize = gridHeight;
             gridHeight = gridWidth;
         }
 
-        this.gridWidth = Math.min(Math.max(gridWidth, 20), 1000);
-        this.gridHeight = Math.min(Math.max(gridHeight, 20), 1000);
-        this.cellSize = Math.min(Math.max(cellSize, 1), 20);
+        this.gridWidth = Math.min(Math.max(gridWidth, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
+        this.gridHeight = Math.min(Math.max(gridHeight, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
+        this.cellSize = Math.min(Math.max(cellSize, AppConfig.GRID.MIN_CELL_SIZE), AppConfig.GRID.MAX_CELL_SIZE);
 
         // === CORE MATEMÁTICO ===
         this.core = new CellularAutomatonCore({
@@ -25,14 +25,14 @@ class CellularAutomaton {
             height: this.gridHeight,
             rule: {birth: [3], survival: [2, 3]},
             neighborhoodType: 'moore',
-            neighborhoodRadius: 1,
+            neighborhoodRadius: AppConfig.NEIGHBORHOOD.DEFAULT_RADIUS,
             wrapEdges: true
         });
 
         // === STATE MANAGER ===
         this.stateManager = new StateManager(this.core.gridManager, {
-            maxHistory: 50,
-            maxPopulationHistory: 100
+            maxHistory: AppConfig.STATE.MAX_HISTORY,
+            maxPopulationHistory: AppConfig.STATE.MAX_POPULATION_HISTORY
         });
 
         this.stateManager.on({
@@ -54,14 +54,14 @@ class CellularAutomaton {
             gridWidth: this.gridWidth,
             gridHeight: this.gridHeight,
             cellSize: this.cellSize,
-            showGrid: false,
+            showGrid: AppConfig.GRID.DEFAULT_SHOW_GRID ?? false,
             showActivityEffect: true,
             getCell: (x, y) => this.core.getCell(x, y),
             getRD2DState: (x, y) => this.rd2dEngine?.stateGrid?.[x]?.[y],
             isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight,
-            showGridHighlights: false
+            showGridHighlights: AppConfig.GRID.DEFAULT_SHOW_HIGHLIGHTS ?? false
         });
 
         // === ESTADO DE EJECUCIÓN ===
@@ -71,7 +71,7 @@ class CellularAutomaton {
         // === WORKERS ===
         this._workerManager = new GridWorkerManager({
             workerPath: 'scripts/infrastructure/workers/automaton-worker.js',
-            threshold: 600,
+            threshold: AppConfig.WORKER.THRESHOLD,
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight,
             getCore: () => this.core,
@@ -194,7 +194,7 @@ class CellularAutomaton {
     }
 
     get neighborhoodRadius() {
-        return this.core?.neighborhood?.radius || 1;
+        return this.core?.neighborhood?.radius || AppConfig.NEIGHBORHOOD.MIN_RADIUS;
     }
 
     get wrapEdges() {
@@ -476,7 +476,7 @@ class CellularAutomaton {
     }
 
     _stepStandardMode(t0) {
-        const result = (this.worker && Math.max(this.gridWidth, this.gridHeight) >= this.workerThreshold)
+        const result = (this.worker && Math.max(this.gridWidth, this.gridHeight) >= AppConfig.WORKER.THRESHOLD)
             ? this._nextGenerationWorker()
             : this._nextGenerationCore();
         this._pendingStepT0 = t0;
@@ -664,8 +664,8 @@ class CellularAutomaton {
      * @param {number} [newHeight=newWidth] — omitir para cuadrado
      */
     resizeGrid(newWidth, newHeight = newWidth) {
-        const w = Math.min(Math.max(newWidth, 20), 1000);
-        const h = Math.min(Math.max(newHeight, 20), 1000);
+        const w = Math.min(Math.max(newWidth, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
+        const h = Math.min(Math.max(newHeight, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
 
         if (this.isRunning) this.stop();
 
@@ -695,7 +695,7 @@ class CellularAutomaton {
         this.updateStats();
         this.render();
 
-        if (Math.max(w, h) >= this.workerThreshold &&
+        if (Math.max(w, h) >= AppConfig.WORKER.THRESHOLD &&
             this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
             // Reinicializar worker con las nuevas dimensiones
             this._initWorker();
@@ -709,7 +709,7 @@ class CellularAutomaton {
     }
 
     setCellSize(size) {
-        const newSize = Math.min(Math.max(size, 1), 20);
+        const newSize = Math.min(Math.max(size, AppConfig.GRID.MIN_CELL_SIZE), AppConfig.GRID.MAX_CELL_SIZE);
         this.cellSize = newSize;
 
         // El renderer triangular acepta (gridSize, cellSize) — 2 parámetros.

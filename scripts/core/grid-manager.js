@@ -15,8 +15,8 @@ class GridManager {
      * @param {number} [height=width] — omitir para grid cuadrado
      */
     constructor(width, height = width) {
-        this.width = Math.max(20, Math.min(width, 1000));
-        this.height = Math.max(20, Math.min(height, 1000));
+        this.width = Math.max(AppConfig.GRID.MIN_CELLS, Math.min(AppConfig.GRID.MAX_CELLS, width));
+        this.height = Math.max(AppConfig.GRID.MIN_CELLS, Math.min(AppConfig.GRID.MAX_CELLS, height));
         this.grid = this._createEmptyGrid(this.width, this.height);
         this._backGrid = this._createEmptyGrid(this.width, this.height);
     }
@@ -92,8 +92,8 @@ class GridManager {
      * @returns {{ grid: Uint8Array[], wasResized: boolean }}
      */
     resize(newWidth, newHeight = newWidth) {
-        const w = Math.max(20, Math.min(newWidth, 1000));
-        const h = Math.max(20, Math.min(newHeight, 1000));
+        const w = Math.max(AppConfig.GRID.MIN_CELLS, Math.min(AppConfig.GRID.MAX_CELLS, newWidth));
+        const h = Math.max(AppConfig.GRID.MIN_CELLS, Math.min(AppConfig.GRID.MAX_CELLS, newHeight));
 
         const oldGrid = this.grid;
         const oldW = this.width;

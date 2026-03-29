@@ -21,10 +21,10 @@
     const MARGIN_PX = 6;
 
     /** Mínimo de celdas por eje. */
-    const MIN_CELLS = 20;
+    const MIN_CELLS = AppConfig.GRID.MIN_CELLS;
 
     /** Máximo permitido (igual a GridManager). */
-    const MAX_CELLS = 1000;
+    const MAX_CELLS = AppConfig.GRID.MAX_CELLS;
 
     /**
      * Mide el área real disponible para el canvas.

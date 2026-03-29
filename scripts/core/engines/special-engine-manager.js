@@ -27,8 +27,8 @@ class SpecialEngineManager {
         this._setRenderer = setRenderer;
         this._getCore = getCore;
         this._setCore = setCore;
-        this._getGridWidth = getGridWidth || (() => 500);
-        this._getGridHeight = getGridHeight || (() => 500);
+        this._getGridWidth = getGridWidth || (() => AppConfig.GRID.DEFAULT_WIDTH);
+        this._getGridHeight = getGridHeight || (() => AppConfig.GRID.DEFAULT_HEIGHT);
         this._getCellSize = getCellSize;
         this._getAutomaton = getAutomaton;
 
@@ -231,7 +231,7 @@ class SpecialEngineManager {
             // Math.max(1,…) en lugar de Math.max(2,…): cellSize=1 es válido con ImageData.
             const currentCs = this._getCellSize();
             const maxFit = Math.floor(Math.min(csFromWidth, csFromHeight));
-            const fittedCellSize = Math.max(1, Math.min(20, currentCs <= maxFit ? currentCs : maxFit));
+            const fittedCellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE, Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs <= maxFit ? currentCs : maxFit));
 
             const rendererOptions = {
                 canvas, container,

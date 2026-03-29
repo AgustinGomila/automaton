@@ -140,8 +140,8 @@ class GridController {
         const automaton = this.automaton;
         const isMobile = window.innerWidth <= 768;
         const MARGIN = 6;
-        const MIN_CELLS = 20;
-        const MAX_CELLS = 1000;
+        const MIN_CELLS = AppConfig.GRID.MIN_CELLS;
+        const MAX_CELLS = AppConfig.GRID.MAX_CELLS;
 
         let availW, availH;
         if (isMobile) {
@@ -255,7 +255,7 @@ class GridController {
         if (!lockChk?.checked) return;
 
         const ratio = this._rectAspectRatio || 1;
-        const clamp = v => Math.max(20, Math.min(1000, Math.round(v)));
+        const clamp = v => Math.max(AppConfig.GRID.MIN_CELLS, Math.min(AppConfig.GRID.MAX_CELLS, Math.round(v)));
 
         if (axis === 'width') {
             const newH = clamp(value / ratio);

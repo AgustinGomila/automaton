@@ -6,7 +6,7 @@ class TriangleRenderer {
         this.canvas = options.canvas;
         this.ctx = this.canvas.getContext('2d', {alpha: false});
         this.container = options.container;
-        this.cellSize = options.cellSize || 20;
+        this.cellSize = options.cellSize || AppConfig.GRID.MAX_CELL_SIZE;
         this.showGrid = options.showGrid !== false;
         this.colorAlive = options.colorAlive || '#8b5cf6';
         this.colorDead = options.colorDead || '#0f172a';
