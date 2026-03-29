@@ -47,8 +47,14 @@ completa del grid e internacionalización ES/EN.
 ### Rendimiento
 
 - Dirty rendering: solo renderiza las celdas modificadas
+- **ImageData + Uint32Array**: renderizado por pixel buffer — reemplaza N× fillRect por 1× putImageData
+- **Dirty bounding box**: putImageData con dirty-rect, transfiriendo solo la región modificada al framebuffer
+- **Módulo WASM** (`wasm-renderer.js`): fill_full y fill_dirty compilados en WebAssembly, con memoria compartida con
+  ImageData (zero-copy). Activo automáticamente en Conway, Wolfram, ETA y Generations; fallback JS para Langton,
+  WireWorld y RD-2D
 - Worker en hilo separado para grids grandes (modo estándar y triangular)
 - Renderer WebGL2 acelerado para el grid triangular (fallback a Canvas 2D)
+- Grid de hasta 2000×2000 celdas
 - 10 niveles de velocidad con control de pasos por frame
 
 ### UI
@@ -99,7 +105,7 @@ completa del grid e internacionalización ES/EN.
 ## Stack
 
 - **Lenguaje**: JavaScript (ES2022+), HTML5, CSS3
-- **Renderizado**: Canvas 2D API, WebGL2
+- **Renderizado**: Canvas 2D API, WebGL2, WebAssembly (WAT)
 - **Concurrencia**: Web Workers
 - **Sin frameworks, sin build system, sin dependencias externas**
 
@@ -125,6 +131,7 @@ automaton/
 ├── edit-coordinator.js              # Operaciones de edicion del grid (cortar, pegar, etc.)
 ├── simulator-limiter.js             # Limites de generacion y poblacion
 ├── circular-array.js                # Buffer circular para historial
+├── config.js                        # Configuracion centralizada (AppConfig: limites, defaults, colores)
 ├── event-bus.js                     # Bus de eventos global (pub/sub)
 │
 ├── -- Motores Especiales --
@@ -142,6 +149,7 @@ automaton/
 │
 ├── -- Renderizado --
 ├── grid-renderer.js                 # Renderer Canvas 2D con dirty rendering y efectos
+├── wasm-renderer.js                 # Módulo WASM para fill_full/fill_dirty (zero-copy con ImageData)
 ├── triangle-renderer.js             # Renderer Canvas 2D para grid triangular
 ├── triangle-webgl2-renderer.js      # Renderer WebGL2 para grid triangular
 ├── automaton-worker.js              # Worker para calculo del grid estandar

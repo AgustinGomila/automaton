@@ -46,8 +46,14 @@ internationalization.
 ### Performance
 
 - Dirty rendering: only re-renders modified cells
+- **ImageData + Uint32Array**: pixel buffer rendering — replaces N× fillRect with 1× putImageData
+- **Dirty bounding box**: putImageData with dirty-rect, uploading only the modified region to the framebuffer
+- **WASM module** (`wasm-renderer.js`): fill_full and fill_dirty compiled to WebAssembly with shared memory with
+  ImageData (zero-copy). Active automatically for Conway, Wolfram, ETA and Generations; JS fallback for Langton,
+  WireWorld and RD-2D
 - Background worker thread for large grids (standard and triangular modes)
 - WebGL2 accelerated renderer for the triangular grid (Canvas 2D fallback)
+- Grid up to 2000×2000 cells
 - 10 speed levels with steps-per-frame control
 
 ### UI
@@ -98,7 +104,7 @@ internationalization.
 ## Stack
 
 - **Language**: JavaScript (ES2022+), HTML5, CSS3
-- **Rendering**: Canvas 2D API, WebGL2
+- **Rendering**: Canvas 2D API, WebGL2, WebAssembly (WAT)
 - **Concurrency**: Web Workers
 - **No frameworks, no build system, no external dependencies**
 
@@ -124,6 +130,7 @@ automaton/
 ├── edit-coordinator.js              # Grid editing operations (cut, paste, clear, etc.)
 ├── simulator-limiter.js             # Generation and population limits
 ├── circular-array.js                # Circular buffer for history
+├── config.js                        # Centralized configuration (AppConfig: limits, defaults, colors)
 ├── event-bus.js                     # Global event bus (pub/sub)
 │
 ├── -- Special Engines --
@@ -141,6 +148,7 @@ automaton/
 │
 ├── -- Rendering --
 ├── grid-renderer.js                 # Canvas 2D renderer with dirty rendering and effects
+├── wasm-renderer.js                 # WASM module for fill_full/fill_dirty (zero-copy with ImageData)
 ├── triangle-renderer.js             # Canvas 2D renderer for triangular grid
 ├── triangle-webgl2-renderer.js      # WebGL2 renderer for triangular grid
 ├── automaton-worker.js              # Worker for standard grid computation
