@@ -41,6 +41,11 @@ class GenerationsEngine {
         this.survival = [2, 3];
         this.numStates = 2;           // C — número total de estados (mín 2)
 
+        // Tablas de lookup pre-computadas (Uint8Array[9]): evitan new Set() en cada step.
+        // Índice = número de vecinos vivos (0–8), valor = 0|1.
+        this._birthTable = new Uint8Array(9);
+        this._survivalTable = new Uint8Array(9);
+
         // Grids de estados 0..C-1 (column-major, igual que ctx.grid)
         this.stateGrid = null;
         this._backGrid = null;
@@ -68,6 +73,12 @@ class GenerationsEngine {
         this.birth = birth ?? [3];
         this.survival = survival ?? [2, 3];
         this.numStates = Math.max(2, Math.min(numStates ?? 2, 256));
+
+        // Pre-computar tablas de lookup: O(1) por celda en step() en lugar de Set.has()
+        this._birthTable.fill(0);
+        this._survivalTable.fill(0);
+        for (const n of this.birth) this._birthTable[n] = 1;
+        for (const n of this.survival) this._survivalTable[n] = 1;
 
         const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
@@ -170,8 +181,9 @@ class GenerationsEngine {
         const sg = this.stateGrid;
         const back = this._backGrid;
         const C = this.numStates;
-        const bSet = new Set(this.birth);
-        const sSet = new Set(this.survival);
+        // Usar tablas pre-computadas en lugar de new Set() por step
+        const bTable = this._birthTable;
+        const sTable = this._survivalTable;
         const renderer = this._ctx.renderer;
 
         this._changedCells.length = 0;
@@ -188,12 +200,10 @@ class GenerationsEngine {
                 let next;
 
                 if (cur === 0 || cur === 1) {
-                    // Ambos estados usan el mismo conteo de vecinos en estado 1.
-                    // Extraído en helper para eliminar la duplicación del bloque original.
                     const n = this._countAliveNeighbors(sg, gw, gh, x, xm, xp, y, ym, yp);
                     next = cur === 0
-                        ? (bSet.has(n) ? 1 : 0)
-                        : (sSet.has(n) ? 1 : (C > 2 ? 2 : 0));
+                        ? bTable[n]
+                        : (sTable[n] ? 1 : (C > 2 ? 2 : 0));
                 } else {
                     // Moribundo: avanzar al siguiente estado de envejecimiento
                     next = (cur + 1) % C;

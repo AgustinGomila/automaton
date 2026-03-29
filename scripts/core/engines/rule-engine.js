@@ -40,8 +40,18 @@ class RuleEngine {
         }
         this.birth = [...rule.birth].sort((a, b) => a - b);
         this.survival = [...rule.survival].sort((a, b) => a - b);
+
+        // Sets mantenidos para compatibilidad con código externo
         this._birthSet = new Set(this.birth);
         this._survivalSet = new Set(this.survival);
+
+        // Tablas Uint8Array[9]: lookup O(1) sin hash para el inner loop crítico.
+        // Índice = número de vecinos vivos (0–8), valor = 0|1.
+        this._birthTable = new Uint8Array(9);
+        this._survivalTable = new Uint8Array(9);
+        for (const n of this.birth) this._birthTable[n] = 1;
+        for (const n of this.survival) this._survivalTable[n] = 1;
+
         this.ruleString = `B${this.birth.join('')}/S${this.survival.join('')}`;
     }
 
@@ -51,8 +61,8 @@ class RuleEngine {
 
     computeNextState(currentState, neighborCount) {
         return currentState
-            ? (this._survivalSet.has(neighborCount) ? 1 : 0)
-            : (this._birthSet.has(neighborCount) ? 1 : 0);
+            ? this._survivalTable[neighborCount]
+            : this._birthTable[neighborCount];
     }
 
     // =========================================
@@ -123,6 +133,8 @@ class RuleEngine {
 
         const buf = this._ensureChangedBuf(width, height);
         let changedCount = 0, births = 0, deaths = 0;
+        const bTable = this._birthTable;
+        const sTable = this._survivalTable;
 
         if (wrap) {
             for (let x = 0; x < width; x++) {
@@ -141,9 +153,7 @@ class RuleEngine {
                         + colP[ym] + colP[y] + colP[yp];
 
                     const current = col[y];
-                    const next = current
-                        ? (this._survivalSet.has(n) ? 1 : 0)
-                        : (this._birthSet.has(n) ? 1 : 0);
+                    const next = current ? sTable[n] : bTable[n];
                     outGrid[x][y] = next;
 
                     if (next !== current) {
@@ -168,9 +178,7 @@ class RuleEngine {
                         }
                     }
                     const current = currentGrid[x][y];
-                    const next = current
-                        ? (this._survivalSet.has(n) ? 1 : 0)
-                        : (this._birthSet.has(n) ? 1 : 0);
+                    const next = current ? sTable[n] : bTable[n];
                     outGrid[x][y] = next;
                     if (next !== current) {
                         buf[changedCount++] = x * height + y;

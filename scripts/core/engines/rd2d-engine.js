@@ -187,31 +187,58 @@ class RD2DEngine {
 
         const gw = this.gridWidth;
         const gh = this.gridHeight;
+        const sg = this.stateGrid;
         const back = this._backStateGrid;
+        const grid = this.automaton.grid;
+        const renderer = this.automaton.renderer;
+        const wrap = this.automaton.wrapEdges;
+
         this._changedCells.length = 0;
         let changed = false;
 
-        for (let y = 0; y < gh; y++) {
-            for (let x = 0; x < gw; x++) {
-                // Regla XOR de los 4 vecinos cardinales
-                const ns = this._getState(x, y - 1)
-                    ^ this._getState(x, y + 1)
-                    ^ this._getState(x + 1, y)
-                    ^ this._getState(x - 1, y);
-                back[x][y] = ns;
-                if (ns !== this.stateGrid[x][y]) {
+        for (let x = 0; x < gw; x++) {
+            // Pre-calcular índices de vecinos horizontales con wrap inline —
+            // evita 2× módulo por celda dentro del loop Y (4M operaciones en 1000×1000).
+            const xL = wrap ? (x === 0 ? gw - 1 : x - 1) : x - 1;
+            const xR = wrap ? (x === gw - 1 ? 0 : x + 1) : x + 1;
+
+            const colL = (xL >= 0 && xL < gw) ? sg[xL] : null;
+            const col = sg[x];
+            const colR = (xR >= 0 && xR < gw) ? sg[xR] : null;
+            const gridCol = grid[x];
+
+            for (let y = 0; y < gh; y++) {
+                // Vecinos cardinales inlineados — sin _getState(), sin módulo en Y
+                const yU = wrap ? (y === 0 ? gh - 1 : y - 1) : y - 1;
+                const yD = wrap ? (y === gh - 1 ? 0 : y + 1) : y + 1;
+
+                const n = (colL ? colL[y] : 0)
+                    ^ (colR ? colR[y] : 0)
+                    ^ (yU >= 0 ? col[yU] : 0)
+                    ^ (yD < gh ? col[yD] : 0);
+
+                back[x][y] = n;
+
+                if (n !== col[y]) {
                     changed = true;
                     this._changedCells.push(x * gh + y);
+
+                    // Sincronización grid binario + mark dirty inline —
+                    // elimina el segundo loop _syncToAutomatonGrid()
+                    const isAlive = n !== 0;
+                    if (gridCol[y] !== (isAlive ? 1 : 0)) {
+                        gridCol[y] = isAlive ? 1 : 0;
+                        renderer.markDirty(x, y);
+                    }
                 }
             }
         }
 
         // Swap de buffers sin allocaciones
-        this._backStateGrid = this.stateGrid;
+        this._backStateGrid = sg;
         this.stateGrid = back;
         this.generation++;
 
-        this._syncToAutomatonGrid();
         return changed;
     }
 
