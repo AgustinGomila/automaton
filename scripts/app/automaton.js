@@ -61,6 +61,8 @@ class CellularAutomaton {
             isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight,
+            // Acceso directo al grid column-major — habilita el path WASM en GridRenderer
+            getGridColumns: () => this.core.gridManager.grid,
             showGridHighlights: AppConfig.GRID.DEFAULT_SHOW_HIGHLIGHTS ?? false
         });
 

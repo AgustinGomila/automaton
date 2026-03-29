@@ -133,10 +133,14 @@ class LangtonEngine {
         this.ants = [];
         this._changedIndices = [];
 
+        // Iteramos cada celda exactamente una vez → no puede haber duplicados.
+        // Se añade directamente sin pasar por addAnt() para evitar la búsqueda
+        // lineal O(N) que convierte el loop en O(N²) con grids grandes.
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
                 if (Math.random() < density) {
-                    this.addAnt(x, y, Math.floor(Math.random() * 4));
+                    this.ants.push({x, y, dir: Math.floor(Math.random() * 4)});
+                    grid[x][y] = 1;
                 }
             }
         }

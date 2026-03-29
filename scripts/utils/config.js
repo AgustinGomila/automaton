@@ -50,6 +50,13 @@ window.AppConfig = Object.freeze({
         FULL_RENDER_THRESHOLD: 0.15,
 
         /**
+         * cellSize máximo para usar el path ImageData (putImageData).
+         * Por encima de este valor se usa el path fillRect, que soporta
+         * gradientes, efectos de brillo y bordes de 1px.
+         */
+        PIXEL_PATH_MAX_CELL_SIZE: 3,
+
+        /**
          * Frames de cooldown del efecto de actividad.
          * Controla cuántos frames permanece visible el color born/dying.
          */
