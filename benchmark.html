@@ -125,6 +125,107 @@
             cursor: not-allowed;
         }
 
+        #exportBtn {
+            background: transparent;
+            color: var(--muted);
+            font-family: var(--mono);
+            font-size: 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 6px 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: none; /* shown only after results */
+        }
+
+        #exportBtn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Export text overlay */
+        #exportOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(8, 12, 18, 0.92);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        #exportOverlay.visible {
+            display: flex;
+        }
+
+        #exportBox {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 700px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        #exportBox h3 {
+            font-family: var(--sans);
+            font-size: 14px;
+            color: var(--primary);
+            margin: 0;
+        }
+
+        #exportText {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 11px;
+            line-height: 1.6;
+            padding: 12px;
+            resize: none;
+            height: 320px;
+            white-space: pre;
+            overflow: auto;
+            outline: none;
+        }
+
+        .export-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .export-actions button {
+            font-family: var(--mono);
+            font-size: 12px;
+            border-radius: 4px;
+            padding: 6px 16px;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            transition: all 0.15s;
+        }
+
+        #copyBtn {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        #copyBtn:hover {
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        #closeExportBtn:hover {
+            border-color: var(--text);
+            color: var(--text);
+        }
+
         /* ── Status bar ─────────────────────────────────────────── */
         #status {
             font-size: 11px;
@@ -381,6 +482,7 @@
     </select>
 
     <button id="runBtn">▶ Run Benchmark</button>
+    <button id="exportBtn">⬇ Export</button>
 </div>
 
 <div id="status">Ready — configure and press Run.</div>
@@ -425,15 +527,24 @@
 </div>
 
 <!-- Hidden canvas for off-screen rendering -->
+<div id="exportOverlay">
+    <div id="exportBox">
+        <h3>Benchmark Results</h3>
+        <textarea id="exportText" readonly spellcheck="false"></textarea>
+        <div class="export-actions">
+            <button id="closeExportBtn">Close</button>
+            <button id="copyBtn">Copy to clipboard</button>
+        </div>
+    </div>
+</div>
+
 <canvas id="offscreen" width="400" height="400"></canvas>
 
 <!-- ── Core dependencies (order matters) ────────────────── -->
 <script src="scripts/utils/config.js"></script>
 <script src="scripts/utils/circular-array.js"></script>
 <script src="scripts/infrastructure/event-bus.js"></script>
-<script src="scripts/infrastructure/workers/triangle-worker-manager.js"></script>
 <script src="scripts/core/grid-manager.js"></script>
-<script src="scripts/core/triangle-grid-manager.js"></script>
 <script src="scripts/core/neighborhood-calculator.js"></script>
 <script src="scripts/core/engines/rule-engine.js"></script>
 <script src="scripts/config/rules.js"></script>
@@ -446,6 +557,8 @@
 <script src="scripts/core/engines/ulam-warburton-engine.js"></script>
 <script src="scripts/core/engines/rd2d-engine.js"></script>
 <script src="scripts/core/engines/generations-engine.js"></script>
+<script src="scripts/core/triangle-grid-manager.js"></script>
+<script src="scripts/infrastructure/workers/triangle-worker-manager.js"></script>
 <script src="scripts/core/engines/triangle-engine.js"></script>
 
 <script>
@@ -1182,8 +1295,82 @@
         }
 
         setStatus(`Done — ${ENGINES.length} engines × ${steps} steps on ${gw}×${gh}. (${new Date().toLocaleTimeString()})`, 'done');
+        _lastResults = results;
+        _lastConfig = {gw, gh, steps, warmup};
+        document.getElementById('exportBtn').style.display = 'inline-block';
         document.getElementById('runBtn').disabled = false;
     }
+
+
+    // ── Stored results for export ────────────────────────────────────────────────
+    let _lastResults = [];
+    let _lastConfig = {};
+
+    function buildExportText(results, config) {
+        const {gw, gh, steps, warmup} = config;
+        const pad = (s, n, r = false) => {
+            s = String(s ?? '—');
+            return r ? s.padStart(n) : s.padEnd(n);
+        };
+
+        const lines = [];
+        lines.push(`Cellular Automaton — Benchmark Results`);
+        lines.push(`Grid: ${gw}×${gh}  |  Steps: ${steps}  |  Warm-up: ${warmup}`);
+        lines.push(`Date: ${new Date().toLocaleString()}`);
+        lines.push('');
+
+        const HDR = [
+            pad('Engine', 24),
+            pad('Step avg', 10, true),
+            pad('Step p95', 10, true),
+            pad('Render avg', 12, true),
+            pad('Gen/s', 10, true),
+            pad('Render path', 14),
+            pad('Step path', 8),
+        ].join('  ');
+        lines.push(HDR);
+        lines.push('─'.repeat(HDR.length));
+
+        for (const r of results) {
+            if (r.error) {
+                lines.push(pad(r._eng.name, 24) + '  ERROR: ' + r.error);
+                continue;
+            }
+            lines.push([
+                pad(r._eng.name, 24),
+                pad(r.stepAvg != null ? r.stepAvg.toFixed(2) + ' ms' : '—', 10, true),
+                pad(r.stepP95 != null ? r.stepP95.toFixed(2) + ' ms' : '—', 10, true),
+                pad(r.renderAvg != null ? r.renderAvg.toFixed(2) + ' ms' : '—', 12, true),
+                pad(r.genPerSec != null ? (r.genPerSec >= 1000
+                    ? (r.genPerSec / 1000).toFixed(1) + ' k/s'
+                    : Math.round(r.genPerSec) + ' /s') : '—', 10, true),
+                pad(r.renderPath ?? '—', 14),
+                pad(r._eng.stepPath ?? 'core', 8),
+            ].join('  '));
+        }
+        return lines.join('\n');
+    }
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        document.getElementById('exportText').value = buildExportText(_lastResults, _lastConfig);
+        document.getElementById('exportOverlay').classList.add('visible');
+    });
+    document.getElementById('closeExportBtn').addEventListener('click', () => {
+        document.getElementById('exportOverlay').classList.remove('visible');
+    });
+    document.getElementById('exportOverlay').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget)
+            document.getElementById('exportOverlay').classList.remove('visible');
+    });
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+        const text = document.getElementById('exportText').value;
+        await navigator.clipboard.writeText(text).catch(() => {
+        });
+        const btn = document.getElementById('copyBtn');
+        const orig = btn.textContent;
+        btn.textContent = '✓ Copied';
+        setTimeout(() => btn.textContent = orig, 1500);
+    });
 
     document.getElementById('runBtn').addEventListener('click', runBenchmark);
 </script>
