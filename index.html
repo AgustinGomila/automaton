@@ -576,6 +576,75 @@
                                 </div>
                             </div>
 
+                            <!-- Sub-acordeón: Hexagonal -->
+                            <div class="accordion-group accordion-group--engine">
+                                <button class="accordion-header" data-accordion="hexagonal">
+                                    <i class="fas fa-hexagon"></i>
+                                    <span data-i18n="hex.title">Hexagonal</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="toggle-switch" style="margin-bottom: 10px;">
+                                        <input type="checkbox" id="hexToggle" class="toggle-checkbox">
+                                        <label for="hexToggle" class="toggle-label">
+                                            <span data-i18n="hex.enable">Autómata Hexagonal</span>
+                                            <span class="toggle-switch-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="hex-controls" id="hexControls"
+                                         style="opacity: 0.5; pointer-events: none;">
+
+                                        <!-- Inputs B/S — mismo estilo que el grupo de regla personalizada estándar -->
+                                        <div class="hex-rule-group">
+                                            <div class="config-group">
+                                                <label for="hexBirth">
+                                                    <i class="fas fa-seedling"></i>
+                                                    B (<span data-i18n="hex.birth">Nacimiento</span>):
+                                                </label>
+                                                <input id="hexBirth" type="text" value="2"
+                                                       maxlength="7" placeholder="0–6">
+                                            </div>
+                                            <div class="config-group">
+                                                <label for="hexSurvival">
+                                                    <i class="fas fa-heart"></i>
+                                                    S (<span data-i18n="hex.survival">Supervivencia</span>):
+                                                </label>
+                                                <input id="hexSurvival" type="text" value="1234"
+                                                       maxlength="7" placeholder="0–6">
+                                            </div>
+                                            <p class="hex-rule-hint" data-i18n="hex.hint">
+                                                6 vecinos. Dibuja 2+ células adyacentes.
+                                            </p>
+                                        </div>
+
+                                        <!-- Presets de reglas conocidas -->
+                                        <div class="triangle-presets">
+                                            <button class="btn-preset"
+                                                    data-hex-birth="2" data-hex-survival="1234"
+                                                    title="Crece desde 2+ células adyacentes">B2/S1234
+                                            </button>
+                                            <button class="btn-preset"
+                                                    data-hex-birth="2" data-hex-survival="34"
+                                                    title="Hex Life — análogo a Conway">B2/S34
+                                            </button>
+                                            <button class="btn-preset"
+                                                    data-hex-birth="2" data-hex-survival="2345"
+                                                    title="Crece lento, muy estable">B2/S2345
+                                            </button>
+                                            <button class="btn-preset"
+                                                    data-hex-birth="3" data-hex-survival="12345"
+                                                    title="Estructuras persistentes">B3/S12345
+                                            </button>
+                                            <button class="btn-preset"
+                                                    data-hex-birth="24" data-hex-survival="3456"
+                                                    title="Expansión controlada">B24/S3456
+                                            </button>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Sub-acordeón: Ulam-Warburton -->
                             <div class="accordion-group accordion-group--engine">
                                 <button class="accordion-header" data-accordion="ulam-warburton">

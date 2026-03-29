@@ -13,6 +13,7 @@ class SpecialEngineManager {
         WOLFRAM: 'wolfram',
         RD2D: 'rd2d',
         TRIANGLE: 'triangle',
+        HEXAGONAL: 'hexagonal',
         ULAM_WARBURTON: 'ulam-warburton',
         LANGTON: 'langton',
         WIREWORLD: 'wireworld',
@@ -38,6 +39,7 @@ class SpecialEngineManager {
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
+        this.hexEngine = null;
         this.uwEngine = null;
         this.langtonEngine = null;
         this.wireworldEngine = null;
@@ -75,6 +77,8 @@ class SpecialEngineManager {
                 });
             case SpecialEngineManager.MODES.TRIANGLE:
                 return this._describeTriangleStep();
+            case SpecialEngineManager.MODES.HEXAGONAL:
+                return this._describeHexStep();
             default:
                 return null;
         }
@@ -107,6 +111,33 @@ class SpecialEngineManager {
         };
     }
 
+    _describeHexStep() {
+        if (!this.hexEngine?.gridManager) return null;
+        const engine = this.hexEngine;
+
+        // Siempre _stepSync — síncrono, sin Promise sin await.
+        // La inicialización ya fue completada por activateHexMode antes del primer step.
+        engine._stepSync();
+
+        // Forzar full render: markAllDirty garantiza que _renderFull() se ejecuta,
+        // borrando correctamente las celdas muertas con colorDead.
+        engine.automaton.renderer.markAllDirty?.();
+
+        // Devolver población del hex grid (no del grid rectangular del core)
+        const population = engine.gridManager.countPopulation();
+
+        return {
+            continued: true,
+            label: 'Hexagonal',
+            stopMessage: null,
+            generation: engine.generation,
+            changedCells: [],
+            population,
+            markDirtyFromCells: false,
+            skipActivity: true
+        };
+    }
+
     // =========================================
     // INFO DEL MOTOR ACTIVO
     // =========================================
@@ -118,6 +149,8 @@ class SpecialEngineManager {
                 return {mode, info: this.wolframEngine?.getInfo() ?? null};
             case SpecialEngineManager.MODES.TRIANGLE:
                 return {mode, info: this.triangleEngine?.getInfo() ?? null};
+            case SpecialEngineManager.MODES.HEXAGONAL:
+                return {mode, info: this.hexEngine?.getInfo() ?? null};
             case SpecialEngineManager.MODES.LANGTON:
                 return {mode, info: this.langtonEngine?.getInfo() ?? null};
             case SpecialEngineManager.MODES.GENERATIONS:
@@ -137,6 +170,7 @@ class SpecialEngineManager {
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
+        this.hexEngine?.deactivate?.();
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
         this.wireworldEngine?.deactivate?.();
@@ -219,19 +253,15 @@ class SpecialEngineManager {
             // El cssHeight lo calcula el renderer internamente como bitmapH × 2/√3,
             // lo que produce triángulos equiláteros correctos sin importar el historial
             // de cambios de cellSize. No se necesita targetHeight externo.
-            const origW = canvas.width;
-            const origH = canvas.height;
-            const gw = this._getGridWidth();
-            const gh = this._getGridHeight();
-            const csFromWidth = origW / (gw + 0.5);
-            const csFromHeight = origH / (gh * (Math.sqrt(3) / 2));
-
-            // Respetar el cellSize actual del usuario: solo ajustar si geométricamente
-            // no cabe (el canvas triangular sería mayor que el espacio disponible).
-            // Math.max(1,…) en lugar de Math.max(2,…): cellSize=1 es válido con ImageData.
+            // Respetar el cellSize actual del usuario sin modificarlo.
+            // ETA y Hex adaptan su número de filas/columnas al cellSize (no al revés):
+            // activateTriangleMode / activateHexMode calculan las dims del grid que caben
+            // al cs heredado. Validar cs contra _getGridWidth() del grid rectangular
+            // anterior es incorrecto — la geometría triangular necesita mucho más ancho
+            // por celda y produciría un maxFit artificialmente bajo que forzaría cs a 1.
             const currentCs = this._getCellSize();
-            const maxFit = Math.floor(Math.min(csFromWidth, csFromHeight));
-            const fittedCellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE, Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs <= maxFit ? currentCs : maxFit));
+            const fittedCellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
+                Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
 
             const rendererOptions = {
                 canvas, container,
@@ -264,6 +294,67 @@ class SpecialEngineManager {
                 const cellSizeDisplay = document.getElementById('cellSizeValue');
                 if (cellSizeDisplay) cellSizeDisplay.textContent = `${fittedCellSize}px`;
             }
+
+        } else if (engineName === SpecialEngineManager.MODES.HEXAGONAL) {
+            if (typeof HexGridManager === 'undefined') await this._loadScript('scripts/core/hex-grid-manager.js');
+            if (typeof HexWorkerManager === 'undefined') await this._loadScript('scripts/infrastructure/workers/hex-worker-manager.js');
+            if (typeof HexEngine === 'undefined') await this._loadScript('scripts/core/engines/hex-engine.js');
+            if (typeof HexRenderer === 'undefined') await this._loadScript('scripts/rendering/hex-renderer.js');
+
+            const currentRenderer = this._getRenderer();
+            currentRenderer?._destroyGridOverlay?.();
+            this._originalRenderer = currentRenderer;
+            this._originalCore = this._getCore();
+
+            const canvas = document.getElementById('canvas');
+            const container = document.getElementById('canvas-container');
+            const ctx2d = canvas.getContext('2d');
+            if (ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ── Medir área disponible desde el canvas-wrapper (igual que grid-autofit) ──
+            // Usar getBoundingClientRect sobre el contenedor real evita que canvas.width
+            // (que refleja el tamaño del grid rectangular anterior) produzca cálculos
+            // erróneos que generan scroll o canvas demasiado grandes.
+            const wrapper = document.querySelector('.canvas-wrapper');
+            const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : null;
+            const availW = wrapperRect ? Math.floor(wrapperRect.width - 20) : canvas.width;
+            const availH = wrapperRect ? Math.floor(wrapperRect.height - 20) : canvas.height;
+
+            // Calcular cellSize que cabe en el área disponible.
+            // Respetar el cellSize actual del usuario; reducir solo si es necesario.
+            const currentCs = this._getCellSize();
+            // Mismo principio que ETA: el grid hex adapta sus dimensiones al cellSize,
+            // no al revés. activateHexMode calcula hexCols/hexRows que caben al cs
+            // heredado. Usar _getGridWidth() del grid rectangular anterior produciría
+            // un maxFit incorrecto (geometría hex es ~√3× más ancha por columna).
+            const cs = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
+                Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
+
+            const hexRenderer = new HexRenderer({
+                canvas, container,
+                cellSize: cs,
+                showGrid: this._originalRenderer?.getConfig('showGrid') ?? false,
+                colorAlive: '#f59e0b',
+                colorDead: '#0f172a',
+                colorGrid: 'rgba(255,255,255,0.1)',
+            });
+
+            this._setRenderer(hexRenderer);
+            this.specialMode = SpecialEngineManager.MODES.HEXAGONAL;
+
+            // HexEngine se crea aquí; activate() y setGridManager() los llama
+            // activateHexMode() en special-mode-controller, igual que Triangle.
+            this.hexEngine = new HexEngine(this._buildHexContext());
+
+            // Sincronizar cellSize al autómata y al slider de la UI
+            const automaton2 = this._getAutomaton();
+            automaton2.cellSize = cs;
+            const cellSizeSlider2 = document.getElementById('cellSize');
+            if (cellSizeSlider2) {
+                cellSizeSlider2.value = cs;
+                const cellSizeDisplay2 = document.getElementById('cellSizeValue');
+                if (cellSizeDisplay2) cellSizeDisplay2.textContent = `${cs}px`;
+            }
         }
 
         this._specialEngineLoaded = true;
@@ -273,6 +364,7 @@ class SpecialEngineManager {
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
+        this.hexEngine?.deactivate?.();
         this.uwEngine?.deactivate?.();
         this.langtonEngine?.deactivate?.();
         this.wireworldEngine?.deactivate?.();
@@ -281,6 +373,7 @@ class SpecialEngineManager {
         this.wolframEngine = null;
         this.rd2dEngine = null;
         this.triangleEngine = null;
+        this.hexEngine = null;
         this.uwEngine = null;
         this.langtonEngine = null;
         this.wireworldEngine = null;
@@ -313,6 +406,11 @@ class SpecialEngineManager {
                     }
                 }
                 this.triangleEngine?.reset?.();
+                return true;
+            case SpecialEngineManager.MODES.HEXAGONAL:
+                if (this.hexEngine?.gridManager) {
+                    this.hexEngine.gridManager.clear();
+                }
                 return true;
             case SpecialEngineManager.MODES.LANGTON:
                 this.langtonEngine?.reset();
@@ -469,6 +567,44 @@ class SpecialEngineManager {
     _buildGenerationsContext() {
         const automaton = this._getAutomaton();
         return this._buildBaseContext(automaton);
+    }
+
+    _buildHexContext() {
+        const self = this;
+        const automaton = self._getAutomaton();
+        const base = this._buildBaseContext(automaton);
+        return Object.assign(Object.create(base), {
+            get cellSize() {
+                return self._getCellSize();
+            },
+            render() {
+                return automaton.render();
+            },
+        });
+    }
+
+    /**
+     * Desactiva el modo hexagonal y restaura el renderer/core originales.
+     * Sigue el mismo patrón que deactivateTriangle().
+     */
+    deactivateHex() {
+        if (this.hexEngine) {
+            this.hexEngine.deactivate();
+            this.hexEngine = null;
+        }
+
+        if (this._originalRenderer) {
+            const oldRenderer = this._getRenderer();
+            this._setRenderer(this._originalRenderer);
+            this._originalRenderer = null;
+            oldRenderer?.destroy?.();
+            this._getAutomaton()._resizeRenderer();
+        }
+
+        if (this._originalCore) {
+            this._setCore(this._originalCore);
+            this._originalCore = null;
+        }
     }
 
     // =========================================

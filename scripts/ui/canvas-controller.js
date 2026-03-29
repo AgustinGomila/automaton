@@ -234,10 +234,13 @@ class CanvasController {
 
         // Pan toroidal: Alt tiene prioridad sobre cualquier modo de dibujo
         if (this.altPressed) {
-            // Para triangle usamos coordenadas de celda propias; para el resto getCellFromMouse
+            // Para triangle/hex usamos coordenadas de celda propias; para el resto getCellFromMouse
             if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
                 const result = this.automaton.getCellCoords(e.clientX, e.clientY);
                 this._panLastCell = result ? {x: result.q, y: result.r} : null;
+            } else if (this.automaton.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.automaton.hexEngine?.isActive) {
+                const result = this.automaton.getCellCoords(e.clientX, e.clientY);
+                this._panLastCell = result ? {x: result.col, y: result.row} : null;
             } else {
                 const {x, y} = this.automaton.getCellFromMouse(e);
                 this._panLastCell = {x, y};
@@ -252,6 +255,15 @@ class CanvasController {
             const result = this.automaton.getCellCoords(e.clientX, e.clientY);
             if (result) {
                 this.lastCell = {q: result.q, r: result.r, mode: SpecialEngineManager.MODES.TRIANGLE};
+                this.automaton.drawCellAt(result, !this.ctrlPressed ? 1 : 0);
+            }
+            return;
+        }
+
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.automaton.hexEngine?.isActive) {
+            const result = this.automaton.getCellCoords(e.clientX, e.clientY);
+            if (result) {
+                this.lastCell = {col: result.col, row: result.row, mode: SpecialEngineManager.MODES.HEXAGONAL};
                 this.automaton.drawCellAt(result, !this.ctrlPressed ? 1 : 0);
             }
             return;
@@ -335,6 +347,16 @@ class CanvasController {
                         this._panLastCell = {x: result.q, y: result.r};
                     }
                 }
+            } else if (this.automaton.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.automaton.hexEngine?.isActive) {
+                const result = this.automaton.getCellCoords(e.clientX, e.clientY);
+                if (result && this._panLastCell) {
+                    const dx = result.col - this._panLastCell.x;
+                    const dy = result.row - this._panLastCell.y;
+                    if (dx !== 0 || dy !== 0) {
+                        this.automaton.shiftGrid(dx, dy);
+                        this._panLastCell = {x: result.col, y: result.row};
+                    }
+                }
             } else {
                 const {x, y} = this.automaton.getCellFromMouse(e);
                 if (this._panLastCell) {
@@ -360,6 +382,23 @@ class CanvasController {
 
                     if (this.automaton.drawCellAt(result, !this.ctrlPressed ? 1 : 0)) {
                         this.lastCell = {q, r, mode: SpecialEngineManager.MODES.TRIANGLE};
+                    }
+                }
+            }
+            return;
+        }
+
+        if (this.automaton.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.automaton.hexEngine?.isActive) {
+            const result = this.automaton.getCellCoords(e.clientX, e.clientY);
+            if (result) {
+                this._updateMouseCoords(result.col, result.row);
+
+                if (this.isMouseDown && this.lastCell?.mode === SpecialEngineManager.MODES.HEXAGONAL) {
+                    const {col, row} = result;
+                    if (this.lastCell.col === col && this.lastCell.row === row) return;
+
+                    if (this.automaton.drawCellAt(result, !this.ctrlPressed ? 1 : 0)) {
+                        this.lastCell = {col, row, mode: SpecialEngineManager.MODES.HEXAGONAL};
                     }
                 }
             }

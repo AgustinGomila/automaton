@@ -171,6 +171,23 @@ class GridController {
             const sqrt3_2 = Math.sqrt(3) / 2;
             gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs - 0.5)));
             gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / (sqrt3_2 * cs))));
+        } else if (automaton.specialMode === SpecialEngineManager.MODES.HEXAGONAL
+            && automaton.hexEngine?.isActive) {
+            // Geometría hex (pointy-top):
+            //   canvasW = cols × cs×√3 + cs×√3/2  →  cols = (availW - cs×√3/2) / (cs×√3)
+            //   canvasH = rows × cs×1.5 + cs×0.5  →  rows = (availH - cs×0.5)  / (cs×1.5)
+            const SQRT3 = Math.sqrt(3);
+            const hexCols = Math.max(MIN_CELLS, Math.min(MAX_CELLS,
+                Math.floor((availW - cs * SQRT3 / 2) / (cs * SQRT3))
+            ));
+            const hexRows = Math.max(MIN_CELLS, Math.min(MAX_CELLS,
+                Math.floor((availH - cs * 0.5) / (cs * 1.5))
+            ));
+            const hgm = automaton.hexEngine.gridManager;
+            if (hgm && hgm.width === hexCols && hgm.height === hexRows) return;
+            automaton.resizeGrid(hexCols, hexRows);
+            this._showNotification(`Grid hex: ${hexCols}×${hexRows}`, 'info', 1200);
+            return;
         } else {
             gw = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availW / cs)));
             gh = Math.max(MIN_CELLS, Math.min(MAX_CELLS, Math.floor(availH / cs)));
@@ -255,7 +272,7 @@ class GridController {
         if (!lockChk?.checked) return;
 
         const ratio = this._rectAspectRatio || 1;
-        const clamp = v => Math.max(AppConfig.GRID.MIN_CELLS, Math.min(AppConfig.GRID.MAX_CELLS, Math.round(v)));
+        const clamp = v => Math.max(20, Math.min(AppConfig.GRID.MAX_CELLS, Math.round(v)));
 
         if (axis === 'width') {
             const newH = clamp(value / ratio);

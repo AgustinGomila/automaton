@@ -3,7 +3,7 @@
 ![ES](https://flagcdn.com/w20/es.png) Español — ![EN](https://flagcdn.com/w20/gb.png) [English](README_en.md)
 
 Simulador interactivo de autómatas celulares que corre íntegramente en el navegador, sin dependencias ni build system.
-Soporta autómatas 2D clásicos con reglas B/S, siete motores especiales, grids rectangulares independientes, edición
+Soporta autómatas 2D clásicos con reglas B/S, ocho motores especiales, grids rectangulares independientes, edición
 completa del grid e internacionalización ES/EN.
 
 **[Experimentar en vivo](https://agustingomila.github.io/automaton/)**
@@ -33,6 +33,8 @@ completa del grid e internacionalización ES/EN.
 - **Hormiga de Langton** — Multi-agente y multi-color con reglas configurables y presets
 - **WireWorld** — Simulación de circuitos electrónicos con 4 estados (vacío, cabeza, cola, conductor); dibujo libre,
   importación y exportación en formato MCL
+- **Hexagonal** — Autómata Life-like sobre malla hexagonal (6 vecinos, coordenadas offset odd-r); reglas B/S con
+  dígitos 0–6, presets incluidos y dibujo libre sobre la geometría
 
 ### Edición e Interacción
 
@@ -146,12 +148,17 @@ automaton/
 ├── ulam-warburton-engine.js         # Fractal de Ulam-Warburton
 ├── langton-engine.js                # Hormiga de Langton multi-agente
 ├── wireworld-engine.js              # WireWorld (4 estados: vacio, cabeza, cola, conductor)
+├── hex-engine.js                    # Autómata hexagonal Life-like (B/S, 6 vecinos, odd-r)
+├── hex-grid-manager.js              # Grid hexagonal con geometría pointy-top y vecindad odd-r
+├── hex-worker.js                    # Worker para cálculo del motor hexagonal
+├── hex-worker-manager.js            # Gestor del worker hexagonal
 │
 ├── -- Renderizado --
 ├── grid-renderer.js                 # Renderer Canvas 2D con dirty rendering y efectos
 ├── wasm-renderer.js                 # Módulo WASM para fill_full/fill_dirty (zero-copy con ImageData)
 ├── triangle-renderer.js             # Renderer Canvas 2D para grid triangular
 ├── triangle-webgl2-renderer.js      # Renderer WebGL2 para grid triangular
+├── hex-renderer.js                  # Renderer Canvas 2D para grid hexagonal (Path2D cacheado por zoom)
 ├── automaton-worker.js              # Worker para calculo del grid estandar
 ├── grid-worker-manager.js           # Gestor del worker estandar
 │
