@@ -321,10 +321,10 @@ class SpecialEngineManager {
                 Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
 
             // Leer estado y colores actuales del sidebar para preservarlos al activar
-            const prevRenderer       = this._getRenderer();
+            const prevRenderer = this._getRenderer();
             const showActivityEffect = prevRenderer?.getConfig('showActivityEffect') ?? true;
             const colorAlive = document.getElementById('colorAlive')?.value ?? AppConfig.RENDER.COLOR_ALIVE;
-            const colorBorn  = document.getElementById('colorBorn')?.value  ?? AppConfig.RENDER.COLOR_BORN;
+            const colorBorn = document.getElementById('colorBorn')?.value ?? AppConfig.RENDER.COLOR_BORN;
             const colorDying = document.getElementById('colorDying')?.value ?? AppConfig.RENDER.COLOR_DYING;
 
             const hexRenderer = new HexRenderer({
@@ -333,8 +333,8 @@ class SpecialEngineManager {
                 showGrid: prevRenderer?.getConfig('showGrid') ?? false,
                 showActivityEffect,
                 colorAlive,
-                colorDead:  '#0f172a',
-                colorGrid:  'rgba(255,255,255,0.1)',
+                colorDead: '#0f172a',
+                colorGrid: 'rgba(255,255,255,0.1)',
                 colorBorn,
                 colorDying,
             });
@@ -437,6 +437,20 @@ class SpecialEngineManager {
             return {
                 handled: true,
                 population: this.triangleEngine.gridManager.countPopulation(),
+                resetLimit: false
+            };
+        }
+        if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.gridManager) {
+            const {width, height} = this.hexEngine.gridManager;
+            const grid = this.hexEngine.gridManager.grid;
+            for (let c = 0; c < width; c++) {
+                for (let r = 0; r < height; r++) {
+                    grid[c][r] = Math.random() < density ? 1 : 0;
+                }
+            }
+            return {
+                handled: true,
+                population: this.hexEngine.gridManager.countPopulation(),
                 resetLimit: false
             };
         }

@@ -517,6 +517,10 @@ class HexRenderer {
     resizeCanvas() { /* gestionado internamente */
     }
 
+    /** No-op: HexRenderer no usa color providers externos. */
+    setColorProvider(fn) { /* no aplica */
+    }
+
     markDirtyIndex(idx) {
         if (!this.gridManager) return;
         const rows = this.gridManager.height;
