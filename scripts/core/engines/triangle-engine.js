@@ -370,6 +370,12 @@ class TriangleEngine {
 
         this._syncChangedToAutomaton();
 
+        // Notificar actividad celular — mismo punto que _onWorkerResult para el path worker.
+        // _changedCells aquí son packed ints (q<<16|r); updateActivityAges acepta ambos formatos.
+        if (this.automaton && changedCount > 0) {
+            this.automaton.renderer.updateActivityAges?.(this._changedCells);
+        }
+
         return changedCount > 0;
     }
 

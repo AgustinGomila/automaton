@@ -13,16 +13,21 @@ class TriangleWebGL2Renderer {
         this.container = options.container;
         this.cellSize = options.cellSize || 20;
         this.showGrid = options.showGrid !== false;
+        this.showActivityEffect = options.showActivityEffect !== false;
 
         // Colores
         this.colorAlive = options.colorAlive || '#ec4899';
         this.colorDead = options.colorDead || '#0f172a';
         this.colorGrid = options.colorGrid || 'rgba(255,255,255,0.1)';
+        this.colorBorn = options.colorBorn || AppConfig.RENDER.COLOR_BORN;
+        this.colorDying = options.colorDying || AppConfig.RENDER.COLOR_DYING;
 
         // Estado interno
         this._dirtyCells = new Set();
         this._isFirstRender = true;
-        this._useFallback = false;
+        // Los shaders WebGL2 no implementan actividad celular.
+        // Cuando showActivityEffect está activo, delegar al TriangleRenderer canvas 2D.
+        this._useFallback = options.showActivityEffect !== false;
         this._fallbackRenderer = null;
 
         // WebGL2 context
@@ -495,8 +500,10 @@ class TriangleWebGL2Renderer {
                 this._fallbackRenderer = new TriangleRenderer({
                     canvas: this.canvas, container: this.container,
                     cellSize: this.cellSize, showGrid: this.showGrid,
+                    showActivityEffect: this.showActivityEffect,
                     colorAlive: this.colorAlive, colorDead: this.colorDead,
                     colorGrid: this.colorGrid,
+                    colorBorn: this.colorBorn, colorDying: this.colorDying,
                 });
                 this._fallbackRenderer.setGridManager(this.gridManager);
             }
@@ -543,12 +550,14 @@ class TriangleWebGL2Renderer {
         if (!this.gridManager) return;
         if (q >= 0 && q < this.gridManager.width && r >= 0 && r < this.gridManager.height) {
             this._dirtyCells.add((q << 16) | r);
+            if (this._fallbackRenderer) this._fallbackRenderer.markDirty(q, r);
         }
     }
 
     markAllDirty() {
         if (!this.gridManager) return;
         this._isFirstRender = true;
+        if (this._fallbackRenderer) this._fallbackRenderer.markAllDirty();
     }
 
     toggleGrid() {
@@ -588,17 +597,18 @@ class TriangleWebGL2Renderer {
     }
 
     updateActivityAges(changedCells) {
-        // No-op en WebGL2 - los shaders son instantáneos
+        if (this._fallbackRenderer) this._fallbackRenderer.updateActivityAges(changedCells);
     }
 
     resetActivity() {
         this._isFirstRender = true;
         this.markAllDirty();
+        if (this._fallbackRenderer) this._fallbackRenderer.resetActivity();
     }
 
     getConfig(key) {
         if (key === 'showGrid') return this.showGrid;
-        if (key === 'showActivityEffect') return false;
+        if (key === 'showActivityEffect') return this.showActivityEffect;
         return undefined;
     }
 
@@ -607,9 +617,13 @@ class TriangleWebGL2Renderer {
             this.showGrid = value;
             this._isFirstRender = true;
             this.markAllDirty();
-            if (this._fallbackRenderer) {
-                this._fallbackRenderer.setConfig('showGrid', value);
-            }
+            if (this._fallbackRenderer) this._fallbackRenderer.setConfig('showGrid', value);
+        } else if (key === 'showActivityEffect') {
+            this.showActivityEffect = value;
+            this._useFallback = value;   // activar/desactivar canvas 2D según opción
+            if (this._fallbackRenderer) this._fallbackRenderer.setConfig('showActivityEffect', value);
+            this._isFirstRender = true;
+            this.markAllDirty();
         }
     }
 

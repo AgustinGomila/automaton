@@ -98,13 +98,21 @@ class SpecialEngineManager {
 
     _describeTriangleStep() {
         if (!this.triangleEngine?.gridManager) return null;
-        this.triangleEngine.step();
+        const engine = this.triangleEngine;
+        engine.step();
+
+        // updateActivityAges es llamado directamente por:
+        //   - _stepSync (sync path) en triangle-engine.js
+        //   - _onWorkerResult (worker path) en triangle-engine.js
+        // No se llama aquí para evitar procesar changedCells obsoletos cuando
+        // step() delega al worker (async) y getChangedCells() devuelve el paso anterior.
+
         return {
             continued: true,
             label: 'Triangle',
             stopMessage: null,
-            generation: this.triangleEngine.generation,
-            changedCells: this.triangleEngine.getChangedCells(),
+            generation: engine.generation,
+            changedCells: engine.getChangedCells(),
             population: null,
             markDirtyFromCells: true,
             skipActivity: true
@@ -263,13 +271,23 @@ class SpecialEngineManager {
             const fittedCellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
                 Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
 
+            // Leer estado y colores actuales del sidebar para preservarlos al activar
+            const prevRenderer = this._getRenderer();
+            const showActivityEffect = prevRenderer?.getConfig('showActivityEffect') ?? true;
+            const colorAlive = document.getElementById('colorAlive')?.value ?? AppConfig.RENDER.COLOR_ALIVE;
+            const colorBorn = document.getElementById('colorBorn')?.value ?? AppConfig.RENDER.COLOR_BORN;
+            const colorDying = document.getElementById('colorDying')?.value ?? AppConfig.RENDER.COLOR_DYING;
+
             const rendererOptions = {
                 canvas, container,
                 cellSize: fittedCellSize,
-                showGrid: this._getRenderer()?.getConfig('showGrid') ?? false,
-                colorAlive: '#ec4899',
+                showGrid: prevRenderer?.getConfig('showGrid') ?? false,
+                showActivityEffect,
+                colorAlive,
                 colorDead: '#0f172a',
-                colorGrid: 'rgba(255,255,255,0.1)'
+                colorGrid: 'rgba(255,255,255,0.1)',
+                colorBorn,
+                colorDying,
             };
 
             const newRenderer = useWebGL2

@@ -8,24 +8,38 @@ class TriangleRenderer {
         this.container = options.container;
         this.cellSize = options.cellSize || AppConfig.GRID.MAX_CELL_SIZE;
         this.showGrid = options.showGrid !== false;
+        this.showActivityEffect = options.showActivityEffect !== false;
+
         this.colorAlive = options.colorAlive || '#8b5cf6';
         this.colorDead = options.colorDead || '#0f172a';
         this.colorGrid = options.colorGrid || 'rgba(255,255,255,0.1)';
+        this.colorBorn = options.colorBorn || AppConfig.RENDER.COLOR_BORN;
+        this.colorDying = options.colorDying || AppConfig.RENDER.COLOR_DYING;
 
         this.gridManager = null;
         this._dirtyCells = new Set();
-        this._activityAges = new Map();
+
+        this._activityCooldown = AppConfig.RENDER.ACTIVITY_COOLDOWN;
+        this._activityAges = null;
+        this._dyingAges = null;
+        this._coolingCells = new Set();
+        this._dyingCells = new Set();
         this._pathCache = new Map();
         this._cachedCellSize = 0;
         this._isFirstRender = true;
 
-        this.gridStep = 5;
+        // Offscreen canvas de grilla — construido una sola vez, blitado O(1) por frame
+        this._gridOffscreen = null;
+        this._gridOffscreenCtx = null;
+        this._gridDirty = true;
     }
 
     setGridManager(gridManager) {
         this.gridManager = gridManager;
         this._rebuildPathCache();
         this._resizeCanvas();
+        this._allocActivityArrays();
+        this._gridDirty = true;
         this._isFirstRender = true;
         this.markAllDirty();
     }
@@ -63,6 +77,8 @@ class TriangleRenderer {
         this._rebuildPathCache();
         if (this.gridManager) {
             this._resizeCanvas();
+            this._allocActivityArrays();
+            this._gridDirty = true;
             this._isFirstRender = true;
             this.markAllDirty();
         }
@@ -92,24 +108,20 @@ class TriangleRenderer {
             this.container.style.width = (this.canvas.width + 20) + 'px';
             this.container.style.height = (this.canvas.height + 20) + 'px';
         }
+
+        this._gridDirty = true;
     }
 
     render(options = {}) {
         if (!this.gridManager) return;
 
-        const totalCells = this.gridManager.width * this.gridManager.height;
-        const fullRender = options.force
-            || this._isFirstRender
-            || this._dirtyCells.size === 0
-            || this._dirtyCells.size > totalCells * 0.3;
-
-        if (fullRender) {
-            this._renderFull();
-            this._isFirstRender = false;
-        } else {
-            this._renderDirty();
-        }
-
+        // TriangleRenderer siempre usa _renderFull: la geometría triangular hace que
+        // el dirty render produzca artefactos de borde inevitables (los bounding boxes
+        // de triángulos adyacentes se solapan, el stroke no coincide con la grilla real,
+        // y el antialiasing sangra fuera del path). _renderFull con offscreen blit
+        // es O(cols×rows) fills + O(1) drawImage — suficientemente eficiente.
+        this._renderFull();
+        this._isFirstRender = false;
         this._dirtyCells.clear();
     }
 
@@ -122,13 +134,12 @@ class TriangleRenderer {
         ctx.fillStyle = this.colorDead;
         ctx.fillRect(0, 0, width, height);
 
-        // Grid de fondo
+        // Grid de fondo — blit del offscreen, O(1) por frame
         if (this.showGrid) {
-            this._drawBackgroundGrid();
+            if (this._gridDirty) this._buildGridOffscreen();
+            if (this._gridOffscreen) ctx.drawImage(this._gridOffscreen, 0, 0);
         }
 
-        // Dibujar celdas vivas
-        ctx.fillStyle = this.colorAlive;
         ctx.strokeStyle = this.colorGrid;
         ctx.lineWidth = 0.5;
 
@@ -137,158 +148,150 @@ class TriangleRenderer {
 
         for (let r = 0; r < this.gridManager.height; r++) {
             for (let q = 0; q < this.gridManager.width; q++) {
-                if (this.gridManager.grid[q][r] === 1) {
-                    const pos = this.gridManager.toCartesian(q, r, this.cellSize);
-                    const path = pos.orientation === 'up' ? pathUp : pathDown;
+                const state = this.gridManager.grid[q][r];
+                const color = this._cellColor(q, r, state);
+                if (!color) continue;
 
-                    ctx.save();
-                    ctx.translate(pos.x, pos.y);
-                    ctx.fill(path);
-                    ctx.stroke(path);
-                    ctx.restore();
-                }
+                const pos = this.gridManager.toCartesian(q, r, this.cellSize);
+                const path = pos.orientation === 'up' ? pathUp : pathDown;
+
+                ctx.fillStyle = color;
+                ctx.save();
+                ctx.translate(pos.x, pos.y);
+                ctx.fill(path);
+                if (this.showGrid) ctx.stroke(path);
+                ctx.restore();
             }
         }
     }
 
-    _drawBackgroundGrid() {
-        const ctx = this.ctx;
+    /**
+     * Construye el offscreen canvas de grilla triangular.
+     *
+     * Coordenadas reales (toCartesian): celda (q,r) → translate(q×w, r×h), w=size/2
+     *   △UP  paths:   top=(w,0), bl=(0,h), br=(2w,h)
+     *   △DOWN paths:  tl=(0,0),  tr=(2w,0), bot=(w,h)
+     *
+     * Las 3 familias de aristas son continuas (sin gaps):
+     *
+     *   H  — Horizontales: y = r×h  para r=0..rows
+     *         (top de UP y DOWN de cada fila, coincide con bot del row anterior)
+     *
+     *   ↙  — Diagonal slope −√3 (top→bot-left de △UP):  x + y/√3 = xi = k×w
+     *         k ∈ [1, ceil((cw + ch/√3) / w)]
+     *         moveTo(xi, 0) → lineTo(xi − ch/√3, ch)
+     *
+     *   ↘  — Diagonal slope +√3 (top→bot-right de △UP):  x − y/√3 = xi = k×w
+     *         k ∈ [ceil(−ch/√3 / w), floor(cw / w)]
+     *         moveTo(xi, 0) → lineTo(xi + ch/√3, ch)
+     *
+     * Canvas recorta automáticamente → moveTo siempre en y=0, sin clipping manual.
+     * Coste: O(cols + rows) líneas, 3 strokes. Coste por frame: O(1) via drawImage.
+     */
+    _buildGridOffscreen() {
+        if (!this.gridManager) return;
+
+        const cw = this.canvas.width;
+        const ch = this.canvas.height;
+
+        if (!this._gridOffscreen) {
+            this._gridOffscreen = document.createElement('canvas');
+            this._gridOffscreenCtx = this._gridOffscreen.getContext('2d', {alpha: true});
+        }
+        if (this._gridOffscreen.width !== cw || this._gridOffscreen.height !== ch) {
+            this._gridOffscreen.width = cw;
+            this._gridOffscreen.height = ch;
+        }
+
+        const octx = this._gridOffscreenCtx;
+        octx.clearRect(0, 0, cw, ch);
+
+        if (!this.showGrid) {
+            this._gridDirty = false;
+            return;
+        }
+
         const size = this.cellSize;
         const h = size * Math.sqrt(3) / 2;
         const w = size / 2;
-        const width = this.canvas.width;
-        const height = this.canvas.height;
-        const gm = this.gridManager;
-        const step = this.gridStep;
+        const SQRT3 = Math.sqrt(3);
+        const rows = this.gridManager.height;
 
-        ctx.strokeStyle = this.colorGrid;
-        ctx.lineWidth = 0.5;
-        ctx.beginPath();
+        octx.strokeStyle = this.colorGrid;
+        octx.lineWidth = 0.5;
 
-        // 1. LÍNEAS HORIZONTALES - en y = r * h para r múltiplo de step
-        for (let r = 0; r <= gm.height; r += step) {
+        // ── Familia H: horizontales y = r×h ──────────────────────────────
+        octx.beginPath();
+        for (let r = 0; r <= rows; r++) {
             const y = r * h;
-            if (y > height) break;
-            ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
+            if (y > ch) break;
+            octx.moveTo(0, y);
+            octx.lineTo(cw, y);
         }
+        octx.stroke();
 
-        // 2. DIAGONALES ↘ (\) - pasan por vértices donde (col + row) es impar
-        // col = x/w, row = y/h
-        // Ecuación: x/w + y/h = impar, o x/w - y/h = impar (para la otra dirección)
-
-        // Para \: y = -√3(x - x0), pasa por (x0, 0)
-        // En celda (q,r), vértice superior de △ está en x = (q+1)*w, y = r*h
-        // y (q+1) + r debe ser impar para que sea vértice de △
-
-        // Generar líneas \ que pasan por la fila superior (y=0) en x = k*step*w
-        // pero desplazadas para coincidir con vértices: x = w, 3w, 5w... = (2k+1)*w
-
-        const xOffsetDiag = w;  // Empezar en primera línea de vértices
-
-        for (let k = -Math.ceil(height / h); k <= Math.ceil(width / w) + 1; k += step) {
-            // Línea que pasa por (xOffsetDiag + k*2*w, 0) si k es par... no
-            // Simplemente: xBase = (2k+1)*w para cubrir todos los vértices
-
-            const xBase = xOffsetDiag + k * 2 * w;  // w, 3w, 5w, ... o desplazado
-
-            // Encontrar segmento visible
-            const pts = [];
-
-            // y = -√3 * (x - xBase)
-
-            // x=0: y = √3 * xBase
-            const yLeft = Math.sqrt(3) * xBase;
-            if (yLeft >= 0 && yLeft <= height) pts.push({x: 0, y: yLeft});
-
-            // x=width: y = -√3 * (width - xBase)
-            const yRight = -Math.sqrt(3) * (width - xBase);
-            if (yRight >= 0 && yRight <= height) pts.push({x: width, y: yRight});
-
-            // y=0: x = xBase
-            if (xBase >= 0 && xBase <= width) pts.push({x: xBase, y: 0});
-
-            // y=height: x = xBase - height/√3 = xBase - h*2*w/h = xBase - 2w? No
-            // height/√3 = height * w / h = (gm.height * h) * w / h = gm.height * w
-            const xBottom = xBase - height / Math.sqrt(3);
-            if (xBottom >= 0 && xBottom <= width) pts.push({x: xBottom, y: height});
-
-            if (pts.length >= 2) {
-                pts.sort((a, b) => a.x - b.x);
-                ctx.moveTo(pts[0].x, pts[0].y);
-                ctx.lineTo(pts[1].x, pts[1].y);
+        // ── Familia ↙: slope −√3, x + y/√3 = k×w ────────────────────────
+        // Solo k impares — las aristas reales tienen k=q+r+1 (UP, q+r par→k impar)
+        // y k=q+r+2 (DOWN, q+r impar→k impar). Los k pares son líneas espurias.
+        {
+            const kMax = Math.ceil((cw + ch / SQRT3) / w);
+            octx.beginPath();
+            for (let k = 1; k <= kMax; k += 2) {
+                const xi = k * w;
+                octx.moveTo(xi, 0);
+                octx.lineTo(xi - ch / SQRT3, ch);
             }
+            octx.stroke();
         }
 
-        // 3. DIAGONALES ↗ (/) - pendiente +√3
-        // y = √3 * (x - xBase)
-
-        for (let k = -Math.ceil(height / h); k <= Math.ceil(width / w) + 1; k += step) {
-            const xBase = xOffsetDiag + k * 2 * w;  // Mismos xBase que \
-
-            const pts = [];
-
-            // y = √3 * (x - xBase)
-
-            // x=0: y = -√3 * xBase
-            const yLeft = -Math.sqrt(3) * xBase;
-            if (yLeft >= 0 && yLeft <= height) pts.push({x: 0, y: yLeft});
-
-            // x=width: y = √3 * (width - xBase)
-            const yRight = Math.sqrt(3) * (width - xBase);
-            if (yRight >= 0 && yRight <= height) pts.push({x: width, y: yRight});
-
-            // y=0: x = xBase
-            if (xBase >= 0 && xBase <= width) pts.push({x: xBase, y: 0});
-
-            // y=height: x = xBase + height/√3
-            const xBottom = xBase + height / Math.sqrt(3);
-            if (xBottom >= 0 && xBottom <= width) pts.push({x: xBottom, y: height});
-
-            if (pts.length >= 2) {
-                pts.sort((a, b) => a.x - b.x);
-                ctx.moveTo(pts[0].x, pts[0].y);
-                ctx.lineTo(pts[1].x, pts[1].y);
+        // ── Familia ↘: slope +√3, x − y/√3 = k×w ────────────────────────
+        // Solo k impares — k=q−r+1 (UP, q+r par→k impar) y k=q−r (DOWN, q+r impar→k impar).
+        {
+            const kMin = Math.ceil(-ch / SQRT3 / w);
+            const kMax = Math.floor(cw / w);
+            const kStart = (kMin % 2 !== 0) ? kMin : kMin + 1;  // primer k impar
+            octx.beginPath();
+            for (let k = kStart; k <= kMax; k += 2) {
+                const xi = k * w;
+                octx.moveTo(xi, 0);
+                octx.lineTo(xi + ch / SQRT3, ch);
             }
+            octx.stroke();
         }
 
-        ctx.stroke();
+        this._gridDirty = false;
     }
 
     _renderDirty() {
         const ctx = this.ctx;
         const size = this.cellSize;
-        const h = size * Math.sqrt(3) / 2;
         const pathUp = this._pathCache.get('up');
         const pathDown = this._pathCache.get('down');
         const gm = this.gridManager;
 
-        ctx.fillStyle = this.colorAlive;
-        ctx.strokeStyle = this.colorGrid;
         ctx.lineWidth = 0.5;
 
-        // Procesar celdas dirty
         for (const packed of this._dirtyCells) {
             const q = packed >>> 16;
             const r = packed & 0xFFFF;
 
             const state = gm.grid[q][r];
+            const color = this._cellColor(q, r, state);
             const pos = gm.toCartesian(q, r, size);
             const path = pos.orientation === 'up' ? pathUp : pathDown;
 
+            ctx.fillStyle = color ?? this.colorDead;
             ctx.save();
             ctx.translate(pos.x, pos.y);
-
-            if (state === 1) {
-                ctx.fill(path);
+            ctx.fill(path);
+            // stroke(path) con Path2D explícito — ctx.stroke() sin argumento usaría
+            // el current path del contexto (incorrecto), no el Path2D del fill.
+            ctx.strokeStyle = this.colorDead;
+            ctx.stroke(path);
+            if (this.showGrid) {
+                ctx.strokeStyle = this.colorGrid;
                 ctx.stroke(path);
-            } else {
-                // Clear: dibujar fondo local
-                ctx.fillStyle = this.colorDead;
-                ctx.fill(path);
-                ctx.fillStyle = this.colorAlive; // restore
             }
-
             ctx.restore();
         }
     }
@@ -307,6 +310,7 @@ class TriangleRenderer {
 
     toggleGrid() {
         this.showGrid = !this.showGrid;
+        this._gridDirty = true;
         this._isFirstRender = true;
         this.markAllDirty();
         return this.showGrid;
@@ -333,40 +337,112 @@ class TriangleRenderer {
         return this.gridManager.fromCartesian(x, y, this.cellSize);
     }
 
-    updateActivityAges(changedCells) {
-        const maxProcess = Math.min(changedCells.length, 100);
+    _cellColor(q, r, alive) {
+        if (!this.showActivityEffect) return alive ? this.colorAlive : null;
+        const idx = q * this.gridManager.height + r;
+        const cooldown = this._activityCooldown;
+        if (alive) return this._activityAges[idx] < cooldown ? this.colorBorn : this.colorAlive;
+        return this._dyingAges[idx] < cooldown ? this.colorDying : null;
+    }
 
-        for (let i = 0; i < maxProcess; i++) {
-            const c = changedCells[i];
-            const key = `${c.x},${c.y}`;
-            this._activityAges.set(key, 0);
+    _allocActivityArrays() {
+        if (!this.gridManager) return;
+        const total = this.gridManager.width * this.gridManager.height;
+        const cooldown = this._activityCooldown;
+        this._activityAges = new Uint8Array(total).fill(cooldown);
+        this._dyingAges = new Uint8Array(total).fill(cooldown);
+        this._coolingCells.clear();
+        this._dyingCells.clear();
+    }
+
+    /**
+     * Avanza contadores de actividad.
+     * Acepta packed ints (q<<16|r) de _stepSync, o {x,y} del worker.
+     * _activityAges usa índice plano (q*rows+r).
+     * _dirtyCells usa formato (q<<16)|r para compatibilidad con _renderDirty.
+     */
+    updateActivityAges(changedCells) {
+        if (!this.gridManager || !this._activityAges || !changedCells?.length) return;
+
+        const cooldown = this._activityCooldown;
+        const rows = this.gridManager.height;
+        const grid = this.gridManager.grid;
+
+        for (let i = 0; i < changedCells.length; i++) {
+            const cell = changedCells[i];
+            const q = (typeof cell === 'object') ? cell.x : (cell >>> 16);
+            const r = (typeof cell === 'object') ? cell.y : (cell & 0xFFFF);
+            const idx = q * rows + r;
+
+            if (grid[q]?.[r]) {
+                this._activityAges[idx] = 0;
+                this._coolingCells.add(idx);
+                this._dyingAges[idx] = cooldown;
+                this._dyingCells.delete(idx);
+            } else {
+                this._dyingAges[idx] = 0;
+                this._dyingCells.add(idx);
+                this._activityAges[idx] = cooldown;
+                this._coolingCells.delete(idx);
+            }
+        }
+
+        for (const idx of this._coolingCells) {
+            this._activityAges[idx]++;
+            if (this._activityAges[idx] >= cooldown) {
+                this._coolingCells.delete(idx);
+                const q = (idx / rows) | 0, r = idx % rows;
+                this._dirtyCells.add((q << 16) | r);
+            }
+        }
+
+        for (const idx of this._dyingCells) {
+            this._dyingAges[idx]++;
+            if (this._dyingAges[idx] >= cooldown) {
+                this._dyingCells.delete(idx);
+                const q = (idx / rows) | 0, r = idx % rows;
+                this._dirtyCells.add((q << 16) | r);
+            }
         }
     }
 
     resetActivity() {
-        this._activityAges.clear();
+        if (this._activityAges) this._activityAges.fill(this._activityCooldown);
+        if (this._dyingAges) this._dyingAges.fill(this._activityCooldown);
+        this._coolingCells.clear();
+        this._dyingCells.clear();
         this._isFirstRender = true;
         this.markAllDirty();
     }
 
     getConfig(key) {
         if (key === 'showGrid') return this.showGrid;
-        if (key === 'showActivityEffect') return true;
+        if (key === 'showActivityEffect') return this.showActivityEffect;
         return undefined;
     }
 
     setConfig(key, value) {
         if (key === 'showGrid') {
             this.showGrid = value;
-            this._isFirstRender = true; // Forzar redraw al cambiar config
+            this._gridDirty = true;
+            this._isFirstRender = true;
             this.markAllDirty();
+        } else if (key === 'showActivityEffect') {
+            this.showActivityEffect = value;
+            if (!value) this.resetActivity();
+            this._isFirstRender = true;
         }
     }
 
     destroy() {
         this.gridManager = null;
+        this._activityAges = null;
+        this._dyingAges = null;
+        this._gridOffscreen = null;
+        this._gridOffscreenCtx = null;
+        this._coolingCells.clear();
+        this._dyingCells.clear();
         this._dirtyCells.clear();
-        this._activityAges.clear();
         this._pathCache.clear();
     }
 }
