@@ -154,8 +154,8 @@ class GridController {
             const wrapper = document.querySelector('.canvas-wrapper');
             if (!wrapper) return;
             const rect = wrapper.getBoundingClientRect();
-            availW = Math.floor(rect.width - 20 - MARGIN);
-            availH = Math.floor(rect.height - 20 - MARGIN);
+            availW = Math.floor(rect.width - AppConfig.GRID.CANVAS_MARGIN - MARGIN);
+            availH = Math.floor(rect.height - AppConfig.GRID.CANVAS_MARGIN - MARGIN);
         }
 
         if (availW <= 0 || availH <= 0) return;

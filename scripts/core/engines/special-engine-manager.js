@@ -253,12 +253,11 @@ class SpecialEngineManager {
             // El cssHeight lo calcula el renderer internamente como bitmapH × 2/√3,
             // lo que produce triángulos equiláteros correctos sin importar el historial
             // de cambios de cellSize. No se necesita targetHeight externo.
-            // Respetar el cellSize actual del usuario sin modificarlo.
-            // ETA y Hex adaptan su número de filas/columnas al cellSize (no al revés):
-            // activateTriangleMode / activateHexMode calculan las dims del grid que caben
-            // al cs heredado. Validar cs contra _getGridWidth() del grid rectangular
-            // anterior es incorrecto — la geometría triangular necesita mucho más ancho
-            // por celda y produciría un maxFit artificialmente bajo que forzaría cs a 1.
+            // Respetar el cellSize actual sin modificarlo: ETA adapta sus dims al cs
+            // heredado (activateTriangleMode calcula gw/gh que caben al cs actual).
+            // Validar cs contra las dims del grid rectangular anterior es incorrecto —
+            // la geometría triangular necesita distinto espacio por celda y produciría
+            // un maxFit artificialmente bajo que forzaría cs a 1 entre cambios de modo.
             const currentCs = this._getCellSize();
             const fittedCellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
                 Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
@@ -266,7 +265,7 @@ class SpecialEngineManager {
             const rendererOptions = {
                 canvas, container,
                 cellSize: fittedCellSize,
-                showGrid: this._originalRenderer?.getConfig('showGrid') ?? true,
+                showGrid: this._getRenderer()?.getConfig('showGrid') ?? false,
                 colorAlive: '#ec4899',
                 colorDead: '#0f172a',
                 colorGrid: 'rgba(255,255,255,0.1)'
@@ -311,29 +310,19 @@ class SpecialEngineManager {
             const ctx2d = canvas.getContext('2d');
             if (ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
 
-            // ── Medir área disponible desde el canvas-wrapper (igual que grid-autofit) ──
-            // Usar getBoundingClientRect sobre el contenedor real evita que canvas.width
-            // (que refleja el tamaño del grid rectangular anterior) produzca cálculos
-            // erróneos que generan scroll o canvas demasiado grandes.
-            const wrapper = document.querySelector('.canvas-wrapper');
-            const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : null;
-            const availW = wrapperRect ? Math.floor(wrapperRect.width - 20) : canvas.width;
-            const availH = wrapperRect ? Math.floor(wrapperRect.height - 20) : canvas.height;
-
-            // Calcular cellSize que cabe en el área disponible.
-            // Respetar el cellSize actual del usuario; reducir solo si es necesario.
+            // Respetar el cellSize actual sin modificarlo: Hex adapta sus dims al cs
+            // heredado (activateHexMode calcula hexCols/hexRows que caben al cs actual).
+            // Validar cs contra _getGridWidth() del grid rectangular es incorrecto —
+            // la geometría hex es √3× más ancha por columna y daría un maxFit bajo
+            // que forzaría cs a 1 entre cambios de modo.
             const currentCs = this._getCellSize();
-            // Mismo principio que ETA: el grid hex adapta sus dimensiones al cellSize,
-            // no al revés. activateHexMode calcula hexCols/hexRows que caben al cs
-            // heredado. Usar _getGridWidth() del grid rectangular anterior produciría
-            // un maxFit incorrecto (geometría hex es ~√3× más ancha por columna).
             const cs = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
                 Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
 
             const hexRenderer = new HexRenderer({
                 canvas, container,
                 cellSize: cs,
-                showGrid: this._originalRenderer?.getConfig('showGrid') ?? false,
+                showGrid: this._getRenderer()?.getConfig('showGrid') ?? false,
                 colorAlive: '#f59e0b',
                 colorDead: '#0f172a',
                 colorGrid: 'rgba(255,255,255,0.1)',
