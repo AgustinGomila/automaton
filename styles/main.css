@@ -1658,6 +1658,16 @@ canvas {
     background: #d97706;
 }
 
+#applyHexRuleBtn {
+    background: var(--warning);
+    color: white;
+    width: 100%;
+}
+
+#applyHexRuleBtn:hover {
+    background: #d97706;
+}
+
 /* ============================================================
    GRILLA DE VECINDAD PERSONALIZADA
    ============================================================ */

@@ -130,6 +130,18 @@ class SpecialModeController {
             });
         });
 
+        // Botón "Aplicar Regla" — aplica los valores manuales de hexBirth/hexSurvival
+        this._addEventListener(
+            document.getElementById('applyHexRuleBtn'), 'click', () => {
+                if (!this.automaton.hexEngine?.isActive) return;
+                const birth = this._readHexBirth();
+                const survival = this._readHexSurvival();
+                this.automaton.hexEngine.setRule(birth, survival);
+                this._ui.updateModeIndicator(SpecialEngineManager.MODES.HEXAGONAL);
+                this._onUpdateHeader();
+            }
+        );
+
         // Toggle Langton
         const langtonToggle = document.getElementById('langtonToggle');
         if (langtonToggle) {
