@@ -3,7 +3,7 @@
 ![EN](https://flagcdn.com/w20/gb.png) English — ![ES](https://flagcdn.com/w20/es.png) [Español](README.md)
 
 An interactive cellular automaton simulator that runs entirely in the browser, with no dependencies or build system.
-Supports classic 2D B/S automata, seven special engines, independent rectangular grids, full grid editing, and ES/EN
+Supports classic 2D B/S automata, eight special engines, independent rectangular grids, full grid editing, and ES/EN
 internationalization.
 
 **[Try it live](https://agustingomila.github.io/automaton/)**
@@ -32,6 +32,8 @@ internationalization.
 - **Langton's Ant** — Multi-agent, multi-color with configurable rules and presets
 - **WireWorld** — Electronic circuit simulation with 4 states (empty, head, tail, conductor); free drawing, import and
   export in MCL format
+- **Hexagonal** — Life-like automaton on a hexagonal grid (6 neighbors, odd-r offset coordinates); B/S rules with
+  digits 0–6, built-in presets, and free drawing on the hex geometry
 
 ### Editing and Interaction
 
@@ -145,12 +147,17 @@ automaton/
 ├── ulam-warburton-engine.js         # Ulam-Warburton fractal
 ├── langton-engine.js                # Multi-agent Langton's Ant
 ├── wireworld-engine.js              # WireWorld (4 states: empty, head, tail, conductor)
+├── hex-engine.js                    # Hexagonal Life-like automaton (B/S rules, 6 neighbors, odd-r)
+├── hex-grid-manager.js              # Hexagonal grid with pointy-top geometry and odd-r neighborhood
+├── hex-worker.js                    # Worker for hexagonal engine computation
+├── hex-worker-manager.js            # Hexagonal worker manager
 │
 ├── -- Rendering --
 ├── grid-renderer.js                 # Canvas 2D renderer with dirty rendering and effects
 ├── wasm-renderer.js                 # WASM module for fill_full/fill_dirty (zero-copy with ImageData)
 ├── triangle-renderer.js             # Canvas 2D renderer for triangular grid
 ├── triangle-webgl2-renderer.js      # WebGL2 renderer for triangular grid
+├── hex-renderer.js                  # Canvas 2D renderer for hexagonal grid (Path2D cached per zoom level)
 ├── automaton-worker.js              # Worker for standard grid computation
 ├── grid-worker-manager.js           # Standard worker manager
 │

@@ -291,12 +291,12 @@ class CellularAutomaton {
         this._engineManager.generationsEngine = v;
     }
 
-    get _originalRenderer() {
-        return this._engineManager._originalRenderer;
+    get hexEngine() {
+        return this._engineManager.hexEngine;
     }
 
-    set _originalRenderer(v) {
-        this._engineManager._originalRenderer = v;
+    set hexEngine(v) {
+        this._engineManager.hexEngine = v;
     }
 
     get worker() {
@@ -680,6 +680,16 @@ class CellularAutomaton {
             // Pasar las dimensiones rectangulares reales para que el engine
             // calcule triWidth = gw*2, triHeight = gh y preserve las proporciones.
             this.triangleEngine.resize(w, h);
+        } else if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.isActive) {
+            // Redimensionar el gridManager y recrear el back-buffer (_newGrid).
+            // Sin este paso, _stepSync crashea con "Cannot set properties of undefined"
+            // porque _newGrid tiene dims anteriores y next[c] es undefined.
+            this.hexEngine.gridManager?.resize(w, h);
+            this.hexEngine._newGrid = Array.from(
+                {length: this.hexEngine.gridManager.width},
+                () => new Uint8Array(this.hexEngine.gridManager.height)
+            );
+            this.renderer.setGridManager?.(this.hexEngine.gridManager);
         } else {
             this.renderer.resize(this.gridWidth, this.gridHeight, this.cellSize);
         }
@@ -698,7 +708,8 @@ class CellularAutomaton {
         this.render();
 
         if (Math.max(w, h) >= AppConfig.WORKER.THRESHOLD &&
-            this.specialMode !== SpecialEngineManager.MODES.TRIANGLE) {
+            this.specialMode !== SpecialEngineManager.MODES.TRIANGLE &&
+            this.specialMode !== SpecialEngineManager.MODES.HEXAGONAL) {
             // Reinicializar worker con las nuevas dimensiones
             this._initWorker();
         } else {
@@ -894,6 +905,9 @@ class CellularAutomaton {
         if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
             return this.renderer.getCellFromMouse(clientX, clientY);
         }
+        if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.isActive) {
+            return this.renderer.getCellFromMouse(clientX, clientY);
+        }
         return this.renderer.getCellFromMouse({clientX, clientY});
     }
 
@@ -904,6 +918,16 @@ class CellularAutomaton {
                 this.renderer.markDirty(coords.q, coords.r);
                 this.render();
                 this.updateStats(this.triangleEngine.gridManager.countPopulation());
+            }
+            return !!changed;
+        }
+        if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.isActive) {
+            // HexRenderer usa {col, row}; HexGridManager.fromPixel devuelve esa forma
+            const changed = this.hexEngine.gridManager.setCell(coords.col, coords.row, state);
+            if (changed) {
+                this.renderer.markDirty(coords.col, coords.row);
+                this.render();
+                this.updateStats(this.hexEngine.gridManager.countPopulation());
             }
             return !!changed;
         }

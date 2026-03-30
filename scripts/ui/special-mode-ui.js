@@ -53,6 +53,10 @@ class SpecialModeUI {
         this.toggleControls('triangleControls', show);
     }
 
+    toggleHexControls(show) {
+        this.toggleControls('hexControls', show);
+    }
+
     toggleRD2DControls(show) {
         this.toggleControls('.rd2d-info', show, {cssQuery: true, toggleClass: false});
     }
@@ -150,6 +154,12 @@ class SpecialModeUI {
                 const info = this.automaton.triangleEngine.getInfo();
                 indicator.className = 'mode-indicator triangle-mode';
                 indicator.innerHTML = `<i class="fa-solid fa-play"></i> ETA R${info.rule}`;
+                break;
+            }
+            case SpecialEngineManager.MODES.HEXAGONAL: {
+                const info = this.automaton.hexEngine?.getInfo();
+                indicator.className = 'mode-indicator hex-mode';
+                indicator.innerHTML = `<i class="fas fa-hexagon"></i> Hex ${info?.ruleString ?? ''}`;
                 break;
             }
             case SpecialEngineManager.MODES.WOLFRAM: {

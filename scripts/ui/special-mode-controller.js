@@ -97,6 +97,32 @@ class SpecialModeController {
             });
         }
 
+        // Toggle Hexagonal
+        const hexToggle = document.getElementById('hexToggle');
+        if (hexToggle) {
+            this._addEventListener(hexToggle, 'change', () => {
+                if (this._suppressToggleEvents) return;
+                if (hexToggle.checked) {
+                    this.activateHexMode();
+                } else {
+                    this.deactivateHexMode();
+                }
+            });
+        }
+
+        // Presets Hexagonal
+        document.querySelectorAll('.btn-preset[data-hex-birth][data-hex-survival]').forEach(btn => {
+            this._addEventListener(btn, 'click', () => {
+                const birth = btn.dataset.hexBirth.split('').map(Number);
+                const survival = btn.dataset.hexSurvival.split('').map(Number);
+                if (this.automaton.hexEngine?.isActive) {
+                    this.automaton.hexEngine.setRule(birth, survival);
+                    this._ui.updateModeIndicator(SpecialEngineManager.MODES.HEXAGONAL);
+                    this._onUpdateHeader();
+                }
+            });
+        });
+
         // Toggle Langton
         const langtonToggle = document.getElementById('langtonToggle');
         if (langtonToggle) {
@@ -634,6 +660,12 @@ class SpecialModeController {
                 deactivate: () => this._deactivateTriangleEngine()
             },
             {
+                name: SpecialEngineManager.MODES.HEXAGONAL,
+                toggleId: 'hexToggle',
+                hideControls: () => this._ui.toggleHexControls(false),
+                deactivate: () => this._deactivateHexEngine()
+            },
+            {
                 name: SpecialEngineManager.MODES.ULAM_WARBURTON,
                 toggleId: 'uwToggle',
                 hideControls: () => {
@@ -699,6 +731,107 @@ class SpecialModeController {
      */
     _deactivateTriangleEngine() {
         this.automaton._engineManager.deactivateTriangle();
+    }
+
+    _deactivateHexEngine() {
+        this.automaton._engineManager.deactivateHex();
+    }
+
+    // ─── Modo Hexagonal ───────────────────────────────────────────────────
+
+    /**
+     * Activa el modo hexagonal con la regla B/S leída del DOM.
+     */
+    async activateHexMode() {
+        if (!this.automaton?.grid) {
+            this._onShowNotification(t('notif.automata.error'), 'warning', 3000);
+            return;
+        }
+        try {
+            await this._prepareEngine(SpecialEngineManager.MODES.HEXAGONAL);
+
+            this._ui.toggleHexControls(true);
+            this._ui.setModeSelectors(true);
+
+            const birth = this._readHexBirth();
+            const survival = this._readHexSurvival();
+            const wrap = document.getElementById('wrapToggle')?.checked ?? true;
+            const cs = this.automaton.cellSize;   // ya fue ajustado por special-engine-manager
+            const SQRT3 = Math.sqrt(3);
+
+            // Medir área disponible para calcular dimensiones del grid hex
+            const wrapper = document.querySelector('.canvas-wrapper');
+            const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : null;
+            const availW = wrapperRect ? Math.floor(wrapperRect.width - 20) : 400;
+            const availH = wrapperRect ? Math.floor(wrapperRect.height - 20) : 400;
+            const hexCols = Math.max(10, Math.min(2000,
+                Math.floor((availW - cs * SQRT3 / 2) / (cs * SQRT3))
+            ));
+            const hexRows = Math.max(10, Math.min(2000,
+                Math.floor((availH - cs * 0.5) / (cs * 1.5))
+            ));
+
+            // 1. Activar el engine: crea un HexGridManager del tamaño del grid rectangular actual
+            this.automaton.hexEngine.activate({birth, survival, wrap});
+
+            // 2. Redimensionar el gridManager propio del engine al tamaño hex calculado.
+            //    Evita llamar automaton.resizeGrid() que: a) dispara renderer.resize(gw,gh,cs)
+            //    con la firma incorrecta, b) emite eventos de resize que interfieren, y
+            //    c) no tiene sentido porque el grid rectangular y el hex son estructuras separadas.
+            this.automaton.hexEngine.gridManager.resize(hexCols, hexRows);
+            this.automaton.hexEngine._newGrid = Array.from(
+                {length: hexCols}, () => new Uint8Array(hexRows)
+            );
+
+            // 3. Inicializar desde el estado actual del grid rectangular (copia lo que cabe)
+            this.automaton.hexEngine._initializeFromAutomaton();
+            this.automaton.hexEngine.initialized = true;
+
+            // 4. Conectar HexRenderer con el HexGridManager del engine.
+            //    setGridManager() llama _resizeCanvas() → dimensiona el canvas exacto,
+            //    después rellena el fondo y fuerza _isFirstRender = true.
+            const hexRenderer = this.automaton._engineManager._getRenderer();
+            hexRenderer.setGridManager(this.automaton.hexEngine.gridManager);
+
+            // Resetear contadores de generación tanto del engine como del autómata
+            this.automaton.hexEngine.generation = 0;
+            this.automaton.generation = 0;
+
+            const ruleStr = `B${birth.join('')}/S${survival.join('')}`;
+            this._finalizeActivation(
+                SpecialEngineManager.MODES.HEXAGONAL,
+                t('notif.hex.enabled', {rule: ruleStr}),
+                true   // skipResize — renderer propio
+            );
+        } catch (error) {
+            console.error('Error cargando HexEngine:', error);
+            this._onShowNotification(t('notif.hex.error'), 'warning', 3000);
+            this.deactivateHexMode();
+        }
+    }
+
+    deactivateHexMode() {
+        this.automaton.specialMode = null;
+        this.automaton.generation = 0;
+        const gw = this.automaton.gridWidth;
+        const gh = this.automaton.gridHeight;
+        for (let x = 0; x < gw; x++)
+            for (let y = 0; y < gh; y++)
+                this.automaton.grid[x][y] = 0;
+        this.automaton._markAllDirty();
+        this._returnToStandard();
+    }
+
+    /** Lee los valores de birth del DOM hexagonal */
+    _readHexBirth() {
+        const val = document.getElementById('hexBirth')?.value ?? '2';
+        return [...new Set(val.split('').map(Number).filter(n => n >= 0 && n <= 6))].sort((a, b) => a - b);
+    }
+
+    /** Lee los valores de survival del DOM hexagonal */
+    _readHexSurvival() {
+        const val = document.getElementById('hexSurvival')?.value ?? '34';
+        return [...new Set(val.split('').map(Number).filter(n => n >= 0 && n <= 6))].sort((a, b) => a - b);
     }
 
     /**

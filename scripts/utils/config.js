@@ -40,6 +40,13 @@ window.AppConfig = Object.freeze({
 
         /** Resaltado de líneas principales activado por defecto. */
         DEFAULT_SHOW_HIGHLIGHTS: false,
+
+        /**
+         * Padding del #canvas-container (10px × 2 lados = 20px) que se descuenta
+         * del área disponible al calcular cuántas celdas caben en pantalla.
+         * Debe coincidir con la propiedad padding del selector #canvas-container en main.css.
+         */
+        CANVAS_MARGIN: 20,
     }),
 
     // =========================================================================
@@ -105,5 +112,4 @@ window.AppConfig = Object.freeze({
         /** Radio máximo. */
         MAX_RADIUS: 10,
     }),
-
 });

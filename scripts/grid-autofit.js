@@ -49,10 +49,9 @@
         if (!wrapper) return null;
 
         const rect = wrapper.getBoundingClientRect();
-        // Descontar el padding del #canvas-container (10px × 2 lados)
-        const containerPadding = 20;
-        const w = Math.floor(rect.width - containerPadding - MARGIN_PX);
-        const h = Math.floor(rect.height - containerPadding - MARGIN_PX);
+        // Descontar el padding del #canvas-container (AppConfig.GRID.CANVAS_MARGIN)
+        const w = Math.floor(rect.width - AppConfig.GRID.CANVAS_MARGIN - MARGIN_PX);
+        const h = Math.floor(rect.height - AppConfig.GRID.CANVAS_MARGIN - MARGIN_PX);
         return (w > 0 && h > 0) ? {w, h} : null;
     }
 
