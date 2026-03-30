@@ -194,16 +194,12 @@ class HexRenderer {
         if (!this._geom || !this._hexPath) this._rebuildPath();
         if (!this._geom) return;
 
-        const total = this.gridManager.width * this.gridManager.height;
-        const force = options.force || this._isFirstRender
-            || this._dirtyCells.size > total * 0.3;
-
-        if (force) {
-            this._renderFull();
-            this._isFirstRender = false;
-        } else {
-            this._renderDirty();
-        }
+        // HexRenderer siempre usa _renderFull: el dirty render produce artefactos
+        // de borde porque el stroke del hexágono no coincide con las líneas reales
+        // de la grilla (intermitentes, no contornos hexagonales completos).
+        // _renderFull con offscreen blit es suficientemente eficiente.
+        this._renderFull();
+        this._isFirstRender = false;
         this._dirtyCells.clear();
     }
 
