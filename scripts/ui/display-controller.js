@@ -119,6 +119,19 @@ class DisplayController {
                 break;
             }
 
+            case M.HEXAGONAL: {
+                const hi = info;
+                this._setTitle(t('app.title.hex', {rule: hi?.ruleString ?? ''}));
+                this._setH1('fas fa-hexagon', t('header.title', {ruleName: `Hex ${hi?.ruleString ?? ''}`}));
+                this._setRulesSpecific(`
+                    <p><span class="birth"><i class="fas fa-seedling"></i> ${t('header.rules.birth')}</span> ${hi?.birth?.join(', ') ?? ''} ${t('header.rules.neighbors')}</p>
+                    <p><span class="survival"><i class="fas fa-heart"></i> ${t('header.rules.survival')}</span> ${hi?.survival?.join(', ') ?? ''} ${t('header.rules.neighbors')}</p>
+                    <p class="notation">${t('header.rules.notation')} <span class="highlight">${hi?.ruleString ?? ''}</span></p>
+                `);
+                this._setNeighborhoodText(t('hex.neighborhood', {wrap}));
+                break;
+            }
+
             default: { // STANDARD
                 const selector = document.getElementById('ruleSelector');
                 if (!selector) break;
@@ -160,6 +173,7 @@ class DisplayController {
             [M.WOLFRAM]: `<i class="fas fa-dice"></i> ${t('wolfram.neighborhood', {wrap})}`,
             [M.RD2D]: `<i class="fas fa-border-style"></i> ${t('rd2d.neighborhood', {wrap})}`,
             [M.TRIANGLE]: `<i class="fa-solid fa-play"></i> ${t('triangle.neighborhood', {wrap})}`,
+            [M.HEXAGONAL]: `<i class="fas fa-hexagon"></i> ${t('hex.neighborhood', {wrap})}`,
             [M.ULAM_WARBURTON]: `<i class="fas fa-snowflake"></i> ${t('uw.neighborhood', {wrap})}`,
         };
 
