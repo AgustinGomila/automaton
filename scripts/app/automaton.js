@@ -393,6 +393,7 @@ class CellularAutomaton {
                 eventBus.emit('automaton:neighborhoodChanged', event.info);
                 break;
             case 'randomize':
+                this.renderer.resetActivity();
                 this.renderer.markAllDirty();
                 eventBus.emit('automaton:randomized', event);
                 break;
