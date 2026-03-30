@@ -6,20 +6,31 @@
  *   - Dirty render para actualizaciones parciales — redibuja solo las celdas cambiadas.
  *   - Path2D cacheado por cellSize — reconstruido solo al cambiar el zoom.
  *
+ * Efecto de actividad (showActivityEffect):
+ *   Cuando está activo, las celdas se colorean según su estado de transición:
+ *     born  (0→1): colorBorn   durante ACTIVITY_COOLDOWN generaciones
+ *     alive (1→1): colorAlive  (estado neutro)
+ *     dying (1→0): colorDying  durante ACTIVITY_COOLDOWN generaciones
+ *   Se mantienen dos arrays paralelos Uint8Array: _activityAges y _dyingAges.
+ *   La lógica es idéntica a GridRenderer.updateActivityAges.
+ *
  * Grilla — offscreen canvas (sin DOM):
  *   Se construye una sola vez por resize/zoom/toggle en _buildGridOffscreen().
  *   En cada _renderFull() se blita con drawImage() — O(1) por frame.
- *   En _renderDirty() cada celda sucia re-strokea solo su propio contorno.
+ *   Las aristas se representan con 3 familias de líneas rectas intermitentes:
+ *     A) Verticales  x = n×halfW
+ *     B) Diagonal ↘  x − y√3 = n×halfW  (n impar)
+ *     C) Diagonal ↗  x + y√3 = n×halfW  (n impar)
+ *   → O(cols + rows) líneas totales, cero costo por frame.
  *
  * Geometría (pointy-top, radio = size):
  *   w_celda  = size × √3
- *   h_celda  = size × 2
- *   paso_v   = size × 1.5      (solapamiento vertical entre filas)
- *   offset_r_impar = w/2       (desplazamiento horizontal filas impares)
+ *   paso_v   = size × 1.5
+ *   offset_r_impar = w/2
  *
  * Canvas:
- *   canvasW = cols × w_celda + w_celda/2   (filas impares sobresalen medio hex)
- *   canvasH = rows × paso_v + size × 0.5   (media celda en la última fila)
+ *   canvasW = cols × w + w/2
+ *   canvasH = rows × stepV + size × 0.5
  */
 class HexRenderer {
 
@@ -27,41 +38,52 @@ class HexRenderer {
      * @param {Object}  options
      * @param {HTMLCanvasElement} options.canvas
      * @param {HTMLElement|null}  options.container
-     * @param {number}  options.cellSize   — radio del hexágono
-     * @param {boolean} [options.showGrid=true]
+     * @param {number}  options.cellSize        — radio del hexágono
+     * @param {boolean} [options.showGrid]
+     * @param {boolean} [options.showActivityEffect]
      * @param {string}  [options.colorAlive]
      * @param {string}  [options.colorDead]
      * @param {string}  [options.colorGrid]
+     * @param {string}  [options.colorBorn]
+     * @param {string}  [options.colorDying]
      */
     constructor(options) {
         this.canvas = options.canvas;
         this.ctx = this.canvas.getContext('2d', {alpha: false});
         this.container = options.container;
         this.cellSize = options.cellSize || 8;
+
         this.showGrid = options.showGrid !== false;
+        this.showActivityEffect = options.showActivityEffect !== false;
+
         this.colorAlive = options.colorAlive || '#10b981';
         this.colorDead = options.colorDead || '#0f172a';
         this.colorGrid = options.colorGrid || 'rgba(255,255,255,0.08)';
+        this.colorBorn = options.colorBorn || AppConfig.RENDER.COLOR_BORN;
+        this.colorDying = options.colorDying || AppConfig.RENDER.COLOR_DYING;
 
         this.gridManager = null;
-        this._dirtyCells = new Set();   // índices planos col*rows+row
+        this._dirtyCells = new Set();
         this._isFirstRender = true;
 
-        // Path2D del hexágono unitario, cacheado por cellSize
+        // Actividad — mismo modelo que GridRenderer
+        this._activityCooldown = AppConfig.RENDER.ACTIVITY_COOLDOWN;
+        this._activityAges = null;   // Uint8Array: edad de nacimiento (0 = recién nacida)
+        this._dyingAges = null;   // Uint8Array: edad de muerte     (0 = recién muerta)
+        this._coolingCells = new Set();
+        this._dyingCells = new Set();
+
+        // Path2D y offsets de vértices cacheados por cellSize
         this._hexPath = null;
         this._cachedSize = 0;
-
-        // Offscreen canvas para la grilla — dibujado una sola vez, blitado por frame
-        this._gridOffscreen = null;    // HTMLCanvasElement fuera del DOM
-        this._gridOffscreenCtx = null;
-        this._gridDirty = true;    // true → rebuild antes del próximo render
-
-        // Vértices del hexágono relativos al centro (se recalculan con cellSize)
-        this._vx = null;   // Float64Array[6]
-        this._vy = null;   // Float64Array[6]
-
-        // Constantes geométricas derivadas de cellSize
+        this._vx = null;   // Float64Array[6] — offsets X de los 6 vértices
+        this._vy = null;   // Float64Array[6] — offsets Y de los 6 vértices
         this._geom = null;
+
+        // Offscreen canvas de grilla — construido una sola vez, blitado O(1) por frame
+        this._gridOffscreen = null;
+        this._gridOffscreenCtx = null;
+        this._gridDirty = true;
     }
 
     // ─── API pública ──────────────────────────────────────────────────────
@@ -70,6 +92,7 @@ class HexRenderer {
         this.gridManager = gm;
         this._rebuildPath();
         this._resizeCanvas();
+        this._allocActivityArrays();
         this._gridDirty = true;
         this._isFirstRender = true;
         this.markAllDirty();
@@ -80,6 +103,7 @@ class HexRenderer {
         this._rebuildPath();
         if (this.gridManager) {
             this._resizeCanvas();
+            this._allocActivityArrays();
             this._gridDirty = true;
             this._isFirstRender = true;
             this.markAllDirty();
@@ -97,12 +121,9 @@ class HexRenderer {
         this._dirtyCells.add(col * this.gridManager.height + row);
     }
 
-    updateActivityAges(changedCells) {
-        for (const {x, y} of changedCells) this.markDirty(x, y);
-    }
-
     getConfig(key) {
         if (key === 'showGrid') return this.showGrid;
+        if (key === 'showActivityEffect') return this.showActivityEffect;
         return false;
     }
 
@@ -111,7 +132,67 @@ class HexRenderer {
             this.showGrid = value;
             this._gridDirty = true;
             this._isFirstRender = true;
+        } else if (key === 'showActivityEffect') {
+            this.showActivityEffect = value;
+            if (!value) this.resetActivity();
+            this._isFirstRender = true;
         }
+    }
+
+    /**
+     * Avanza los contadores de actividad para las celdas que cambiaron de estado.
+     * Recibe Array<{x, y}> desde HexEngine._stepSync / _stepWorker.
+     * Lógica idéntica a GridRenderer.updateActivityAges.
+     */
+    updateActivityAges(changedCells) {
+        if (!this.gridManager || !this._activityAges) return;
+
+        const cooldown = this._activityCooldown;
+        const rows = this.gridManager.height;
+        const grid = this.gridManager.grid;
+
+        for (const {x, y} of changedCells) {
+            const idx = x * rows + y;
+            if (grid[x]?.[y]) {
+                // Nació: edad de nacimiento a 0, cancelar muerte pendiente
+                this._activityAges[idx] = 0;
+                this._coolingCells.add(idx);
+                this._dyingAges[idx] = cooldown;
+                this._dyingCells.delete(idx);
+            } else {
+                // Murió: edad de muerte a 0, cancelar nacimiento pendiente
+                this._dyingAges[idx] = 0;
+                this._dyingCells.add(idx);
+                this._activityAges[idx] = cooldown;
+                this._coolingCells.delete(idx);
+            }
+        }
+
+        // Avanzar cooldown de nacimientos
+        for (const idx of this._coolingCells) {
+            this._activityAges[idx]++;
+            if (this._activityAges[idx] >= cooldown) {
+                this._coolingCells.delete(idx);
+                this._dirtyCells.add(idx);
+            }
+        }
+
+        // Avanzar cooldown de muertes
+        for (const idx of this._dyingCells) {
+            this._dyingAges[idx]++;
+            if (this._dyingAges[idx] >= cooldown) {
+                this._dyingCells.delete(idx);
+                this._dirtyCells.add(idx);
+            }
+        }
+    }
+
+    resetActivity() {
+        if (this._activityAges) this._activityAges.fill(this._activityCooldown);
+        if (this._dyingAges) this._dyingAges.fill(this._activityCooldown);
+        this._coolingCells.clear();
+        this._dyingCells.clear();
+        this.markAllDirty();
     }
 
     render(options = {}) {
@@ -134,13 +215,8 @@ class HexRenderer {
 
     // ─── Render ───────────────────────────────────────────────────────────
 
-    /**
-     * Render completo: fondo → celdas vivas → grilla.
-     * La grilla se blita desde el offscreen canvas (O(1)) — se reconstruye
-     * solo cuando _gridDirty=true (resize, zoom, toggle).
-     */
     _renderFull() {
-        if (!this.ctx || !this._geom || !this._hexPath) return;
+        if (!this.ctx || !this._geom) return;
 
         const ctx = this.ctx;
         const {w, stepV, halfW} = this._geom;
@@ -152,30 +228,27 @@ class HexRenderer {
         ctx.fillStyle = this.colorDead;
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // 2. Celdas vivas — solo fill, sin stroke individual
-        ctx.fillStyle = this.colorAlive;
+        // 2. Celdas — color según estado de actividad si está activo
         for (let c = 0; c < cols; c++) {
             const col = grid[c];
             for (let r = 0; r < rows; r++) {
-                if (col[r]) this._fillCell(ctx, c, r, w, stepV, halfW);
+                const color = this._cellColor(c, r, col[r]);
+                if (color) {
+                    ctx.fillStyle = color;
+                    this._fillCell(ctx, c, r, w, stepV, halfW);
+                }
             }
         }
 
-        // 3. Grilla sobre todo — blit del offscreen (O(1) por frame)
+        // 3. Grilla — blit del offscreen (O(1) por frame)
         if (this.showGrid) {
             if (this._gridDirty) this._buildGridOffscreen();
-            if (this._gridOffscreen) {
-                ctx.drawImage(this._gridOffscreen, 0, 0);
-            }
+            if (this._gridOffscreen) ctx.drawImage(this._gridOffscreen, 0, 0);
         }
     }
 
-    /**
-     * Render parcial: solo redibuja las celdas marcadas como sucias.
-     * Para cada celda: fill de fondo o color vivo, luego re-stroke del contorno.
-     */
     _renderDirty() {
-        if (!this.ctx || !this._geom || !this._hexPath) return;
+        if (!this.ctx || !this._geom) return;
 
         const ctx = this.ctx;
         const {w, stepV, halfW} = this._geom;
@@ -189,32 +262,38 @@ class HexRenderer {
             const c = (idx / rows) | 0;
             const r = idx % rows;
             if (c >= cols || r >= rows) continue;
-
-            if (grid[c][r]) {
-                ctx.fillStyle = this.colorAlive;
-                ctx.strokeStyle = this.colorGrid;
-                this._drawCell(ctx, c, r, w, stepV, halfW);
-            } else {
-                // Borrar la celda muerta: fill con colorDead + restituir contorno
-                ctx.fillStyle = this.colorDead;
-                ctx.strokeStyle = this.colorGrid;
-                this._drawCell(ctx, c, r, w, stepV, halfW);
-            }
+            this._drawCellDirty(ctx, c, r, grid[c][r], w, stepV, halfW);
         }
     }
 
-    // ─── Helpers de dibujado ──────────────────────────────────────────────
+    // ─── Helpers de color y dibujado ──────────────────────────────────────
 
     /**
-     * Rellena un hexágono sin stroke — usado en _renderFull para celdas vivas.
-     * Sin save/restore: aplica la traslación sobre los vértices absolutos.
+     * Retorna el color de relleno para una celda según su estado de actividad.
+     * Devuelve null para celdas muertas y sin efecto dying activo.
+     */
+    _cellColor(c, r, alive) {
+        if (!this.showActivityEffect) {
+            return alive ? this.colorAlive : null;
+        }
+        const idx = c * this.gridManager.height + r;
+        const cooldown = this._activityCooldown;
+        if (alive) {
+            return this._activityAges[idx] < cooldown ? this.colorBorn : this.colorAlive;
+        }
+        return this._dyingAges[idx] < cooldown ? this.colorDying : null;
+    }
+
+    /**
+     * Rellena una celda en _renderFull — solo fill, sin stroke.
+     * Sin save/restore: calcula coordenadas absolutas con _vx/_vy.
      */
     _fillCell(ctx, c, r, w, stepV, halfW) {
-        const offset = (r & 1) === 1 ? halfW : 0;
+        const offset = (r & 1) ? halfW : 0;
         const cx = c * w + offset + halfW;
         const cy = r * stepV + this._geom.size;
-
         const vx = this._vx, vy = this._vy;
+
         ctx.beginPath();
         ctx.moveTo(cx + vx[0], cy + vy[0]);
         ctx.lineTo(cx + vx[1], cy + vy[1]);
@@ -227,15 +306,17 @@ class HexRenderer {
     }
 
     /**
-     * Dibuja un hexágono con fill Y stroke — usado en _renderDirty.
-     * El fill limpia el área; el stroke restaura el contorno de grilla.
+     * Redibuja una celda sucia en _renderDirty: fill con color correcto + stroke de grilla.
      */
-    _drawCell(ctx, c, r, w, stepV, halfW) {
-        const offset = (r & 1) === 1 ? halfW : 0;
+    _drawCellDirty(ctx, c, r, alive, w, stepV, halfW) {
+        const color = this._cellColor(c, r, alive);
+        ctx.fillStyle = color ?? this.colorDead;
+
+        const offset = (r & 1) ? halfW : 0;
         const cx = c * w + offset + halfW;
         const cy = r * stepV + this._geom.size;
-
         const vx = this._vx, vy = this._vy;
+
         ctx.beginPath();
         ctx.moveTo(cx + vx[0], cy + vy[0]);
         ctx.lineTo(cx + vx[1], cy + vy[1]);
@@ -245,31 +326,26 @@ class HexRenderer {
         ctx.lineTo(cx + vx[5], cy + vy[5]);
         ctx.closePath();
         ctx.fill();
-        if (this.showGrid) ctx.stroke();
+        if (this.showGrid) {
+            ctx.strokeStyle = this.colorGrid;
+            ctx.stroke();
+        }
     }
 
     // ─── Offscreen canvas de grilla ───────────────────────────────────────
 
     /**
-     * Construye el offscreen canvas de grilla con líneas rectas intermitentes.
+     * Construye el offscreen canvas de grilla con 3 familias de líneas intermitentes.
      *
-     * En lugar de dibujar N contornos hexagonales (O(cols×rows)), la grilla
-     * completa se representa con 3 familias de líneas rectas — análogo exacto
-     * a la grilla rectangular (horizontales + verticales) pero con tres direcciones.
+     * Familia A — Verticales    x = n×halfW
+     * Familia B — Diagonal ↘   x − y√3 = n×halfW  (n impar)
+     * Familia C — Diagonal ↗   x + y√3 = n×halfW  (n impar)
      *
-     * Las aristas de la malla hex forman segmentos colineales en:
-     *   Familia A — verticales    x = n×halfW       n entero (0..2·cols+1)
-     *   Familia B — diagonales ↘  x − y√3 = n×halfW  n impar
-     *   Familia C — diagonales ↗  x + y√3 = n×halfW  n impar
+     * setLineDash([size, 2×size]) con LDO=0 — válido porque t_v1 = 2×r×stepV
+     * siempre es múltiplo del período 3×size. Canvas recorta automáticamente
+     * trazos fuera de sus límites → moveTo siempre en y=0, sin clipping manual.
      *
-     * Todas usan setLineDash([size, 2×size]) — dash=arista, gap=2×aristas —
-     * con LDO=0 (el offset se resetea en cada moveTo según la spec Canvas2D).
-     * La única diferencia es el y_start por subfamilia de A:
-     *   n par  (bordes de filas pares):   moveTo(x, size/2)
-     *   n impar (bordes de filas impares): moveTo(x, 2×size)
-     *
-     * Coste de construcción: O(cols + rows) — igual que la grilla rectangular.
-     * Coste por frame:        O(1) — drawImage del offscreen.
+     * Coste: O(cols + rows) líneas, construido solo en _gridDirty=true.
      */
     _buildGridOffscreen() {
         if (!this.gridManager || !this._geom) return;
@@ -277,7 +353,6 @@ class HexRenderer {
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
-        // Crear o reciclar el offscreen canvas (fondo transparente para blit)
         if (!this._gridOffscreen) {
             this._gridOffscreen = document.createElement('canvas');
             this._gridOffscreenCtx = this._gridOffscreen.getContext('2d', {alpha: true});
@@ -300,14 +375,12 @@ class HexRenderer {
 
         octx.strokeStyle = this.colorGrid;
         octx.lineWidth = 0.6;
-        octx.setLineDash([size, 2 * size]);   // dash=arista, gap=2×arista, período=3×size
+        octx.setLineDash([size, 2 * size]);
         octx.lineDashOffset = 0;
 
-        // ── Familia A: líneas verticales ──────────────────────────────────
-        // x = n×halfW para n = 0, 1, 2, ..., 2·cols+1
-        // n par   → arista de fila par,   primer segmento en y = size/2
-        // n impar → arista de fila impar, primer segmento en y = 2·size
-        // El lineDash offset se reinicia con cada moveTo → LDO=0 funciona para ambos.
+        // ── Familia A: verticales x = n×halfW ────────────────────────────
+        // n par   → primer seg en y = size/2   (filas pares)
+        // n impar → primer seg en y = 2×size   (filas impares)
         octx.beginPath();
         const nMaxA = Math.ceil(cw / halfW) + 1;
         for (let n = 0; n <= nMaxA; n++) {
@@ -318,13 +391,8 @@ class HexRenderer {
         }
         octx.stroke();
 
-        // ── Familia B: diagonales ↘ (slope +1/√3) ─────────────────────────
-        // Ecuación de línea: x − y√3 = xi, donde xi = n×halfW con n impar.
-        // Cada línea va desde (xi, 0) hacia (xi + ch×√3, ch).
-        // LDO=0 es válido SOLO si moveTo parte de y=0 — Canvas recorta automáticamente
-        // cualquier porción fuera del canvas, por lo que xi puede ser negativo.
-        // Si se usara un moveTo en y>0 (clipping manual), el lineDash empezaría
-        // en la posición incorrecta y los segmentos quedarían desfasados.
+        // ── Familia B: diagonales ↘ (slope +1/√3) ────────────────────────
+        // x − y√3 = n×halfW con n impar. LDO=0 garantizado con moveTo(xi, 0).
         {
             const nMin = Math.ceil(-ch * SQRT3 / halfW);
             const nMax = Math.floor(cw / halfW);
@@ -332,17 +400,14 @@ class HexRenderer {
             octx.beginPath();
             for (let n = nStart; n <= nMax; n += 2) {
                 const xi = n * halfW;
-                octx.moveTo(xi, 0);                  // siempre y=0 → LDO=0 garantizado
+                octx.moveTo(xi, 0);
                 octx.lineTo(xi + ch * SQRT3, ch);
             }
             octx.stroke();
         }
 
-        // ── Familia C: diagonales ↗ (slope −1/√3) ─────────────────────────
-        // Ecuación de línea: x + y√3 = xi, donde xi = n×halfW con n impar.
-        // Cada línea va desde (xi, 0) hacia (xi − ch×√3, ch).
-        // Mismo argumento: moveTo siempre en y=0, Canvas recorta.
-        // xi puede ser > cw sin problema.
+        // ── Familia C: diagonales ↗ (slope −1/√3) ────────────────────────
+        // x + y√3 = n×halfW con n impar. Mismo argumento de LDO=0.
         {
             const nMin = 1;
             const nMax = Math.ceil((cw + ch * SQRT3) / halfW);
@@ -350,37 +415,30 @@ class HexRenderer {
             octx.beginPath();
             for (let n = nStart; n <= nMax; n += 2) {
                 const xi = n * halfW;
-                octx.moveTo(xi, 0);                  // siempre y=0 → LDO=0 garantizado
+                octx.moveTo(xi, 0);
                 octx.lineTo(xi - ch * SQRT3, ch);
             }
             octx.stroke();
         }
 
-        octx.setLineDash([]);   // restaurar para futuros usos del contexto
+        octx.setLineDash([]);
         this._gridDirty = false;
     }
 
     // ─── Geometría y canvas ───────────────────────────────────────────────
 
-    /**
-     * Construye el Path2D del hexágono centrado en (0,0) y los arrays
-     * de vértices absolutos (_vx/_vy) usados en _fillCell/_drawCell.
-     * Se reconstruye solo cuando cellSize cambia.
-     */
     _rebuildPath() {
         if (this.cellSize === this._cachedSize && this._geom) return;
 
         const size = this.cellSize;
         const verts = HexGridManager.hexVertices(size);
 
-        // Path2D cacheado (para compatibilidad si alguien lo usa externamente)
         const path = new Path2D();
         path.moveTo(verts[0][0], verts[0][1]);
         for (let i = 1; i < 6; i++) path.lineTo(verts[i][0], verts[i][1]);
         path.closePath();
         this._hexPath = path;
 
-        // Arrays de offsets para drawCell/fillCell sin save/translate/restore
         this._vx = new Float64Array(verts.map(v => v[0]));
         this._vy = new Float64Array(verts.map(v => v[1]));
 
@@ -390,20 +448,16 @@ class HexRenderer {
         const stepV = size * 1.5;
         this._geom = {size, w, stepV, halfW: w / 2};
 
-        // Invalidar offscreen — el tamaño de los hexágonos cambió
         this._gridDirty = true;
     }
 
     _resizeCanvas() {
-        if (!this.gridManager) return;
-        if (!this._geom || !this._hexPath) this._rebuildPath();
-        if (!this._geom) return;
+        if (!this.gridManager || !this._geom) return;
 
         const {w, stepV, size} = this._geom;
         const cols = this.gridManager.width;
         const rows = this.gridManager.height;
 
-        // Las filas impares desplazan media celda → ancho extra
         const canvasW = Math.ceil(cols * w + w / 2);
         const canvasH = Math.ceil(rows * stepV + size * 0.5);
 
@@ -412,7 +466,6 @@ class HexRenderer {
         this.canvas.style.width = canvasW + 'px';
         this.canvas.style.height = canvasH + 'px';
 
-        // Relleno inmediato para evitar flash de fondo CSS
         if (this.ctx) {
             this.ctx.fillStyle = this.colorDead;
             this.ctx.fillRect(0, 0, canvasW, canvasH);
@@ -423,13 +476,25 @@ class HexRenderer {
             this.container.style.height = (canvasH + 20) + 'px';
         }
 
-        // Invalidar el offscreen — las dimensiones del canvas cambiaron
         this._gridDirty = true;
     }
 
     /**
-     * Convierte coordenadas de mouse (clientX, clientY) a celda hexagonal.
+     * Reserva (o re-reserva) los arrays de actividad al tamaño actual del grid.
+     * Se llama tras setGridManager y resize — ambos pueden cambiar cols×rows.
      */
+    _allocActivityArrays() {
+        if (!this.gridManager) return;
+        const total = this.gridManager.width * this.gridManager.height;
+        const cooldown = this._activityCooldown;
+        this._activityAges = new Uint8Array(total).fill(cooldown);
+        this._dyingAges = new Uint8Array(total).fill(cooldown);
+        this._coolingCells.clear();
+        this._dyingCells.clear();
+    }
+
+    // ─── Interfaz pública ─────────────────────────────────────────────────
+
     getCellFromMouse(clientX, clientY) {
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
@@ -439,7 +504,7 @@ class HexRenderer {
         return this.gridManager?.fromPixel(px, py, this.cellSize) ?? null;
     }
 
-    // ─── Stubs de interfaz (compatibilidad con automaton.js) ─────────────
+    // ─── Stubs de compatibilidad ──────────────────────────────────────────
 
     toggleGrid() {
         this.showGrid = !this.showGrid;
@@ -463,11 +528,6 @@ class HexRenderer {
     resizeCanvas() { /* gestionado internamente */
     }
 
-    resetActivity() {
-        this._isFirstRender = true;
-        this.markAllDirty();
-    }
-
     markDirtyIndex(idx) {
         if (!this.gridManager) return;
         const rows = this.gridManager.height;
@@ -478,6 +538,10 @@ class HexRenderer {
         this._hexPath = null;
         this._gridOffscreen = null;
         this._gridOffscreenCtx = null;
+        this._activityAges = null;
+        this._dyingAges = null;
+        this._coolingCells.clear();
+        this._dyingCells.clear();
         this._dirtyCells.clear();
         this.gridManager = null;
         this.ctx = null;

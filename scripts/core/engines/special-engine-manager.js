@@ -119,9 +119,10 @@ class SpecialEngineManager {
         // La inicialización ya fue completada por activateHexMode antes del primer step.
         engine._stepSync();
 
-        // Forzar full render: markAllDirty garantiza que _renderFull() se ejecuta,
-        // borrando correctamente las celdas muertas con colorDead.
-        engine.automaton.renderer.markAllDirty?.();
+        // Notificar al renderer de las celdas que cambiaron de estado para que
+        // actualice los contadores de actividad (born/dying). Sin esta llamada
+        // el efecto de actividad nunca se activa porque changedCells llegaría vacío.
+        engine.automaton.renderer.updateActivityAges?.(engine._changedCells);
 
         // Devolver población del hex grid (no del grid rectangular del core)
         const population = engine.gridManager.countPopulation();
@@ -131,10 +132,10 @@ class SpecialEngineManager {
             label: 'Hexagonal',
             stopMessage: null,
             generation: engine.generation,
-            changedCells: [],
+            changedCells: [],        // ya procesadas arriba — no re-procesar en automaton
             population,
             markDirtyFromCells: false,
-            skipActivity: true
+            skipActivity: true       // updateActivityAges ya fue llamado directamente
         };
     }
 
@@ -319,13 +320,23 @@ class SpecialEngineManager {
             const cs = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
                 Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
 
+            // Leer estado y colores actuales del sidebar para preservarlos al activar
+            const prevRenderer       = this._getRenderer();
+            const showActivityEffect = prevRenderer?.getConfig('showActivityEffect') ?? true;
+            const colorAlive = document.getElementById('colorAlive')?.value ?? AppConfig.RENDER.COLOR_ALIVE;
+            const colorBorn  = document.getElementById('colorBorn')?.value  ?? AppConfig.RENDER.COLOR_BORN;
+            const colorDying = document.getElementById('colorDying')?.value ?? AppConfig.RENDER.COLOR_DYING;
+
             const hexRenderer = new HexRenderer({
                 canvas, container,
                 cellSize: cs,
-                showGrid: this._getRenderer()?.getConfig('showGrid') ?? false,
-                colorAlive: '#f59e0b',
-                colorDead: '#0f172a',
-                colorGrid: 'rgba(255,255,255,0.1)',
+                showGrid: prevRenderer?.getConfig('showGrid') ?? false,
+                showActivityEffect,
+                colorAlive,
+                colorDead:  '#0f172a',
+                colorGrid:  'rgba(255,255,255,0.1)',
+                colorBorn,
+                colorDying,
             });
 
             this._setRenderer(hexRenderer);

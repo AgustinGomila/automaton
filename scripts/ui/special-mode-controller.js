@@ -115,6 +115,13 @@ class SpecialModeController {
             this._addEventListener(btn, 'click', () => {
                 const birth = btn.dataset.hexBirth.split('').map(Number);
                 const survival = btn.dataset.hexSurvival.split('').map(Number);
+
+                // Sincronizar los campos manuales del sidebar con el preset seleccionado
+                const birthInput = document.getElementById('hexBirth');
+                const survivalInput = document.getElementById('hexSurvival');
+                if (birthInput) birthInput.value = btn.dataset.hexBirth;
+                if (survivalInput) survivalInput.value = btn.dataset.hexSurvival;
+
                 if (this.automaton.hexEngine?.isActive) {
                     this.automaton.hexEngine.setRule(birth, survival);
                     this._ui.updateModeIndicator(SpecialEngineManager.MODES.HEXAGONAL);
