@@ -252,6 +252,15 @@ class CanvasController {
         }
 
         if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine?.isActive) {
+            // Patrón Random: randomizar el grid del engine, igual que la tecla A
+            if (this._patternState?.pattern?.pattern === 'random') {
+                const density = parseInt(document.getElementById('randomPercentage')?.value ?? 35, 10) / 100;
+                const wasRunning = this.automaton.isRunning;
+                if (wasRunning) this.automaton.stop();
+                this.automaton.randomize(density);
+                if (wasRunning) requestAnimationFrame(() => this.automaton.start());
+                return;
+            }
             const result = this.automaton.getCellCoords(e.clientX, e.clientY);
             if (result) {
                 this.lastCell = {q: result.q, r: result.r, mode: SpecialEngineManager.MODES.TRIANGLE};
@@ -261,6 +270,15 @@ class CanvasController {
         }
 
         if (this.automaton.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.automaton.hexEngine?.isActive) {
+            // Patrón Random: randomizar el grid del engine, igual que la tecla A
+            if (this._patternState?.pattern?.pattern === 'random') {
+                const density = parseInt(document.getElementById('randomPercentage')?.value ?? 35, 10) / 100;
+                const wasRunning = this.automaton.isRunning;
+                if (wasRunning) this.automaton.stop();
+                this.automaton.randomize(density);
+                if (wasRunning) requestAnimationFrame(() => this.automaton.start());
+                return;
+            }
             const result = this.automaton.getCellCoords(e.clientX, e.clientY);
             if (result) {
                 this.lastCell = {col: result.col, row: result.row, mode: SpecialEngineManager.MODES.HEXAGONAL};
