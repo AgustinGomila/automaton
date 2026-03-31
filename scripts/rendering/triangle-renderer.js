@@ -9,6 +9,7 @@ class TriangleRenderer {
         this.cellSize = options.cellSize || AppConfig.GRID.MAX_CELL_SIZE;
         this.showGrid = options.showGrid !== false;
         this.showActivityEffect = options.showActivityEffect !== false;
+        this.destroboscope = options.destroboscope || false;
 
         this.colorAlive = options.colorAlive || '#8b5cf6';
         this.colorDead = options.colorDead || '#0f172a';
@@ -140,29 +141,28 @@ class TriangleRenderer {
             if (this._gridOffscreen) ctx.drawImage(this._gridOffscreen, 0, 0);
         }
 
-        ctx.strokeStyle = this.colorGrid;
-        ctx.lineWidth = 0.5;
-
+        // setTransform (1 call) en lugar de save/translate/restore (3 calls).
+        // Coordenadas inline en lugar de toCartesian() — sin allocación de objeto por celda.
+        const size = this.cellSize;
+        const h = size * Math.sqrt(3) / 2;
+        const w = size / 2;
+        const gm = this.gridManager;
+        const cols = gm.width, rows = gm.height;
         const pathUp = this._pathCache.get('up');
         const pathDown = this._pathCache.get('down');
 
-        for (let r = 0; r < this.gridManager.height; r++) {
-            for (let q = 0; q < this.gridManager.width; q++) {
-                const state = this.gridManager.grid[q][r];
-                const color = this._cellColor(q, r, state);
+        for (let r = 0; r < rows; r++) {
+            const py = r * h;
+            for (let q = 0; q < cols; q++) {
+                const color = this._cellColor(q, r, gm.grid[q][r]);
                 if (!color) continue;
 
-                const pos = this.gridManager.toCartesian(q, r, this.cellSize);
-                const path = pos.orientation === 'up' ? pathUp : pathDown;
-
                 ctx.fillStyle = color;
-                ctx.save();
-                ctx.translate(pos.x, pos.y);
-                ctx.fill(path);
-                if (this.showGrid) ctx.stroke(path);
-                ctx.restore();
+                ctx.setTransform(1, 0, 0, 1, q * w, py);
+                ctx.fill(((q + r) & 1) === 0 ? pathUp : pathDown);
             }
         }
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
     }
 
     /**
@@ -338,7 +338,7 @@ class TriangleRenderer {
     }
 
     _cellColor(q, r, alive) {
-        if (!this.showActivityEffect) return alive ? this.colorAlive : null;
+        if (!this.showActivityEffect || this.destroboscope) return alive ? this.colorAlive : null;
         const idx = q * this.gridManager.height + r;
         const cooldown = this._activityCooldown;
         if (alive) return this._activityAges[idx] < cooldown ? this.colorBorn : this.colorAlive;
@@ -366,7 +366,16 @@ class TriangleRenderer {
 
         const cooldown = this._activityCooldown;
         const rows = this.gridManager.height;
+        const total = this.gridManager.width * rows;
         const grid = this.gridManager.grid;
+
+        // Si más del 20% del grid cambió, el tracking de actividad es costoso
+        // (sets O(N)) y visualmente poco significativo — saltearlo este frame.
+        if (changedCells.length > total * 0.2) {
+            this._coolingCells.clear();
+            this._dyingCells.clear();
+            return;
+        }
 
         for (let i = 0; i < changedCells.length; i++) {
             const cell = changedCells[i];
@@ -418,6 +427,7 @@ class TriangleRenderer {
     getConfig(key) {
         if (key === 'showGrid') return this.showGrid;
         if (key === 'showActivityEffect') return this.showActivityEffect;
+        if (key === 'destroboscope') return this.destroboscope;
         return undefined;
     }
 
@@ -430,6 +440,10 @@ class TriangleRenderer {
         } else if (key === 'showActivityEffect') {
             this.showActivityEffect = value;
             if (!value) this.resetActivity();
+            this._isFirstRender = true;
+        } else if (key === 'destroboscope') {
+            this.destroboscope = value;
+            this.resetActivity();
             this._isFirstRender = true;
         }
     }

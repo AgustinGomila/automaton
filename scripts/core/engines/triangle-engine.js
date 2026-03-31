@@ -271,10 +271,7 @@ class TriangleEngine {
         const currentGrid = this.gridManager.grid;
         const newGrid = this._newGrid;
 
-        // Elegir tabla según destroboscopia y paridad
-        const ruleTable = (this.destroboscope && (this.generation & 1) === 1)
-            ? this._twinRuleTable
-            : this._ruleTable;
+        const ruleTable = this._ruleTable;
 
         // Cache bounds
         const w = width, h = height;
@@ -368,11 +365,51 @@ class TriangleEngine {
         this._changedCells.length = changedCount;
         this.generation++;
 
+        // Destroboscopia: twin rule sobre el resultado principal → grid visible estable.
+        if (this.destroboscope) {
+            if (!this._twinGrid) {
+                this._twinGrid = Array.from({length: w}, () => new Uint8Array(h));
+            }
+            const twinRule = this._twinRuleTable;
+            const src = this.gridManager.grid;  // resultado del paso principal
+            const dst = this._twinGrid;
+            let tc = 0;
+            this._changedCells.length = 0;
+            for (let r = 0; r < h; r++) {
+                for (let q = 0; q < w; q++) {
+                    const isUp = ((q + r) & 1) === 0;
+                    const s = src[q][r];
+                    let sum = 0;
+                    if (wrap) {
+                        const rUp = (r - 1 + h) % h, rDown = (r + 1) % h;
+                        const lQ = (q - 1 + w) % w, rQ = (q + 1) % w;
+                        sum = isUp
+                            ? src[lQ][r] + src[rQ][r] + src[q][rDown]
+                            : src[q][rUp] + src[lQ][r] + src[rQ][r];
+                    } else {
+                        const hasU = r > 0, hasD = r < h - 1;
+                        sum = isUp
+                            ? (q > 0 ? src[q - 1][r] : 0) + (q < w - 1 ? src[q + 1][r] : 0) + (hasD ? src[q][r + 1] : 0)
+                            : (hasU ? src[q][r - 1] : 0) + (q > 0 ? src[q - 1][r] : 0) + (q < w - 1 ? src[q + 1][r] : 0);
+                    }
+                    const ns = twinRule[(s << 2) | sum];
+                    dst[q][r] = ns;
+                    if (ns !== s && tc < CHANGED_CAP) this._changedCells[tc++] = (q << 16) | r;
+                }
+            }
+            // Swap twin result into el grid visible
+            for (let q = 0; q < w; q++) {
+                const tmp = this.gridManager.grid[q];
+                this.gridManager.grid[q] = this._twinGrid[q];
+                this._twinGrid[q] = tmp;
+            }
+            this._changedCells.length = tc;
+            this.generation++;
+        }
+
         this._syncChangedToAutomaton();
 
-        // Notificar actividad celular — mismo punto que _onWorkerResult para el path worker.
-        // _changedCells aquí son packed ints (q<<16|r); updateActivityAges acepta ambos formatos.
-        if (this.automaton && changedCount > 0) {
+        if (this.automaton && this._changedCells.length > 0) {
             this.automaton.renderer.updateActivityAges?.(this._changedCells);
         }
 

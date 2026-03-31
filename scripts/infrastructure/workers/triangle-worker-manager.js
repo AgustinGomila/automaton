@@ -88,7 +88,7 @@ class TriangleWorkerManager {
      * @param {number}              ruleNumber
      * @param {boolean}             wrapEdges
      */
-    sync(gridManager, ruleNumber, wrapEdges) {
+    sync(gridManager, ruleNumber, wrapEdges, destroboscope = false) {
         if (!this._worker) return;
 
         this._isReady = false;
@@ -108,7 +108,7 @@ class TriangleWorkerManager {
 
         this._worker.postMessage({
             type: 'init',
-            data: {width, height, ruleNumber, wrapEdges, gridBuffer}
+            data: {width, height, ruleNumber, wrapEdges, destroboscope, gridBuffer}
         }, [gridBuffer]);
     }
 

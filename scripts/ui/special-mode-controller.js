@@ -240,7 +240,17 @@ class SpecialModeController {
         if (destroboscopeToggle) {
             this._addEventListener(destroboscopeToggle, 'change', () => {
                 if (this.automaton.triangleEngine?.isActive) {
-                    this.automaton.triangleEngine.destroboscope = destroboscopeToggle.checked;
+                    const checked = destroboscopeToggle.checked;
+                    this.automaton.triangleEngine.destroboscope = checked;
+                    // Notificar al renderer (desactiva actividad celular bajo destroboscope)
+                    this.automaton.renderer?.setConfig('destroboscope', checked);
+                    // Re-sincronizar el worker para que reciba el flag actualizado
+                    this.automaton.triangleEngine._workerManager?.sync(
+                        this.automaton.triangleEngine.gridManager,
+                        this.automaton.triangleEngine.ruleNumber,
+                        this.automaton.triangleEngine.wrapEdges,
+                        checked
+                    );
                     this._ui.updateTwinRuleInfo();
                 }
             });

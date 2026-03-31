@@ -25,9 +25,7 @@ class TriangleWebGL2Renderer {
         // Estado interno
         this._dirtyCells = new Set();
         this._isFirstRender = true;
-        // Los shaders WebGL2 no implementan actividad celular.
-        // Cuando showActivityEffect está activo, delegar al TriangleRenderer canvas 2D.
-        this._useFallback = options.showActivityEffect !== false;
+        this._useFallback = false;
         this._fallbackRenderer = null;
 
         // WebGL2 context
@@ -53,9 +51,11 @@ class TriangleWebGL2Renderer {
         // Inicializar WebGL2 con detección robusta
         const webgl2Available = this._initWebGL2Robust();
 
+        // Usar fallback si: WebGL2 no disponible O actividad celular activa
+        // (los shaders WebGL2 no implementan born/dying colors).
+        this._useFallback = !webgl2Available || this.showActivityEffect;
         if (!webgl2Available) {
-            this._useFallback = true;
-            console.debug('TriangleWebGL2Renderer: Usando fallback Canvas2D');
+            console.debug('TriangleWebGL2Renderer: WebGL2 no disponible, usando Canvas2D');
         }
 
         // === OPTIMIZACIÓN: Buffer persistente y dirty regions ===
@@ -501,6 +501,7 @@ class TriangleWebGL2Renderer {
                     canvas: this.canvas, container: this.container,
                     cellSize: this.cellSize, showGrid: this.showGrid,
                     showActivityEffect: this.showActivityEffect,
+                    destroboscope: this.destroboscope,
                     colorAlive: this.colorAlive, colorDead: this.colorDead,
                     colorGrid: this.colorGrid,
                     colorBorn: this.colorBorn, colorDying: this.colorDying,
@@ -620,10 +621,15 @@ class TriangleWebGL2Renderer {
             if (this._fallbackRenderer) this._fallbackRenderer.setConfig('showGrid', value);
         } else if (key === 'showActivityEffect') {
             this.showActivityEffect = value;
-            this._useFallback = value;   // activar/desactivar canvas 2D según opción
+            // Volver a WebGL2 solo si gl está disponible; si no, mantener fallback.
+            this._useFallback = value || !this.gl;
             if (this._fallbackRenderer) this._fallbackRenderer.setConfig('showActivityEffect', value);
             this._isFirstRender = true;
             this.markAllDirty();
+        } else if (key === 'destroboscope') {
+            this.destroboscope = value;
+            if (this._fallbackRenderer) this._fallbackRenderer.setConfig('destroboscope', value);
+            this._isFirstRender = true;
         }
     }
 
