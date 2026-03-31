@@ -1,3 +1,5 @@
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+
 /**
  * DrawingTool — Herramientas de dibujo sobre el grid celular.
  *
@@ -200,4 +202,4 @@ class DrawingTool {
     }
 }
 
-window.DrawingTool = DrawingTool;
+export {DrawingTool};

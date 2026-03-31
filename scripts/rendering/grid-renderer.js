@@ -1,3 +1,6 @@
+import {AppConfig} from '../utils/config.js';
+import {WasmRenderer} from './wasm-renderer.js';
+
 /**
  * GridRenderer — Renderizado visual del autómata celular sobre Canvas 2D.
  *
@@ -1073,4 +1076,4 @@ class GridRenderer {
     }
 }
 
-window.GridRenderer = GridRenderer;
+export {GridRenderer};

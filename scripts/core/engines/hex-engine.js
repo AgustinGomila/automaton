@@ -1,3 +1,8 @@
+import {AppConfig} from '../../utils/config.js';
+import {eventBus} from '../../infrastructure/event-bus.js';
+import {HexGridManager} from '../hex-grid-manager.js';
+import {HexWorkerManager} from '../../infrastructure/workers/hex-worker-manager.js';
+
 /**
  * HexEngine — Motor de autómata celular hexagonal.
  *
@@ -401,4 +406,4 @@ class HexEngine {
     }
 }
 
-window.HexEngine = HexEngine;
+export {HexEngine};

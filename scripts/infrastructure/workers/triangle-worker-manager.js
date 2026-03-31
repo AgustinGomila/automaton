@@ -87,6 +87,7 @@ class TriangleWorkerManager {
      * @param {TriangleGridManager} gridManager
      * @param {number}              ruleNumber
      * @param {boolean}             wrapEdges
+     * @param {boolean}             destroboscope
      */
     sync(gridManager, ruleNumber, wrapEdges, destroboscope = false) {
         if (!this._worker) return;
@@ -221,4 +222,4 @@ class TriangleWorkerManager {
     }
 }
 
-window.TriangleWorkerManager = TriangleWorkerManager;
+export {TriangleWorkerManager};

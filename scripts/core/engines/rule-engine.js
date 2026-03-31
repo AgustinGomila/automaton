@@ -5,6 +5,9 @@
  * nextGenerationMoore reciben width y height explícitos.
  * El índice plano es x * height + y (column-major consistente).
  */
+
+import {parseRuleString} from '../../config/rules.js';
+
 class RuleEngine {
     static PRESETS = {
         CONWAY: {birth: [3], survival: [2, 3], name: "Conway's Life"},
@@ -20,12 +23,11 @@ class RuleEngine {
     }
 
     static fromString(ruleString) {
-        const match = ruleString.match(/B?(\d+)\/S?(\d+)/i);
-        if (!match) throw new Error(`Formato de regla inválido: ${ruleString}. Use B3/S23`);
-        return new RuleEngine({
-            birth: match[1].split('').map(Number),
-            survival: match[2].split('').map(Number)
-        });
+        const {birth, survival} = parseRuleString(ruleString);
+        if (!birth.length && !survival.length) {
+            throw new Error(`Formato de regla inválido: ${ruleString}. Use B3/S23`);
+        }
+        return new RuleEngine({birth, survival});
     }
 
     static fromPreset(name) {
@@ -40,18 +42,8 @@ class RuleEngine {
         }
         this.birth = [...rule.birth].sort((a, b) => a - b);
         this.survival = [...rule.survival].sort((a, b) => a - b);
-
-        // Sets mantenidos para compatibilidad con código externo
         this._birthSet = new Set(this.birth);
         this._survivalSet = new Set(this.survival);
-
-        // Tablas Uint8Array[9]: lookup O(1) sin hash para el inner loop crítico.
-        // Índice = número de vecinos vivos (0–8), valor = 0|1.
-        this._birthTable = new Uint8Array(9);
-        this._survivalTable = new Uint8Array(9);
-        for (const n of this.birth) this._birthTable[n] = 1;
-        for (const n of this.survival) this._survivalTable[n] = 1;
-
         this.ruleString = `B${this.birth.join('')}/S${this.survival.join('')}`;
     }
 
@@ -61,8 +53,8 @@ class RuleEngine {
 
     computeNextState(currentState, neighborCount) {
         return currentState
-            ? this._survivalTable[neighborCount]
-            : this._birthTable[neighborCount];
+            ? (this._survivalSet.has(neighborCount) ? 1 : 0)
+            : (this._birthSet.has(neighborCount) ? 1 : 0);
     }
 
     // =========================================
@@ -133,8 +125,6 @@ class RuleEngine {
 
         const buf = this._ensureChangedBuf(width, height);
         let changedCount = 0, births = 0, deaths = 0;
-        const bTable = this._birthTable;
-        const sTable = this._survivalTable;
 
         if (wrap) {
             for (let x = 0; x < width; x++) {
@@ -153,7 +143,9 @@ class RuleEngine {
                         + colP[ym] + colP[y] + colP[yp];
 
                     const current = col[y];
-                    const next = current ? sTable[n] : bTable[n];
+                    const next = current
+                        ? (this._survivalSet.has(n) ? 1 : 0)
+                        : (this._birthSet.has(n) ? 1 : 0);
                     outGrid[x][y] = next;
 
                     if (next !== current) {
@@ -178,7 +170,9 @@ class RuleEngine {
                         }
                     }
                     const current = currentGrid[x][y];
-                    const next = current ? sTable[n] : bTable[n];
+                    const next = current
+                        ? (this._survivalSet.has(n) ? 1 : 0)
+                        : (this._birthSet.has(n) ? 1 : 0);
                     outGrid[x][y] = next;
                     if (next !== current) {
                         buf[changedCount++] = x * height + y;
@@ -199,13 +193,19 @@ class RuleEngine {
     // =========================================
 
     /**
-     * Reutiliza el buffer de changed cells; lo crece sólo cuando el grid es mayor.
+     * Reutiliza el buffer de changed cells.
+     * Crece si el grid es mayor que el buffer actual.
+     * Recorta si el grid ocupa menos del 25% del buffer (evita retener
+     * 16 MB tras un redimensionado de 2000×2000 → 100×100).
+     * El umbral del 25% previene thrashing en redimensionados frecuentes.
      * @param {number} width
      * @param {number} height
      */
     _ensureChangedBuf(width, height) {
         const needed = width * height;
-        if (!this._changedBuf || this._changedBuf.length < needed) {
+        if (!this._changedBuf
+            || this._changedBuf.length < needed
+            || this._changedBuf.length > needed * 4) {
             this._changedBuf = new Uint32Array(needed);
         }
         return this._changedBuf;
@@ -228,4 +228,4 @@ class RuleEngine {
     }
 }
 
-window.RuleEngine = RuleEngine;
+export {RuleEngine};

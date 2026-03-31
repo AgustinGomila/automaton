@@ -1,3 +1,5 @@
+// scripts/ui/responsive-controller.js
+
 /**
  * ResponsiveController — Ajustes de layout para móviles.
  *
@@ -165,3 +167,5 @@ class ResponsiveController {
         window.app?.automaton?.render();
     }
 }
+
+export {ResponsiveController};

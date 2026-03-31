@@ -1,3 +1,7 @@
+import {AppConfig} from '../utils/config.js';
+import {eventBus} from '../infrastructure/event-bus.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+
 /**
  * GridController — Controlador de tamaño de grid y zoom.
  *
@@ -81,7 +85,8 @@ class GridController {
         this._setupAspectLockFeedback();
         this._bindPresetButtons();
 
-        this._addEventListener(eventBus, 'automaton:resized', ({width, height}) => {
+        // eventBus.on() — no es un elemento DOM, no pasa por _addEventListener
+        eventBus.on('automaton:resized', ({width, height}) => {
             const wSlider = document.getElementById('gridWidth');
             const hSlider = document.getElementById('gridHeight');
             const wDisplay = document.getElementById('gridWidthValue');
@@ -482,4 +487,4 @@ class GridController {
     }
 }
 
-window.GridController = GridController;
+export {GridController};

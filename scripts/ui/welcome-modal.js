@@ -1,3 +1,5 @@
+import {t} from './i18n.js';
+
 /**
  * WelcomeModal — Cartel de bienvenida que se muestra la primera vez que el usuario
  * accede a la app, o cuando se invoca manualmente.
@@ -309,4 +311,4 @@ class WelcomeModal {
     }
 }
 
-window.WelcomeModal = WelcomeModal;
+export {WelcomeModal};

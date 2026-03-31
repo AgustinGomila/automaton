@@ -1,10 +1,43 @@
+/**
+ * scripts/ui/ui-controller.js
+ *
+ * Coordinador de toda la interfaz de usuario.
+ *
+ * Cambios ESM:
+ *   - window.RULES          → eliminado; rulesLoader importado por RuleController
+ *   - window.patternManager → inyectado via options.getPatternManager()
+ *   - window.t()            → importado de i18n.js
+ *   - getPatternWithRotation → importado de patterns.js
+ *   - SpecialEngineManager  → importado para acceder a MODES
+ *   - Todos los sub-controladores importados explícitamente.
+ */
+
+import {eventBus} from '../infrastructure/event-bus.js';
+import {i18n, t} from './i18n.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {getPatternWithRotation} from '../config/patterns.js';
+import {CanvasController} from './canvas-controller.js';
+import {SpecialModeController} from './special-mode-controller.js';
+import {GridController} from './grid-controller.js';
+import {ImportExportController} from './import-export-controller.js';
+import {NeighborhoodController, RuleController} from './rule-neighborhood-controller.js';
+import {EffectsController} from './effects-controller.js';
+import {DisplayController} from './display-controller.js';
+import {AppConfig} from '../utils/config.js';
+
 class UIController {
-    constructor(automatonInstance) {
+    /**
+     * @param {CellularAutomaton} automatonInstance
+     * @param {Object} options
+     * @param {Function} options.getPatternManager — () => PatternManager | null
+     */
+    constructor(automatonInstance, options = {}) {
         if (!automatonInstance) {
             throw new Error('UIController requiere una instancia de CellularAutomaton');
         }
 
         this.automaton = automatonInstance;
+        this._getPatternManager = options.getPatternManager || (() => null);
 
         this.showInfluenceArea = true;
         this.patternsTwoRows = true;
@@ -14,28 +47,23 @@ class UIController {
 
         this._cleanups = [];
 
-        this._patternState = {
-            pattern: null,
-            key: null,
-            rotation: 0
-        };
+        this._patternState = {pattern: null, key: null, rotation: 0};
 
-        // Canvas controller — gestiona toda interacción con el canvas
+        // Sub-controladores
         this._canvasController = new CanvasController({
             automaton: this.automaton,
             patternState: this._patternState,
-            onUpdateDrawMode: () => this._displayController.updateDrawModeIndicator()
+            onUpdateDrawMode: () => this._displayController?.updateDrawModeIndicator(),
+            getPatternManager: () => this._getPatternManager()
         });
 
         this._specialModeController = new SpecialModeController({
             automaton: this.automaton,
-            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
+            onUpdateHeader: () => this._displayController?.updateHeaderInfo(),
             onSyncPlayButton: () => this._syncPlayButtonState(),
             onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur)
         });
 
-        // Import/Export controller — importación y exportación de patrones
-        // Grid controller — dimensiones de grid y zoom
         this._gridController = new GridController({
             automaton: this.automaton,
             onStopAutomaton: () => this._stopAutomaton(),
@@ -54,42 +82,44 @@ class UIController {
                 if (slider) slider.value = newSize;
                 if (display) display.textContent = `${newSize}×${newSize}`;
             },
-            addEventListener: (target, event, handler, opts) => this._addEventListener(target, event, handler, opts)
+            addEventListener: (target, event, handler, opts) =>
+                this._addEventListener(target, event, handler, opts)
         });
 
-        // Rule controller — selector de reglas B/S y regla custom
         this._ruleController = new RuleController({
             automaton: this.automaton,
             onActivateGenerations: (b, s, c) => this._specialModeController.activateGenerationsMode(b, s, c),
             onDeactivateGenerations: () => this._specialModeController.deactivateGenerationsMode(),
-            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
-            onUpdateRuleInfo: (rule) => this._displayController.updateRuleInfo(rule),
+            onUpdateHeader: () => this._displayController?.updateHeaderInfo(),
+            onUpdateRuleInfo: (rule) => this._displayController?.updateRuleInfo(rule),
             addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
         });
 
-        // Neighborhood controller — grilla visual de vecindad
         this._neighborhoodController = new NeighborhoodController({
             automaton: this.automaton,
-            onUpdateHeader: () => this._displayController.updateHeaderInfo(),
-            onUpdateNeighborhood: () => this._displayController.updateNeighborhoodInfo(),
+            onUpdateHeader: () => this._displayController?.updateHeaderInfo(),
+            onUpdateNeighborhood: () => this._displayController?.updateNeighborhoodInfo(),
             addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
         });
 
-        // Effects controller — actividad visual y área de influencia
         this._effectsController = new EffectsController({
             automaton: this.automaton,
             getShowInfluenceArea: () => this._canvasController.showInfluenceArea,
             setShowInfluenceArea: (v) => {
                 this._canvasController.showInfluenceArea = v;
             },
-            onHideInfluenceArea: () => window.patternManager?.hideInfluenceArea(),
+            onHideInfluenceArea: () => this._getPatternManager()?.hideInfluenceArea(),
             addEventListener: (t, e, h, o) => this._addEventListener(t, e, h, o)
         });
 
         this._subscribeToAutomatonEvents();
-        this._waitForRulesAndInit().then();
 
+        // _displayController debe crearse ANTES de _waitForRulesAndInit porque
+        // loadRules() → _onUpdateRuleInfo(conway) → _displayController.updateRuleInfo()
+        // se ejecuta sincrónicamente cuando las reglas ya están cargadas.
         this._displayController = new DisplayController(this.automaton, this._patternState);
+
+        this._waitForRulesAndInit();
 
         this._cleanups.push(
             i18n.onLocaleChange(() => this._onLocaleChanged())
@@ -98,8 +128,6 @@ class UIController {
 
     /**
      * Devuelve la referencia compartida del estado de patrón activo.
-     * Usado por main.js para sincronizarlo con PatternManager sin acceder
-     * a campos internos (_patternState).
      * @returns {{ pattern: Object|null, key: string|null, rotation: number }}
      */
     getPatternState() {
@@ -107,10 +135,10 @@ class UIController {
     }
 
     _onLocaleChanged() {
-        this._displayController.updateHeaderInfo();
+        this._displayController?.updateHeaderInfo();
         this.updateSpeedDisplay();
-        this._displayController.updateNeighborhoodInfo();
-        this._displayController.updateDrawModeIndicator();
+        this._displayController?.updateNeighborhoodInfo();
+        this._displayController?.updateDrawModeIndicator();
 
         const isRunning = this.automaton.isRunning;
         const playText = document.querySelector('#playBtn [data-i18n]');
@@ -119,20 +147,26 @@ class UIController {
         }
     }
 
-    async _waitForRulesAndInit() {
-
-        let attempts = 0;
-        while ((!window.RULES || Object.keys(window.RULES).length === 0) && attempts < 100) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-            attempts++;
+    _waitForRulesAndInit() {
+        // Esperar event rules:loaded si las reglas aún no están
+        const proceed = () => this._init();
+        if (document.getElementById('ruleSelector')?.options?.length > 0) {
+            proceed();
+        } else {
+            // Las reglas se cargan vía rulesLoader que ya emitió 'rules:loaded'
+            // antes de construir UIController (ver main.js), por lo que siempre
+            // llegamos aquí con las reglas disponibles. El eventBus.once es
+            // un seguro ante condiciones de carrera en entornos lentos.
+            const unsub = eventBus.on('rules:loaded', () => {
+                unsub();
+                proceed();
+            });
+            // Llamar inmediatamente por si el evento ya ocurrió
+            proceed();
         }
-
-
-        this._init().then()
     }
 
     async _init() {
-        await this._waitForRules();
         this._bindEvents();
         this._bindAccordionEvents();
         this._bindKeyboardEvents();
@@ -142,11 +176,10 @@ class UIController {
 
         this.updateSpeedDisplay();
         this._gridController.initDisplays();
-        this._displayController.updateNeighborhoodInfo();
+        this._displayController?.updateNeighborhoodInfo();
         this._ruleController.loadRules();
 
         eventBus.on('automaton:runningChanged', () => this._syncPlayButtonState());
-
         eventBus.on('app:ready', () => setTimeout(() => this._gridController.initGridRectUI(), 60));
 
         eventBus.emit('ui:ready');
@@ -159,7 +192,6 @@ class UIController {
     destroy() {
         this._gridController?.destroy();
         this._gridController = null;
-
         this._canvasController?.destroy();
         this._canvasController = null;
 
@@ -181,7 +213,6 @@ class UIController {
 
         this._specialModeController?.destroy();
         this._specialModeController = null;
-
         this._displayController?.destroy();
         this._displayController = null;
 
@@ -197,7 +228,6 @@ class UIController {
 
     _subscribeToAutomatonEvents() {
         const weakThis = new WeakRef(this);
-
         this._cleanups.push(
             eventBus.on('stats:updated', (stats) => {
                 weakThis.deref()?._displayController?.updateStats(stats);
@@ -208,46 +238,25 @@ class UIController {
             eventBus.on('automaton:neighborhoodChanged', () => {
                 const ui = weakThis.deref();
                 if (ui) {
-                    ui._displayController.updateHeaderInfo();
-                    ui._displayController.updateNeighborhoodInfo();
+                    ui._displayController?.updateHeaderInfo();
+                    ui._displayController?.updateNeighborhoodInfo();
                 }
             }),
             eventBus.on('automaton:radiusChanged', () => {
                 const ui = weakThis.deref();
                 if (ui) {
-                    ui._displayController.updateHeaderInfo();
-                    ui._displayController.updateNeighborhoodInfo();
+                    ui._displayController?.updateHeaderInfo();
+                    ui._displayController?.updateNeighborhoodInfo();
                 }
             }),
             eventBus.on('automaton:wrapChanged', () => {
                 const ui = weakThis.deref();
                 if (ui) {
-                    ui._displayController.updateHeaderInfo();
-                    ui._displayController.updateNeighborhoodInfo();
+                    ui._displayController?.updateHeaderInfo();
+                    ui._displayController?.updateNeighborhoodInfo();
                 }
             })
         );
-    }
-
-    async _waitForRules() {
-        if (window.RULES && Object.keys(window.RULES).length > 0) {
-            return;
-        }
-
-        await new Promise(resolve => {
-            const check = () => {
-                if (window.RULES && Object.keys(window.RULES).length > 0) {
-                    resolve();
-                } else {
-                    setTimeout(check, 100);
-                }
-            };
-            check();
-        });
-    }
-
-    loadRules() {
-        this._ruleController.loadRules();
     }
 
     // =========================================
@@ -272,8 +281,10 @@ class UIController {
             this._addEventListener(randomBtn, 'click', () => {
                 const percentage = this._getPercentage();
                 this.automaton.randomize(percentage);
-                this._showNotification(t('notif.randomized', {density: Math.round(percentage * 100)}), 'info', 1500);
-                this._displayController.updateHeaderInfo();
+                this._showNotification(
+                    t('notif.randomized', {density: Math.round(percentage * 100)}), 'info', 1500
+                );
+                this._displayController?.updateHeaderInfo();
             });
         }
 
@@ -290,7 +301,6 @@ class UIController {
         });
 
         this._ruleController.bindEvents();
-
         this._effectsController.bindEvents();
 
         const wrapToggle = document.getElementById('wrapToggle');
@@ -300,7 +310,7 @@ class UIController {
                 this.automaton.wrapEdges = wrap;
                 this.automaton._markAllDirty();
                 this.automaton.render();
-                this._displayController.updateNeighborhoodInfo();
+                this._displayController?.updateNeighborhoodInfo();
                 if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine) {
                     this.automaton.triangleEngine.wrapEdges = wrap;
                 }
@@ -312,28 +322,18 @@ class UIController {
 
         const workerToggle = document.getElementById('workerToggle');
         if (workerToggle) {
-            /**
-             * Activa/desactiva el worker según el tamaño actual del grid y
-             * sincroniza el toggle visual. Llamado al inicializar y tras cada
-             * resize de grid (el autofit puede subir el grid por encima del umbral).
-             */
             const syncWorkerToggle = () => {
                 const exceedsThreshold = Math.max(this.automaton.gridWidth, this.automaton.gridHeight)
                     >= AppConfig.WORKER.THRESHOLD;
                 if (exceedsThreshold && !this.automaton.worker) {
                     this.automaton._initWorker();
                 } else if (!exceedsThreshold && this.automaton.worker) {
-                    // El grid se redujo bajo el umbral — el worker ya no aporta
                     this.automaton._cleanupWorker();
                 }
                 workerToggle.checked = this.automaton.worker !== null;
             };
-
             syncWorkerToggle();
-
-            // Re-evaluar tras cada resize (autofit, cambio manual de dimensiones)
             this._cleanups.push(eventBus.on('automaton:resized', syncWorkerToggle));
-
             this._addEventListener(workerToggle, 'change', (e) => {
                 if (e.target.checked) {
                     this.automaton._initWorker();
@@ -351,35 +351,24 @@ class UIController {
         this._addEventListener(document.getElementById('limitType'), 'change', () => this.updateLimitType());
         this._addEventListener(document.getElementById('limitValue'), 'input', () => this.updateLimitValue());
 
-        // Toggle de rendimiento
         const perfToggle = document.getElementById('perfToggle');
         if (perfToggle) {
             this._addEventListener(perfToggle, 'click', () => this._togglePerf());
         }
-        this._cleanups.push(
-            eventBus.on('perf:update', (perf) => this._updatePerfOverlay(perf))
-        );
+        this._cleanups.push(eventBus.on('perf:update', (perf) => this._updatePerfOverlay(perf)));
 
         this._specialModeController.bindEvents();
     }
-
-    // =========================================
-    // ACORDEONES
-    // =========================================
 
     _bindAccordionEvents() {
         document.querySelectorAll('.accordion-header').forEach(header => {
             this._addEventListener(header, 'click', (e) => {
                 e.preventDefault();
-
                 const isActive = header.classList.contains('active');
-
                 if (isActive) {
                     header.classList.remove('active');
                 } else {
                     header.classList.add('active');
-                    // Al abrir el acordeón de Vecindad, re-renderizar la grilla
-                    // con el ancho real disponible (que era 0 mientras estaba cerrado).
                     if (header.dataset.accordion === 'neighborhood') {
                         requestAnimationFrame(() => {
                             this._renderNeighborhoodGrid(this.automaton.neighborhoodRadius);
@@ -390,26 +379,14 @@ class UIController {
         });
     }
 
-    // =========================================
-    // ALEATORIEDAD
-    // =========================================
-
     _bindRandomPercentageControl() {
         const slider = document.getElementById('randomPercentage');
         const display = document.getElementById('randomPercentageDisplay');
-
         if (!slider || !display) return;
-
-        // Actualizar display al mover slider
         this._addEventListener(slider, 'input', () => {
-            const value = parseInt(slider.value, 10);
-            display.textContent = `${value}%`;
+            display.textContent = `${parseInt(slider.value, 10)}%`;
         });
     }
-
-    // =========================================
-    // EVENTOS DE TECLADO
-    // =========================================
 
     _bindKeyboardEvents() {
         this._addEventListener(document, 'keydown', (e) => this._handleKeyDown(e));
@@ -417,7 +394,7 @@ class UIController {
     }
 
     _handleKeyDown(e) {
-        this._canvasController.ctrlPressed = e.key === 'Control' ? true : this._canvasController.ctrlPressed;
+        this._canvasController.ctrlPressed = e.key === 'Control' ? true : this._canvasController._ctrlPressed;
         this._canvasController.shiftPressed = e.key === 'Shift' ? true : this._canvasController.shiftPressed;
         if (e.key === 'Alt') {
             e.preventDefault();
@@ -429,7 +406,6 @@ class UIController {
             this.undo();
             return;
         }
-
         if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             this.redo();
@@ -441,7 +417,6 @@ class UIController {
                 this.deselectPattern();
                 this._canvasController.cancelDrag();
                 this._canvasController.clearSelection();
-                // Desactivar bote de pintura si estaba activo
                 if (this._canvasController.bucketToolActive) {
                     this._canvasController.bucketToolActive = false;
                     document.getElementById('bucketToolBtn')?.classList.remove('active');
@@ -465,8 +440,7 @@ class UIController {
                 if (this._patternState.pattern?.pattern !== 'random') {
                     this._patternState.rotation = (this._patternState.rotation + 90) % 360;
                     this._patternState.pattern = getPatternWithRotation(
-                        this._patternState.key,
-                        this._patternState.rotation
+                        this._patternState.key, this._patternState.rotation
                     );
                     eventBus.emit('pattern:rotationChanged', {
                         pattern: this._patternState.pattern,
@@ -526,12 +500,9 @@ class UIController {
         const playBtn = document.getElementById('playBtn');
         const playText = document.getElementById('playText');
         const stepBtn = document.getElementById('stepBtn');
-
         if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
-
-        const playTextEl = playText || playBtn?.querySelector('span');
-        if (playTextEl) playTextEl.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
-
+        const textEl = playText || playBtn?.querySelector('span');
+        if (textEl) textEl.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
         if (stepBtn) stepBtn.disabled = isRunning;
     }
 
@@ -541,48 +512,33 @@ class UIController {
             this.automaton.generation = 0;
             this.automaton.updateStats();
         }
-
         const isRunning = this.automaton.toggleRunning();
-
-        // Controlar seguimiento durante simulación
         if (isRunning) {
             this.automaton.stateManager?.stopTracking();
         } else {
             this.automaton.stateManager?.startTracking();
         }
-
         this._syncPlayButtonState();
     }
 
     step() {
-        // Guardar estado para permitir retroceder este paso específico
         this.automaton.stateManager?.saveState(this.automaton.generation);
-
         this.automaton.nextGeneration();
         this.automaton.render();
     }
 
     _getPercentage() {
-        const percentageSlider = document.getElementById('randomPercentage');
-        return percentageSlider ? parseInt(percentageSlider.value, 10) / 100 : 0.35;
+        const slider = document.getElementById('randomPercentage');
+        return slider ? parseInt(slider.value, 10) / 100 : 0.35;
     }
 
     randomize() {
         const wasRunning = this.automaton.isRunning;
-        if (wasRunning) this.togglePlay(); // Pausar
-
+        if (wasRunning) this.togglePlay();
         this.automaton.randomize(this._getPercentage());
-
-        if (wasRunning) {
-            // Reanudar después de renderizar
-            requestAnimationFrame(() => this.togglePlay());
-        }
+        if (wasRunning) requestAnimationFrame(() => this.togglePlay());
     }
 
-    /**
-     * Detiene la simulación y emite el evento de cambio de estado.
-     * Patrón común siempre que la UI necesita forzar la parada.
-     */
     _stopAutomaton() {
         this.automaton.stop();
         this.automaton.isRunning = false;
@@ -591,34 +547,25 @@ class UIController {
 
     clear() {
         if (this.automaton.isRunning) this._stopAutomaton();
-
         this.automaton.clear();
         this._syncPlayButtonState();
     }
 
-    /**
-     * Ejecuta undo y muestra feedback
-     */
     undo() {
         if (this.automaton.undoCount === 0) {
             this._showNotification(t('notif.noUndo'), 'warning', 1500);
             return;
         }
-
         if (this.automaton.undo()) {
             this._showNotification(t('notif.undo'), 'info', 1000);
         }
     }
 
-    /**
-     * Ejecuta redo y muestra feedback
-     */
     redo() {
         if (this.automaton.redoCount === 0) {
             this._showNotification(t('notif.noRedo'), 'warning', 1500);
             return;
         }
-
         if (this.automaton.redo()) {
             this._showNotification(t('notif.redo'), 'info', 1000);
         }
@@ -626,14 +573,13 @@ class UIController {
 
     updateSpeed() {
         const slider = document.getElementById('speedControl');
-        const value = parseInt(slider.value);
-        this.automaton.setSpeed(value);
+        this.automaton.setSpeed(parseInt(slider.value));
         this.updateSpeedDisplay();
     }
 
     decreaseSpeed() {
         const slider = document.getElementById('speedControl');
-        const value = parseInt(String(slider.value), 10);
+        const value = parseInt(slider.value, 10);
         if (value <= 1) return;
         slider.value = value - 1;
         slider.dispatchEvent(new Event('input'));
@@ -641,7 +587,7 @@ class UIController {
 
     increaseSpeed() {
         const slider = document.getElementById('speedControl');
-        const value = parseInt(String(slider.value), 10);
+        const value = parseInt(slider.value, 10);
         if (value >= 10) return;
         slider.value = value + 1;
         slider.dispatchEvent(new Event('input'));
@@ -650,9 +596,11 @@ class UIController {
     updateSpeedDisplay() {
         const slider = document.getElementById('speedControl');
         const value = parseInt(slider.value);
-        const speedTexts = [t('speed.very_slow'), t('speed.slow'), t('speed.normal'), t('speed.fast'), t('speed.very_fast')];
+        const speedTexts = [
+            t('speed.very_slow'), t('speed.slow'), t('speed.normal'),
+            t('speed.fast'), t('speed.very_fast')
+        ];
         const index = Math.min(Math.max(Math.floor((value - 1) / 2), 0), speedTexts.length - 1);
-
         const display = document.getElementById('speedValue');
         if (display) display.textContent = `${speedTexts[index]} (${value}/10)`;
     }
@@ -685,17 +633,12 @@ class UIController {
         const btn = document.getElementById('perfToggle');
         const overlay = document.getElementById('perfOverlay');
         if (!btn || !overlay) return;
-
         const active = btn.classList.toggle('active');
         overlay.style.display = active ? 'block' : 'none';
         this.automaton.setPerfVisible(active);
-
-        // Forzar actualización inmediata con datos actuales o placeholder
         if (active) {
             this._updatePerfOverlay({
-                genPerSec: 0,
-                stepMs: 0,
-                renderMs: 0,
+                genPerSec: 0, stepMs: 0, renderMs: 0,
                 mode: this.automaton.specialMode || 'Standard'
             });
         }
@@ -704,36 +647,16 @@ class UIController {
     _updatePerfOverlay(perf) {
         const overlay = document.getElementById('perfOverlay');
         if (!overlay || overlay.style.display === 'none') return;
-
         const stepMs = perf.stepMs.toFixed(1);
         const renderMs = perf.renderMs.toFixed(1);
         const totalMs = (perf.stepMs + perf.renderMs).toFixed(1);
-        const gps = perf.genPerSec;
-
-        // Colorear según rendimiento: <16ms verde, <33ms amarillo, >33ms rojo
         const cls = (ms) => ms < 16 ? '' : ms < 33 ? 'warn' : 'slow';
-
         overlay.innerHTML = `
-            <div class="perf-row">
-                <span class="perf-label">gen/s</span>
-                <span class="perf-value">${gps}</span>
-            </div>
-            <div class="perf-row">
-                <span class="perf-label">step</span>
-                <span class="perf-value ${cls(perf.stepMs)}">${stepMs}ms</span>
-            </div>
-            <div class="perf-row">
-                <span class="perf-label">render</span>
-                <span class="perf-value ${cls(perf.renderMs)}">${renderMs}ms</span>
-            </div>
-            <div class="perf-row">
-                <span class="perf-label">total</span>
-                <span class="perf-value ${cls(perf.stepMs + perf.renderMs)}">${totalMs}ms</span>
-            </div>
-            <div class="perf-row">
-                <span class="perf-label">modo</span>
-                <span class="perf-value" style="color:var(--gray-text)">${perf.mode}</span>
-            </div>`;
+            <div class="perf-row"><span class="perf-label">gen/s</span><span class="perf-value">${perf.genPerSec}</span></div>
+            <div class="perf-row"><span class="perf-label">step</span><span class="perf-value ${cls(perf.stepMs)}">${stepMs}ms</span></div>
+            <div class="perf-row"><span class="perf-label">render</span><span class="perf-value ${cls(perf.renderMs)}">${renderMs}ms</span></div>
+            <div class="perf-row"><span class="perf-label">total</span><span class="perf-value ${cls(perf.stepMs + perf.renderMs)}">${totalMs}ms</span></div>
+            <div class="perf-row"><span class="perf-label">modo</span><span class="perf-value" style="color:var(--gray-text)">${perf.mode}</span></div>`;
     }
 
     toggleInfluenceArea() {
@@ -748,29 +671,17 @@ class UIController {
         this._effectsController.toggleActivityEffect();
     }
 
-    _toggleActivityEffect(checked) {
-        this._effectsController._toggleActivityEffect(checked);
+    _toggleActivityEffect(v) {
+        this._effectsController._toggleActivityEffect(v);
     }
 
     toggleActivityEffectCheckbox() {
         this._effectsController._syncActivityEffectCheckbox();
     }
 
-    /**
-     * Conmuta el bloque activityColors entre sus dos modos:
-     *  - Binario (default): 4 swatches fijos dead/born/alive/dying
-     *  - Generations: N swatches dinámicos (uno por estado del engine)
-     *
-     * Llamado por SpecialModeController al activar/desactivar Generations.
-     * @param {boolean} active
-     */
     _syncActivityColorsBlock(active) {
         this._effectsController.syncActivityColorsBlock(active);
     }
-
-    // =========================================
-    // IMPORT / EXPORT — delegados a ImportExportController
-    // =========================================
 
     exportPattern() {
         this._importExportController.exportPattern();
@@ -784,7 +695,6 @@ class UIController {
         const select = document.getElementById('limitType');
         const valueGroup = document.getElementById('limitValueGroup');
         const limitValue = document.getElementById('limitValue');
-
         if (select.value === 'none') {
             valueGroup.style.display = 'none';
             this.automaton.setLimit('none', 0);
@@ -792,7 +702,6 @@ class UIController {
             valueGroup.style.display = 'block';
             this.automaton.setLimit(select.value, parseInt(limitValue.value));
         }
-
         this.automaton.isLimitReached = false;
     }
 
@@ -800,13 +709,9 @@ class UIController {
         const select = document.getElementById('limitType');
         const slider = document.getElementById('limitValue');
         const value = parseInt(slider.value);
-
         const display = document.getElementById('limitValueDisplay');
         if (display) display.textContent = value.toLocaleString();
-
-        if (select.value !== 'none') {
-            this.automaton.setLimit(select.value, value);
-        }
+        if (select.value !== 'none') this.automaton.setLimit(select.value, value);
     }
 
     changeRule() {
@@ -817,53 +722,6 @@ class UIController {
         this._ruleController.applyCustomRule();
     }
 
-    /**
-     * Muestra una notificación flotante
-     * @private
-     */
-    _showNotification(message, type = 'info', duration = 2000) {
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.textContent = message;
-
-        // Estilos inline para evitar crear CSS nuevo
-        notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 12px 20px;
-        background: ${type === 'warning' ? '#f59e0b' : '#10b981'};
-        color: white;
-        border-radius: 4px;
-        font-size: 14px;
-        font-weight: 500;
-        z-index: 10000;
-        opacity: 0;
-        transform: translateY(-10px);
-        transition: opacity 0.3s, transform 0.3s;
-        pointer-events: none;
-    `;
-
-        document.body.appendChild(notification);
-
-        // Animar entrada
-        requestAnimationFrame(() => {
-            notification.style.opacity = '1';
-            notification.style.transform = 'translateY(0)';
-        });
-
-        // Auto-remover
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateY(-10px)';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
-        }, duration);
-    }
-
     changeNeighborhoodType(type) {
         this._neighborhoodController.changeNeighborhoodType(type);
     }
@@ -872,17 +730,34 @@ class UIController {
         this._neighborhoodController.changeNeighborhoodRadius(radius);
     }
 
-    /**
-     * Construye (o reconstruye) la grilla visual de (2R+1)×(2R+1) celdas.
-     *
-     * Estado inicial de las celdas:
-     *   - moore   → todas activas
-     *   - neumann → solo las del diamante (|dx|+|dy| ≤ R)
-     *   - custom  → la selección existente, filtrada al nuevo radio
-     * @param {number} radius
-     */
     _renderNeighborhoodGrid(radius) {
         this._neighborhoodController.renderGrid(radius);
+    }
+
+    loadRules() {
+        this._ruleController.loadRules();
+    }
+
+    _showNotification(message, type = 'info', duration = 2000) {
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+            position:fixed;top:20px;right:20px;padding:12px 20px;
+            background:${type === 'warning' ? '#f59e0b' : '#10b981'};
+            color:white;border-radius:4px;font-size:14px;font-weight:500;
+            z-index:10000;opacity:0;transform:translateY(-10px);
+            transition:opacity .3s,transform .3s;pointer-events:none;`;
+        document.body.appendChild(notification);
+        requestAnimationFrame(() => {
+            notification.style.opacity = '1';
+            notification.style.transform = 'translateY(0)';
+        });
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(-10px)';
+            setTimeout(() => notification.parentNode?.removeChild(notification), 300);
+        }, duration);
     }
 
     _bindPatternsControls() {
@@ -898,13 +773,11 @@ class UIController {
                 if (!cc) return;
                 cc.bucketToolActive = !cc.bucketToolActive;
                 bucketBtn.classList.toggle('active', cc.bucketToolActive);
-                // Deseleccionar patrón activo al activar el bote
                 if (cc.bucketToolActive) this.deselectPattern();
                 cc._updateCursor();
             });
         }
 
-        // Deseleccionar bote cuando se elige un patrón
         this._cleanups.push(
             eventBus.on('pattern:selected', () => {
                 if (this._canvasController?.bucketToolActive) {
@@ -912,7 +785,7 @@ class UIController {
                     document.getElementById('bucketToolBtn')?.classList.remove('active');
                     this._canvasController._updateCursor();
                 }
-                this._displayController.updateDrawModeIndicator();
+                this._displayController?.updateDrawModeIndicator();
             })
         );
 
@@ -921,7 +794,9 @@ class UIController {
                 this.patternsTwoRows = !this.patternsTwoRows;
                 container.classList.toggle('two-rows', this.patternsTwoRows);
                 const icon = toggleRowsBtn.querySelector('i');
-                if (icon) icon.className = this.patternsTwoRows ? 'fas fa-grip-lines-vertical' : 'fas fa-grip-lines';
+                if (icon) icon.className = this.patternsTwoRows
+                    ? 'fas fa-grip-lines-vertical'
+                    : 'fas fa-grip-lines';
             });
             container.classList.add('two-rows');
             toggleRowsBtn.querySelector('i')?.classList.add('fa-grip-lines-vertical');
@@ -941,32 +816,33 @@ class UIController {
             toggleCompactBtn.querySelector('i')?.classList.add('fa-expand-alt');
         }
 
-        if (toggleSortBtn && window.patternManager) {
+        const pm = this._getPatternManager();
+        if (toggleSortBtn && pm) {
             this._addEventListener(toggleSortBtn, 'click', () => {
                 this.patternsSortByCount = !this.patternsSortByCount;
                 const icon = toggleSortBtn.querySelector('i');
-                if (icon) icon.className = this.patternsSortByCount ? 'fas fa-sort-numeric-down' : 'fas fa-sort-alpha-down';
-                window.patternManager.renderPatterns(this.patternsSortByCount);
+                if (icon) icon.className = this.patternsSortByCount
+                    ? 'fas fa-sort-numeric-down'
+                    : 'fas fa-sort-alpha-down';
+                pm.renderPatterns(this.patternsSortByCount);
             });
-            window.patternManager.renderPatterns(false);
+            pm.renderPatterns(false);
             toggleSortBtn.querySelector('i')?.classList.add('fa-sort-alpha-down');
         }
 
         const showAllBtn = document.getElementById('patternsShowAll');
-        if (showAllBtn && window.patternManager) {
+        if (showAllBtn && pm) {
             this._addEventListener(showAllBtn, 'click', () => {
                 this.patternsShowAll = !this.patternsShowAll;
                 showAllBtn.classList.toggle('active', this.patternsShowAll);
-                window.patternManager.setShowAll(this.patternsShowAll);
+                pm.setShowAll(this.patternsShowAll);
             });
-
-            // Al cambiar de modo el filtro se resetea — apagar el botón si estaba activo
             this._cleanups.push(
                 eventBus.on('automaton:filterChanged', () => {
                     if (this.patternsShowAll) {
                         this.patternsShowAll = false;
                         showAllBtn.classList.remove('active');
-                        window.patternManager.setShowAll(false);
+                        pm.setShowAll(false);
                     }
                 })
             );
@@ -974,25 +850,15 @@ class UIController {
     }
 
     _bindPatternEvents() {
-        // Escuchar eventos DEL EVENTBUS
         this._cleanups.push(
-            eventBus.on('pattern:selected', () => {
-                this._displayController.updateDrawModeIndicator();
-            }),
-            eventBus.on('pattern:updated', () => {
-                this._displayController.updateDrawModeIndicator();
-            }),
-            eventBus.on('pattern:cleared', () => {
-                this._displayController.updateDrawModeIndicator();
-            })
+            eventBus.on('pattern:selected', () => this._displayController?.updateDrawModeIndicator()),
+            eventBus.on('pattern:updated', () => this._displayController?.updateDrawModeIndicator()),
+            eventBus.on('pattern:cleared', () => this._displayController?.updateDrawModeIndicator())
         );
 
-        // Botón Cancelar (evento DOM directo)
         const cancelBtn = document.getElementById('cancelPatternBtn');
         if (cancelBtn) {
-            this._addEventListener(cancelBtn, 'click', () => {
-                this.deselectPattern();
-            });
+            this._addEventListener(cancelBtn, 'click', () => this.deselectPattern());
         }
     }
 
@@ -1008,13 +874,14 @@ class UIController {
         const nameEl = document.getElementById('patternNameMini');
         const detailsEl = document.getElementById('patternDetailsMini');
         const descEl = document.getElementById('patternDescriptionMini');
-
         if (nameEl) nameEl.textContent = t('patterns.select');
         if (detailsEl) detailsEl.textContent = t('patterns.details');
         if (descEl) descEl.textContent = '';
 
-        window.patternManager?.hidePatternPreview();
-        window.patternManager?.hideInfluenceArea();
-        this._displayController.updateDrawModeIndicator();
+        this._getPatternManager()?.hidePatternPreview();
+        this._getPatternManager()?.hideInfluenceArea();
+        this._displayController?.updateDrawModeIndicator();
     }
 }
+
+export {UIController};

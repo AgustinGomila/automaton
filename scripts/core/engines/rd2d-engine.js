@@ -1,59 +1,45 @@
 /**
+ * scripts/core/engines/rd2d-engine.js
+ *
  * RD2DEngine — Motor de Distinción Recursiva 2D.
  *
  * Basado en el trabajo de Louis Kauffman sobre Distinción Recursiva.
- * 16 estados representados por 4 bits: [N, S, E, W] (Norte, Sur, Este, Oeste).
- * Cada bit indica si la frontera correspondiente está "abierta" (1) o "cerrada" (0).
+ * 16 estados representados por 4 bits: [N, S, E, W].
+ * Regla: nuevo_estado = vecN XOR vecS XOR vecE XOR vecW
  *
- * Estados (0-15):
- *   0: 0000 (vacío)    4: 0100 (S)       8: 1000 (N)      12: 1100 (NS)
- *   1: 0001 (E)        5: 0101 (SE)      9: 1001 (NE)     13: 1101 (NSE)
- *   2: 0010 (W)        6: 0110 (SW)     10: 1010 (NW)     14: 1110 (NSW)
- *   3: 0011 (EW)       7: 0111 (SEW)    11: 1011 (NEW)    15: 1111 (NSEW)
- *
- * Regla de evolución: XOR de los estados de los 4 vecinos cardinales.
- *   nuevo_estado[x][y] = vecino_N XOR vecino_S XOR vecino_E XOR vecino_W
+ * ─── Optimización step() ───────────────────────────────────────────────
+ * El hot-loop inline los 4 accesos de vecinos directamente en lugar de
+ * llamar _getState() 4 veces por celda. Beneficios:
+ *   - Elimina 4M calls/frame (1000×1000) con su overhead de V8 dispatch.
+ *   - Cachea wrapEdges, gw, gh fuera del doble loop.
+ *   - Loop x-exterior / y-interior (column-major) coincide con el layout
+ *     stateGrid[x][y], maximizando la localidad de caché del Uint8Array.
  *
  * ─── Convención de índice plano ────────────────────────────────────────
  * Column-major:  index = x * gridHeight + y
  * Consistente con GridRenderer y GridManager.
- *
- * ─── Grids rectangulares ───────────────────────────────────────────────
- * gridWidth y gridHeight se guardan como propiedades de instancia y se
- * re-sincronizan al inicio de step() para detectar resize en caliente.
  */
+
 class RD2DEngine {
 
     /**
      * Paleta de colores por número de fronteras abiertas (0-4 bits activos).
-     * Reproduce la escala cromática de _getRD2DColor que vivía en GridRenderer.
      */
     static COLORS = [
-        null,       // 0 fronteras — vacío (renderer usa fondo)
+        null,       // 0 fronteras — vacío
         '#ef4444',  // 1 frontera  — rojo
         '#f97316',  // 2 fronteras — naranja
         '#eab308',  // 3 fronteras — amarillo
         '#22c55e',  // 4 fronteras — verde
     ];
 
-    // =========================================
-    // UTILIDADES ESTÁTICAS
-    // =========================================
-
-    /**
-     * @param {Object} automaton — instancia de CellularAutomaton.
-     *   Expone: .grid, .gridWidth, .gridHeight, .wrapEdges, .renderer,
-     *           ._markAllDirty()
-     */
     constructor(automaton) {
         this.automaton = automaton;
         this.isActive = false;
 
-        // Dimensiones snapshot — se sincronizan en step() para detectar resize
         this.gridWidth = 0;
         this.gridHeight = 0;
 
-        // Doble buffer de estados 0-15
         this.stateGrid = null;
         this._backStateGrid = null;
 
@@ -61,8 +47,8 @@ class RD2DEngine {
         this.initialized = false;
         this._forceReinit = false;
 
-        // Índices planos (x * gridHeight + y) de las celdas cambiadas en el último paso
-        this._changedCells = [];
+        this._changedBuf = new Uint32Array(0);  // buffer pre-allocado, crece/recorta según necesidad
+        this._changedCount = 0;
     }
 
     /** Nombre legible del estado para debugging. */
@@ -74,44 +60,27 @@ class RD2DEngine {
         return names[state] || '∅';
     }
 
-    /** Cuenta fronteras abiertas (bits activos) en un estado. */
     static countBorders(state) {
         let count = 0;
         for (let i = 0; i < 4; i++) count += (state >> i) & 1;
         return count;
     }
 
-    // =========================================
-    // CICLO DE VIDA
-    // =========================================
+    // ─── Ciclo de vida ────────────────────────────────────────────────────
 
-    /** Convierte estado numérico a objeto de fronteras {N, S, E, W}. */
-    static stateToBorders(state) {
-        return {
-            N: (state >> 3) & 1,
-            S: (state >> 2) & 1,
-            E: (state >> 1) & 1,
-            W: state & 1
-        };
-    }
-
-    /**
-     * Activa el motor RD-2D.
-     * @returns {RD2DEngine} this para chaining
-     */
     activate() {
+        this.isActive = true;
         this.gridWidth = this.automaton.gridWidth;
         this.gridHeight = this.automaton.gridHeight;
-        this.isActive = true;
         this.generation = 0;
         this.initialized = false;
         this._forceReinit = false;
         this._initStateGrid();
-        // Registrar colorProvider: el renderer usará este callback para colorear
-        // cada celda viva según su estado RD (0-15), igual que Langton o WireWorld.
-        // Esto elimina el acoplamiento directo entre GridRenderer y RD2DEngine.
-        this.automaton.renderer.setColorProvider(this._colorProvider.bind(this));
 
+        this.automaton.renderer.setColorProvider(
+            (idx) => this._colorProvider(idx)
+        );
+        console.debug(`🔵 RD-2D activado, ${this.gridWidth}×${this.gridHeight}`);
         return this;
     }
 
@@ -120,41 +89,71 @@ class RD2DEngine {
         this.stateGrid = null;
         this._backStateGrid = null;
         this.initialized = false;
-        // Retirar el colorProvider al desactivar.
         // Usar ?. doble: el renderer puede ser el triangular (sin setColorProvider)
         // si RD2D se desactiva mientras Triangle aún no restauró el renderer estándar.
         this.automaton.renderer?.setColorProvider?.(null);
     }
 
-    // =========================================
-    // PASO DE SIMULACIÓN
-    // =========================================
-
     /**
      * Resetea para reinicio controlado.
-     * La próxima llamada a step() reinicializará desde el grid actual.
+     * Limpia stateGrid y fuerza repintado completo para que las celdas
+     * coloreadas desaparezcan del canvas.
+     *
+     * La limpieza de automaton.grid solo ocurre cuando el engine está activo:
+     * resetAllEngines() llama a este método en todos los engines y no debemos
+     * borrar el grid principal cuando RD2D no era el modo activo.
      */
     reset() {
         this.initialized = false;
         this._forceReinit = false;
         this.generation = 0;
-        this._changedCells.length = 0;
+        this._changedCount = 0;
 
         if (this.stateGrid) {
             for (let x = 0; x < this.stateGrid.length; x++) {
                 this.stateGrid[x]?.fill(0);
             }
         }
+
+        // Solo limpiar el grid binario y forzar repintado si RD2D estaba activo.
+        // Si no estaba activo (llamado desde resetAllEngines durante randomize/clear),
+        // no debemos tocar el grid principal: podría borrar datos recién escritos.
+        if (this.isActive && this.automaton?.grid) {
+            const gw = this.gridWidth;
+            for (let x = 0; x < gw; x++) {
+                if (this.automaton.grid[x]) this.automaton.grid[x].fill(0);
+            }
+            this.automaton?.renderer?.markAllDirty?.();
+        }
     }
 
+    syncFromGrid() {
+        this._initStateGrid();
+        const gw = this.gridWidth;
+        const gh = this.gridHeight;
+        for (let x = 0; x < gw; x++) {
+            if (!this.automaton.grid[x]) continue;
+            for (let y = 0; y < gh; y++) {
+                this.stateGrid[x][y] = this.automaton.grid[x][y]
+                    ? (this._inferStateFromNeighbors(x, y) || 15)
+                    : 0;
+            }
+        }
+    }
+
+    // ─── Paso de simulación ───────────────────────────────────────────────
+
     /**
-     * Calcula la siguiente generación aplicando XOR de vecinos cardinales.
-     * @returns {boolean} true si alguna celda cambió; false si el estado es estable.
+     * Avanza una generación.
+     *
+     * Hot-path: los 4 vecinos se acceden inline con ternarios (wrap)
+     * o bounds checks (bounded). Sin llamadas a _getState().
+     * Loop x-exterior/y-interior = column-major = cache-friendly para Uint8Array.
      */
     step() {
         if (!this.isActive || !this.automaton?.grid) return false;
 
-        // Re-sincronizar dimensiones si el grid cambió de tamaño
+        // Resincronizar si el grid cambió de tamaño
         const curW = this.automaton.gridWidth;
         const curH = this.automaton.gridHeight;
         if (curW !== this.gridWidth || curH !== this.gridHeight) {
@@ -173,13 +172,14 @@ class RD2DEngine {
             this.initialized = true;
             this.generation = 0;
 
-            // Registrar todas las celdas no-vacías como cambiadas en la inicialización
-            this._changedCells = [];
+            // Registrar todas las celdas no-vacías como cambiadas
             const gw = this.gridWidth;
             const gh = this.gridHeight;
+            const buf = this._ensureChangedBuf(gw, gh);
+            this._changedCount = 0;
             for (let x = 0; x < gw; x++) {
                 for (let y = 0; y < gh; y++) {
-                    if (this.stateGrid[x][y] !== 0) this._changedCells.push(x * gh + y);
+                    if (this.stateGrid[x][y] !== 0) buf[this._changedCount++] = x * gh + y;
                 }
             }
             return true;
@@ -187,48 +187,56 @@ class RD2DEngine {
 
         const gw = this.gridWidth;
         const gh = this.gridHeight;
+        const wrap = this.automaton.wrapEdges;  // cachear fuera del loop
         const sg = this.stateGrid;
         const back = this._backStateGrid;
-        const grid = this.automaton.grid;
-        const renderer = this.automaton.renderer;
-        const wrap = this.automaton.wrapEdges;
+        const buf = this._ensureChangedBuf(gw, gh);
 
-        this._changedCells.length = 0;
+        this._changedCount = 0;
         let changed = false;
 
-        for (let x = 0; x < gw; x++) {
-            // Pre-calcular índices de vecinos horizontales con wrap inline —
-            // evita 2× módulo por celda dentro del loop Y (4M operaciones en 1000×1000).
-            const xL = wrap ? (x === 0 ? gw - 1 : x - 1) : x - 1;
-            const xR = wrap ? (x === gw - 1 ? 0 : x + 1) : x + 1;
+        if (wrap) {
+            // ── Path toroidal: ternarios sin branching extra ──────────────
+            for (let x = 0; x < gw; x++) {
+                const xm = x === 0 ? gw - 1 : x - 1;
+                const xp = x === gw - 1 ? 0 : x + 1;
+                const colBack = back[x];
+                const colCurr = sg[x];
+                const colM = sg[xm];
+                const colP = sg[xp];
 
-            const colL = (xL >= 0 && xL < gw) ? sg[xL] : null;
-            const col = sg[x];
-            const colR = (xR >= 0 && xR < gw) ? sg[xR] : null;
-            const gridCol = grid[x];
+                for (let y = 0; y < gh; y++) {
+                    const ym = y === 0 ? gh - 1 : y - 1;
+                    const yp = y === gh - 1 ? 0 : y + 1;
 
-            for (let y = 0; y < gh; y++) {
-                // Vecinos cardinales inlineados — sin _getState(), sin módulo en Y
-                const yU = wrap ? (y === 0 ? gh - 1 : y - 1) : y - 1;
-                const yD = wrap ? (y === gh - 1 ? 0 : y + 1) : y + 1;
+                    const ns = colCurr[ym]   // N
+                        ^ colCurr[yp]   // S
+                        ^ colP[y]        // E
+                        ^ colM[y];       // W
 
-                const n = (colL ? colL[y] : 0)
-                    ^ (colR ? colR[y] : 0)
-                    ^ (yU >= 0 ? col[yU] : 0)
-                    ^ (yD < gh ? col[yD] : 0);
+                    colBack[y] = ns;
+                    if (ns !== colCurr[y]) {
+                        changed = true;
+                        buf[this._changedCount++] = x * gh + y;
+                    }
+                }
+            }
+        } else {
+            // ── Path bounded: bounds checks explícitos ───────────────────
+            for (let x = 0; x < gw; x++) {
+                const colBack = back[x];
+                const colCurr = sg[x];
 
-                back[x][y] = n;
+                for (let y = 0; y < gh; y++) {
+                    const ns = (y > 0 ? colCurr[y - 1] : 0)   // N
+                        ^ (y < gh - 1 ? colCurr[y + 1] : 0)   // S
+                        ^ (x < gw - 1 ? sg[x + 1][y] : 0)   // E
+                        ^ (x > 0 ? sg[x - 1][y] : 0);  // W
 
-                if (n !== col[y]) {
-                    changed = true;
-                    this._changedCells.push(x * gh + y);
-
-                    // Sincronización grid binario + mark dirty inline —
-                    // elimina el segundo loop _syncToAutomatonGrid()
-                    const isAlive = n !== 0;
-                    if (gridCol[y] !== (isAlive ? 1 : 0)) {
-                        gridCol[y] = isAlive ? 1 : 0;
-                        renderer.markDirty(x, y);
+                    colBack[y] = ns;
+                    if (ns !== colCurr[y]) {
+                        changed = true;
+                        buf[this._changedCount++] = x * gh + y;
                     }
                 }
             }
@@ -239,48 +247,16 @@ class RD2DEngine {
         this.stateGrid = back;
         this.generation++;
 
+        this._syncToAutomatonGrid();
         return changed;
     }
 
-    // =========================================
-    // SINCRONIZACIÓN TRAS EDICIÓN MANUAL
-    // =========================================
-
     getChangedCells() {
-        return this._changedCells;
+        return this._changedBuf.subarray(0, this._changedCount);
     }
 
-    // =========================================
-    // DESPLAZAMIENTO TOROIDAL (pan)
-    // =========================================
+    // ─── Desplazamiento toroidal (pan) ────────────────────────────────────
 
-    /**
-     * Sincroniza el stateGrid RD desde el grid binario del autómata.
-     * Convierte celdas vivas del usuario a estados RD apropiados.
-     */
-    syncFromGrid() {
-        this._initStateGrid();
-        const gw = this.gridWidth;
-        const gh = this.gridHeight;
-
-        for (let x = 0; x < gw; x++) {
-            if (!this.automaton.grid[x]) continue;
-            for (let y = 0; y < gh; y++) {
-                this.stateGrid[x][y] = this.automaton.grid[x][y]
-                    ? (this._inferStateFromNeighbors(x, y) || 15)
-                    : 0;
-            }
-        }
-    }
-
-    // =========================================
-    // INFO
-    // =========================================
-
-    /**
-     * Desplaza el stateGrid (dx, dy) celdas en modo toroidal.
-     * Llamado por shiftGrid() cuando el usuario hace pan con Alt+drag.
-     */
     shift(dx, dy) {
         if (!this.stateGrid) return;
         const gw = this.gridWidth;
@@ -297,14 +273,11 @@ class RD2DEngine {
             }
         }
 
-        // Swap: dst pasa a ser el stateGrid activo, src queda como back buffer
         this._backStateGrid = src;
         this.stateGrid = dst;
     }
 
-    // =========================================
-    // PRIVADOS
-    // =========================================
+    // ─── Info ─────────────────────────────────────────────────────────────
 
     getInfo() {
         let aliveCells = 0;
@@ -317,7 +290,6 @@ class RD2DEngine {
                 }
             }
         }
-
         return {
             active: this.isActive,
             generation: this.generation,
@@ -329,11 +301,11 @@ class RD2DEngine {
         };
     }
 
+    // ─── Privados ─────────────────────────────────────────────────────────
+
     /**
      * Proveedor de color para GridRenderer.setColorProvider().
-     * Recibe un índice plano (x * gridHeight + y) y devuelve un color CSS
-     * proporcional al número de fronteras abiertas del estado RD (0-15),
-     * o null si la celda está vacía.
+     * Solo se llama si el path WASM no está activo (RD-2D usa colorProvider).
      */
     _colorProvider(cellIndex) {
         if (!this.stateGrid) return null;
@@ -342,35 +314,40 @@ class RD2DEngine {
         const y = cellIndex % gh;
         const state = this.stateGrid[x]?.[y];
         if (!state) return null;
-        // Contar bits activos (fronteras abiertas)
         let count = 0;
         for (let i = 0; i < 4; i++) count += (state >> i) & 1;
         return RD2DEngine.COLORS[count] ?? '#94a3b8';
     }
 
     /**
-     * Inicializa los dos buffers de estado (doble buffer para swap sin allocaciones).
+     * Reutiliza el buffer de changed cells.
+     * Crece si el grid es mayor que el buffer actual.
+     * Recorta si el grid ocupa menos del 25% del buffer (evita retener
+     * memoria tras un redimensionado de grids grandes a pequeños).
+     * @param {number} gw
+     * @param {number} gh
      */
+    _ensureChangedBuf(gw, gh) {
+        const needed = gw * gh;
+        if (!this._changedBuf.length
+            || this._changedBuf.length < needed
+            || this._changedBuf.length > needed * 4) {
+            this._changedBuf = new Uint32Array(needed);
+        }
+        return this._changedBuf;
+    }
+
     _initStateGrid() {
         this.stateGrid = this._allocGrid(this.gridWidth, this.gridHeight);
         this._backStateGrid = this._allocGrid(this.gridWidth, this.gridHeight);
     }
 
-    /**
-     * Aloca un grid column-major Uint8Array[w][h], inicializado a cero.
-     * @param {number} w - ancho (número de columnas)
-     * @param {number} h - alto (número de filas por columna); por defecto = w
-     */
     _allocGrid(w, h = w) {
         const g = new Array(w);
         for (let x = 0; x < w; x++) g[x] = new Uint8Array(h);
         return g;
     }
 
-    /**
-     * Verifica si el usuario dibujó alguna semilla en el grid binario.
-     * @returns {boolean}
-     */
     _checkUserSeed() {
         const gw = this.gridWidth;
         const gh = this.gridHeight;
@@ -384,10 +361,8 @@ class RD2DEngine {
     }
 
     /**
-     * Obtiene el estado de una celda con soporte toroidal o bounded.
-     * @param {number} x
-     * @param {number} y
-     * @returns {number} Estado 0-15
+     * Devuelve el estado de una celda con soporte toroidal o bounded.
+     * Solo se usa fuera del hot-loop (syncFromGrid, inferState).
      */
     _getState(x, y) {
         const gw = this.gridWidth;
@@ -401,9 +376,6 @@ class RD2DEngine {
         return this.stateGrid[x]?.[y] || 0;
     }
 
-    /**
-     * Actualiza grid[][] desde stateGrid y marca dirty las celdas que cambiaron.
-     */
     _syncToAutomatonGrid() {
         const gw = this.gridWidth;
         const gh = this.gridHeight;
@@ -419,10 +391,6 @@ class RD2DEngine {
         }
     }
 
-    /**
-     * Coloca la semilla por defecto: una cruz centrada en el centro geométrico
-     * del grid, con estado 15 (NSEW) en cada celda de la cruz.
-     */
     _initializeDefaultSeed() {
         const gw = this.gridWidth;
         const gh = this.gridHeight;
@@ -449,11 +417,6 @@ class RD2DEngine {
         this._forceReinit = false;
     }
 
-    /**
-     * Intenta inferir un estado RD razonable basado en los vecinos cardinales vivos.
-     * Si una celda tiene vecinos vivos en ciertas direcciones, abre esas fronteras.
-     * @returns {number} Estado inferido (0-15), o 15 si no hay vecinos.
-     */
     _inferStateFromNeighbors(x, y) {
         const gw = this.gridWidth;
         const gh = this.gridHeight;
@@ -468,4 +431,4 @@ class RD2DEngine {
     }
 }
 
-window.RD2DEngine = RD2DEngine;
+export {RD2DEngine};

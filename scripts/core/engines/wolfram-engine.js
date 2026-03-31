@@ -274,4 +274,4 @@ class WolframEngine {
     }
 }
 
-window.WolframEngine = WolframEngine;
+export {WolframEngine};

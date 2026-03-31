@@ -247,4 +247,4 @@ class EffectsController {
     }
 }
 
-window.EffectsController = EffectsController;
+export {EffectsController};

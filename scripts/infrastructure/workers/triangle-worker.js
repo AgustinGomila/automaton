@@ -177,7 +177,7 @@
 
             const t = grid;
             grid = twinGrid;
-            twinGrid = temp;
+            twinGrid = t;
 
             generation++;
             changedCount = tc;

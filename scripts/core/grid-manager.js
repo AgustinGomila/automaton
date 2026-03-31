@@ -1,3 +1,5 @@
+import {AppConfig} from '../utils/config.js';
+
 /**
  * GridManager - Gestión pura del grid de celdas.
  *
@@ -127,6 +129,8 @@ class GridManager {
     }
 
     /**
+     * @param {number} x
+     * @param {number} y
      * @param {number} state — 0 o 1
      * @returns {boolean} true si cambió el estado
      */
@@ -226,4 +230,4 @@ class GridManager {
     }
 }
 
-window.GridManager = GridManager;
+export {GridManager};

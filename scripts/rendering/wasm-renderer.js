@@ -204,7 +204,10 @@ class WasmRenderer {
 
     /**
      * Render completo vía WASM.
-     * @param {number}  dead32, alive32, born32, dying32 — uint32 RGBA LE
+     * @param {number}  dead32
+     * @param {number}  alive32
+     * @param {number}  born32
+     * @param {number}  dying32 — uint32 RGBA LE
      * @param {boolean} showActivity
      * @param {number}  cooldown
      */
@@ -221,7 +224,10 @@ class WasmRenderer {
      * Render diferencial vía WASM.
      * Copia el Set de índices sucios al buffer WASM y llama fill_dirty.
      * @param {Set<number>} dirtyCells
-     * @param {number}  dead32, alive32, born32, dying32
+     * @param {number}  dead32
+     * @param {number}  alive32
+     * @param {number}  born32
+     * @param {number}  dying32
      * @param {boolean} showActivity
      * @param {number}  cooldown
      * @returns {{px, py, pw, ph}} — dirty rect en píxeles para putImageData
@@ -280,4 +286,4 @@ class WasmRenderer {
     }
 }
 
-window.WasmRenderer = WasmRenderer;
+export {WasmRenderer};

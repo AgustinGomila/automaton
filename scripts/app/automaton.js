@@ -1,15 +1,30 @@
 /**
+ * scripts/app/automaton.js
+ *
  * CellularAutomaton — Coordinador del autómata celular.
  *
- * Actualizado para grids rectangulares (width × height).
- * • gridWidth / gridHeight son la fuente de verdad dimensional del grid.
- * • resizeGrid acepta (width, height) con height opcional (cuadrado por defecto).
- * • Worker, renderer y engines especiales reciben dimensiones rectangulares.
+ * Cambios ESM:
+ *   - window.RULES / polling → rulesLoader.RULES + eventBus.once('rules:loaded')
+ *   - Todas las clases colaboradoras importadas explícitamente.
+ *   - Sin `window.CellularAutomaton`.
  */
+
+import {AppConfig} from '../utils/config.js';
+import {eventBus} from '../infrastructure/event-bus.js';
+
+import {CellularAutomatonCore} from '../core/cellular-automaton.js';
+import {GridRenderer} from '../rendering/grid-renderer.js';
+import {GridWorkerManager} from '../infrastructure/workers/grid-worker-manager.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {AnimationLoop} from './automaton-loop.js';
+import {SimulationLimiter} from './simulator-limiter.js';
+import {StateManager} from './state-manager.js';
+import {EditCoordinator} from './edit-coordinator.js';
+import {rulesLoader} from '../config/rules-loader.js';
+
 class CellularAutomaton {
     constructor(gridWidth = AppConfig.GRID.DEFAULT_WIDTH, gridHeight = gridWidth, cellSize = AppConfig.GRID.DEFAULT_CELL_SIZE) {
-        // Soportar firma legacy: constructor(gridSize, cellSize)
-        // Si gridHeight parece un cellSize (1–20) y gridWidth es grande → API legacy
+        // Compatibilidad con firma legacy: constructor(gridSize, cellSize)
         if (gridHeight >= 1 && gridHeight <= AppConfig.GRID.MAX_CELL_SIZE && gridWidth > AppConfig.GRID.MAX_CELL_SIZE) {
             cellSize = gridHeight;
             gridHeight = gridWidth;
@@ -34,7 +49,6 @@ class CellularAutomaton {
             maxHistory: AppConfig.STATE.MAX_HISTORY,
             maxPopulationHistory: AppConfig.STATE.MAX_POPULATION_HISTORY
         });
-
         this.stateManager.on({
             onStateChange: (event) => this._handleStateChange(event),
             onHistoryChange: (stats) => this._handleHistoryChange(stats)
@@ -61,7 +75,6 @@ class CellularAutomaton {
             isRD2DActive: () => this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive,
             getGridWidth: () => this.gridWidth,
             getGridHeight: () => this.gridHeight,
-            // Acceso directo al grid column-major — habilita el path WASM en GridRenderer
             getGridColumns: () => this.core.gridManager.grid,
             showGridHighlights: AppConfig.GRID.DEFAULT_SHOW_HIGHLIGHTS ?? false
         });
@@ -79,10 +92,8 @@ class CellularAutomaton {
             getCore: () => this.core,
             onResult: ({generation, population, changedCells, changedCount}) => {
                 const tStep = performance.now();
-
                 this.generation = generation;
                 this.stateManager.recordPopulation(population);
-
                 if (changedCount > 0) {
                     for (let i = 0; i < changedCount; i++) {
                         this.renderer.markDirtyIndex(changedCells[i]);
@@ -90,13 +101,10 @@ class CellularAutomaton {
                 } else {
                     this.renderer.markAllDirty();
                 }
-
                 this.updateStats(population);
                 this.checkLimits();
                 this.renderer.updateActivityAges(changedCells, changedCount);
                 this.render();
-
-                // Emitir métricas si es visible
                 if (this._workerStartTime && this._perfVisible) {
                     const modeLabel = this._getPerfModeLabel();
                     this._debugTiming(modeLabel, this._workerStartTime, tStep, performance.now());
@@ -319,8 +327,8 @@ class CellularAutomaton {
         return this._loop.isRunning;
     }
 
-    set isRunning(_) {
-    }  // no-op para compatibilidad
+    set isRunning(_) { /* no-op — compatibilidad */
+    }
 
     // =========================================
     // INICIALIZACIÓN
@@ -333,15 +341,28 @@ class CellularAutomaton {
         eventBus.emit('automaton:ready', this);
     }
 
+    /**
+     * Aplica la regla por defecto (Conway) una vez que las reglas están disponibles.
+     * Usa el evento 'rules:loaded' en lugar de polling activo sobre window.RULES.
+     */
     async _initRule() {
-        let attempts = 0;
-        while (!window.RULES && attempts < 50) {
-            await new Promise(r => setTimeout(r, 100));
-            attempts++;
+        let rules = rulesLoader.RULES;
+
+        // Si las reglas aún no están cargadas, esperar el evento con timeout de seguridad
+        if (!rules || Object.keys(rules).length === 0) {
+            rules = await Promise.race([
+                new Promise(resolve => eventBus.once('rules:loaded', ({rules}) => resolve(rules))),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout esperando rules:loaded')), 5000)
+                )
+            ]).catch(() => null);
         }
-        const ruleKey = window.RULES?.conway ? 'conway' : Object.keys(window.RULES || {})[0];
-        if (ruleKey && window.RULES?.[ruleKey]) {
-            const rule = window.RULES[ruleKey];
+
+        if (!rules) return;
+
+        const ruleKey = rules.conway ? 'conway' : Object.keys(rules)[0];
+        if (ruleKey && rules[ruleKey]) {
+            const rule = rules[ruleKey];
             this.core.setRule({birth: rule.birth, survival: rule.survival});
         }
     }
@@ -378,7 +399,6 @@ class CellularAutomaton {
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
                 this.render();
-                // Re-inicializar el worker para que aplique la nueva regla B/S.
                 this._initWorker();
                 eventBus.emit('automaton:ruleChanged', this.core.ruleEngine);
                 break;
@@ -386,9 +406,6 @@ class CellularAutomaton {
                 this.generation = 0;
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
-                // Re-inicializar el worker para que reciba los nuevos offsets.
-                // Sin esto, grids ≥ 600 seguirían usando el fastpath Moore-1
-                // sin importar la vecindad configurada.
                 this._initWorker();
                 eventBus.emit('automaton:neighborhoodChanged', event.info);
                 break;
@@ -499,12 +516,6 @@ class CellularAutomaton {
         this.renderer.reGrid();
     }
 
-    /**
-     * Redimensiona el renderer para las dimensiones actuales del grid.
-     * @param {number} [gw]  — si se omite, usa this.gridWidth
-     * @param {number} [gh]  — si se omite, usa this.gridHeight
-     * @param {number} [cs]  — si se omite, usa this.cellSize
-     */
     _resizeRenderer(gw, gh, cs) {
         this.renderer.resize(
             gw ?? this.gridWidth,
@@ -533,7 +544,7 @@ class CellularAutomaton {
     }
 
     _nextGenerationWorker(stepsPerFrame = 1) {
-        this._workerStartTime = performance.now(); // Guardar tiempo de inicio
+        this._workerStartTime = performance.now();
         this._workerManager.requestNextGeneration(stepsPerFrame);
         return 0;
     }
@@ -547,7 +558,7 @@ class CellularAutomaton {
         const stepMs = tStep - t0;
         const renderMs = tRender - tStep;
         const totalMs = tRender - t0;
-        const α = 0.15;
+        const alpha = 0.15;
 
         if (!this._perf || this._perf.mode !== mode) {
             this._perf = {
@@ -556,9 +567,9 @@ class CellularAutomaton {
                 genPerSec: 0, mode
             };
         } else {
-            this._perf.stepMs = α * stepMs + (1 - α) * this._perf.stepMs;
-            this._perf.renderMs = α * renderMs + (1 - α) * this._perf.renderMs;
-            this._perf.totalMs = α * totalMs + (1 - α) * this._perf.totalMs;
+            this._perf.stepMs = alpha * stepMs + (1 - alpha) * this._perf.stepMs;
+            this._perf.renderMs = alpha * renderMs + (1 - alpha) * this._perf.renderMs;
+            this._perf.totalMs = alpha * totalMs + (1 - alpha) * this._perf.totalMs;
             this._perf.mode = mode;
         }
 
@@ -592,8 +603,6 @@ class CellularAutomaton {
         if (this._workerManager.isProcessing) return;
 
         if (this._workerManager.isAvailable) {
-            // El worker ejecuta stepsPerFrame pasos internamente antes de responder.
-            // Esto hace efectivos los niveles de velocidad 7-10 incluso con el worker.
             this._nextGenerationWorker(stepsPerFrame);
             return;
         }
@@ -630,18 +639,7 @@ class CellularAutomaton {
         const changed = this.core.setCell(x, y, state);
         if (changed) {
             this.renderer.markDirty(x, y);
-            if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
-                if (this.rd2dEngine.stateGrid?.[x]) {
-                    this.rd2dEngine.stateGrid[x][y] = state
-                        ? (this.rd2dEngine._inferStateFromNeighbors(x, y) || 15)
-                        : 0;
-                }
-            }
-            if (this.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.generationsEngine?.isActive) {
-                if (this.generationsEngine.stateGrid?.[x]) {
-                    this.generationsEngine.stateGrid[x][y] = state ? 1 : 0;
-                }
-            }
+            this._engineManager.onCellSet?.(x, y, state);
         }
         return changed;
     }
@@ -650,22 +648,22 @@ class CellularAutomaton {
         return this.core.getCell(x, y);
     }
 
-    setRule(survival, birth) {
+    /**
+     * @param {number[]} birth    — vecinos que hacen nacer una celda muerta
+     * @param {number[]} survival — vecinos que mantienen viva una celda viva
+     */
+    setRule(birth, survival) {
         this.core.setRule({birth, survival});
     }
 
     setRuleByKey(ruleKey) {
-        if (!window.RULES?.[ruleKey]) throw new Error(`Regla ${ruleKey} no encontrada`);
-        const rule = window.RULES[ruleKey];
-        this.setRule(rule.survival, rule.birth);
+        const rules = rulesLoader.RULES;
+        if (!rules?.[ruleKey]) throw new Error(`Regla ${ruleKey} no encontrada`);
+        const rule = rules[ruleKey];
+        this.setRule(rule.birth, rule.survival);
         return true;
     }
 
-    /**
-     * Redimensiona el grid.
-     * @param {number} newWidth
-     * @param {number} [newHeight=newWidth] — omitir para cuadrado
-     */
     resizeGrid(newWidth, newHeight = newWidth) {
         const w = Math.min(Math.max(newWidth, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
         const h = Math.min(Math.max(newHeight, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
@@ -676,46 +674,21 @@ class CellularAutomaton {
         this.gridWidth = this.core.gridManager.width;
         this.gridHeight = this.core.gridManager.height;
 
-        // 3. Redimensionar el renderer (según modo especial)
-        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            // Pasar las dimensiones rectangulares reales para que el engine
-            // calcule triWidth = gw*2, triHeight = gh y preserve las proporciones.
-            this.triangleEngine.resize(w, h);
-        } else if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.isActive) {
-            // Redimensionar el gridManager y recrear el back-buffer (_newGrid).
-            // Sin este paso, _stepSync crashea con "Cannot set properties of undefined"
-            // porque _newGrid tiene dims anteriores y next[c] es undefined.
-            this.hexEngine.gridManager?.resize(w, h);
-            this.hexEngine._newGrid = Array.from(
-                {length: this.hexEngine.gridManager.width},
-                () => new Uint8Array(this.hexEngine.gridManager.height)
-            );
-            this.renderer.setGridManager?.(this.hexEngine.gridManager);
-        } else {
+        // Delegar resize a motores con geometría propia (Triangle, Hex) y
+        // sincronizar dimensiones de RD2D. handledRenderer indica si el motor
+        // ya ajustó su renderer — en ese caso no llamar renderer.resize().
+        const {handledRenderer} = this._engineManager.onResize(this.gridWidth, this.gridHeight);
+        if (!handledRenderer) {
             this.renderer.resize(this.gridWidth, this.gridHeight, this.cellSize);
         }
 
-        // 4. Sincronizar motores especiales que mantienen estado propio
-        if (this.specialMode === SpecialEngineManager.MODES.RD2D && this.rd2dEngine?.isActive) {
-            this.rd2dEngine.gridWidth = this.gridWidth;
-            this.rd2dEngine.gridHeight = this.gridHeight;
-            this.rd2dEngine._initStateGrid();
-            this.rd2dEngine.initialized = false;
-        }
-
-        // 5. Forzar repintado completo
         this.renderer.markAllDirty();
         this.updateStats();
         this.render();
 
-        if (Math.max(w, h) >= AppConfig.WORKER.THRESHOLD &&
-            this.specialMode !== SpecialEngineManager.MODES.TRIANGLE &&
-            this.specialMode !== SpecialEngineManager.MODES.HEXAGONAL) {
-            // Reinicializar worker con las nuevas dimensiones
+        if (Math.max(w, h) >= AppConfig.WORKER.THRESHOLD && !this._engineManager.usesOwnWorker()) {
             this._initWorker();
         } else {
-            // El nuevo grid es menor que el umbral — terminar el worker existente
-            // para evitar que opere con dimensiones obsoletas.
             this._cleanupWorker();
         }
 
@@ -726,12 +699,8 @@ class CellularAutomaton {
         const newSize = Math.min(Math.max(size, AppConfig.GRID.MIN_CELL_SIZE), AppConfig.GRID.MAX_CELL_SIZE);
         this.cellSize = newSize;
 
-        // El renderer triangular acepta (gridSize, cellSize) — 2 parámetros.
-        // La firma estándar (gridWidth, gridHeight, cellSize) pasaría gridHeight
-        // como cellSize, ignorando newSize por completo.
-        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            this.renderer.resize(this.gridWidth, newSize);
-        } else {
+        const {handled} = this._engineManager.onCellSizeChange(this.gridWidth, this.gridHeight, newSize);
+        if (!handled) {
             this.renderer.resize(this.gridWidth, this.gridHeight, newSize);
         }
 
@@ -757,8 +726,7 @@ class CellularAutomaton {
     }
 
     checkLimits() {
-        return this._limiter.check(this.generation,
-            () => this.core.gridManager.countPopulation());
+        return this._limiter.check(this.generation, () => this.core.gridManager.countPopulation());
     }
 
     _checkLimitsWithPop(population) {
@@ -903,35 +871,25 @@ class CellularAutomaton {
     // =========================================
 
     getCellCoords(clientX, clientY) {
-        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            return this.renderer.getCellFromMouse(clientX, clientY);
-        }
-        if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.isActive) {
-            return this.renderer.getCellFromMouse(clientX, clientY);
-        }
+        // Motores con geometría propia (Triangle, Hex) pasan las coordenadas
+        // de cliente directamente al renderer. El path estándar las envuelve
+        // en un objeto tipo Event para getCellFromMouse.
+        const coords = this._engineManager.getCellCoords(clientX, clientY);
+        if (coords !== null) return coords;
         return this.renderer.getCellFromMouse({clientX, clientY});
     }
 
     drawCellAt(coords, state) {
-        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
-            const changed = this.triangleEngine.gridManager.setCell(coords.q, coords.r, state);
-            if (changed) {
-                this.renderer.markDirty(coords.q, coords.r);
+        const result = this._engineManager.onDrawCell(coords, state);
+        if (result.handled) {
+            if (result.changed) {
+                this.renderer.markDirty(result.dirtyX, result.dirtyY);
                 this.render();
-                this.updateStats(this.triangleEngine.gridManager.countPopulation());
+                if (result.population !== null) this.updateStats(result.population);
             }
-            return !!changed;
+            return result.changed;
         }
-        if (this.specialMode === SpecialEngineManager.MODES.HEXAGONAL && this.hexEngine?.isActive) {
-            // HexRenderer usa {col, row}; HexGridManager.fromPixel devuelve esa forma
-            const changed = this.hexEngine.gridManager.setCell(coords.col, coords.row, state);
-            if (changed) {
-                this.renderer.markDirty(coords.col, coords.row);
-                this.render();
-                this.updateStats(this.hexEngine.gridManager.countPopulation());
-            }
-            return !!changed;
-        }
+        // Path estándar — grid rectangular
         const changed = this.setCell(coords.x, coords.y, state ? 1 : 0);
         if (changed) {
             this.updateStats();
@@ -985,22 +943,12 @@ class CellularAutomaton {
 
     syncEngineAfterEdit() {
         this.renderer.resetActivity();
-        const {specialMode, langtonEngine, rd2dEngine, wireworldEngine, generationsEngine} = this;
+        const {specialMode, langtonEngine, rd2dEngine, wireworldEngine} = this;
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.syncFromGrid();
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
     }
 
-    /**
-     * Variante de syncEngineAfterEdit para operaciones de move/drag que ya
-     * relocalizaron los agentes con moveEngineAgents().
-     *
-     * En Langton, syncFromGrid() reconstruye ants[] solo donde stateGrid===0,
-     * matando TODAS las hormigas activas (stateGrid > 0). Por eso se omite:
-     * moveEngineAgents() ya trasladó ants[] al destino correctamente.
-     * Los demás engines (RD2D, WireWorld) no tienen agentes posicionales y
-     * sí necesitan sincronizar su stateGrid desde grid[][].
-     */
     syncEngineAfterMove() {
         this.renderer.resetActivity();
         const {specialMode, rd2dEngine, wireworldEngine} = this;
@@ -1008,18 +956,6 @@ class CellularAutomaton {
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.syncFromGrid();
     }
 
-    /**
-     * Relocaliza los agentes del engine activo de un área origen a un área destino.
-     * Actualmente solo Langton tiene agentes (hormigas) con posición propia.
-     * En todos los demás modos es un no-op.
-     *
-     * @param {number} srcX — columna izquierda del área origen
-     * @param {number} srcY — fila superior del área origen
-     * @param {number} srcW — ancho del área (celdas)
-     * @param {number} srcH — alto del área (celdas)
-     * @param {number} dstX — columna izquierda del área destino
-     * @param {number} dstY — fila superior del área destino
-     */
     moveEngineAgents(srcX, srcY, srcW, srcH, dstX, dstY) {
         const {specialMode, langtonEngine} = this;
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) {
@@ -1041,7 +977,7 @@ class CellularAutomaton {
 
         try {
             this._cleanupResize?.();
-        } catch (e) {
+        } catch (e) { /* ignorar */
         }
         this._cleanupResize = null;
 
@@ -1072,4 +1008,4 @@ class CellularAutomaton {
     }
 }
 
-window.CellularAutomaton = CellularAutomaton;
+export {CellularAutomaton};

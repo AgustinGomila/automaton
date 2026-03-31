@@ -1,3 +1,7 @@
+import {t} from './i18n.js';
+import {rulesLoader} from '../config/rules-loader.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+
 /**
  * DisplayController — Gestiona todas las actualizaciones del DOM informativo.
  *
@@ -38,7 +42,7 @@ class DisplayController {
                 break;
 
             case M.WOLFRAM: {
-                const binary = info.rule.toString(2).padStart(8, '0');
+                const binary = Number(info.rule).toString(2).padStart(8, '0');
                 const dirSymbol = info.direction === 'vertical' ? '↓' : '→';
                 const dirText = t(info.direction === 'vertical' ? 'wolfram.vertical.short' : 'wolfram.horizontal.short');
                 const dirAxis = info.direction === 'vertical' ? 'v' : 'h';
@@ -55,7 +59,7 @@ class DisplayController {
             }
 
             case M.TRIANGLE: {
-                const binary = info.rule.toString(2).padStart(8, '0');
+                const binary = Number(info.rule).toString(2).padStart(8, '0');
                 this._setTitle(t('app.title.triangle', {rule: info.rule}));
                 this._setH1('fa-solid fa-play', t('header.title', {ruleName: `ETA R${info.rule}`}));
                 this._setRulesSpecific(`
@@ -136,7 +140,7 @@ class DisplayController {
                 const selector = document.getElementById('ruleSelector');
                 if (!selector) break;
                 const ruleKey = selector.value;
-                if (window.RULES?.[ruleKey]) this.updateRuleInfo(window.RULES[ruleKey]);
+                if (rulesLoader.RULES?.[ruleKey]) this.updateRuleInfo(rulesLoader.RULES[ruleKey]);
                 break;
             }
         }
@@ -262,4 +266,4 @@ class DisplayController {
     }
 }
 
-window.DisplayController = DisplayController;
+export {DisplayController};

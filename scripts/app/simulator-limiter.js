@@ -82,4 +82,4 @@ class SimulationLimiter {
     }
 }
 
-window.SimulationLimiter = SimulationLimiter;
+export {SimulationLimiter};

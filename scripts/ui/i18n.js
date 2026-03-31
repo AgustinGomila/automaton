@@ -2,6 +2,8 @@
  * Sistema de Internacionalización (i18n) para Autómata Celular
  * Soporta: Español (es) - default, Inglés (en)
  */
+import {eventBus} from '../infrastructure/event-bus.js';
+
 class I18n {
     constructor() {
         this.currentLocale = 'es';
@@ -830,8 +832,7 @@ class I18n {
     }
 }
 
-// Instancia global
-window.i18n = new I18n();
+export const i18n = new I18n();
 
-// Función helper global para acceso rápido
-window.t = (key, vars) => window.i18n.t(key, vars);
+/** Helper de acceso rápido a traducciones — equivalente al anterior window.t */
+export const t = (key, vars) => i18n.t(key, vars);

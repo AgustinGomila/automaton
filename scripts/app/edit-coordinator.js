@@ -1,17 +1,19 @@
 /**
- * EditCoordinator — Operaciones de edición del grid.
+ * scripts/app/edit-coordinator.js
  *
- * Responsabilidad: encapsular todas las operaciones que modifican el estado
- * del grid (aleatorizar, limpiar, copiar/pegar, importar/exportar, undo/redo,
- * desplazamiento toroidal) junto con la lógica de sincronización hacia los
- * motores especiales activos.
+ * Operaciones de edición del grid (aleatorizar, limpiar, copiar/pegar,
+ * importar/exportar, undo/redo, desplazamiento toroidal).
  *
  * Recibe una referencia directa al coordinador principal (CellularAutomaton)
  * para acceder a los subsistemas. Esta dependencia es intencional y equivale
  * a la que estas mismas operaciones tenían cuando vivían en automaton.js.
- * El beneficio es estructural: automaton.js se ocupa de coordinar subsistemas;
- * edit-coordinator.js se ocupa de las operaciones de edición.
+ *
+ * Cambios ESM: eventBus y SpecialEngineManager importados; sin window.*.
  */
+
+import {eventBus} from '../infrastructure/event-bus.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+
 class EditCoordinator {
 
     /** @param {CellularAutomaton} automaton */
@@ -23,12 +25,6 @@ class EditCoordinator {
     // HELPERS INTERNOS
     // =========================================
 
-    /**
-     * Detiene la simulación y limpia el worker si está procesando.
-     * Versión síncrona: úsala cuando la operación no necesita que el worker
-     * termine antes de proceder (la edición sobreescribirá el grid igualmente).
-     * @returns {boolean} wasRunning
-     */
     _haltForEdit() {
         const wasRunning = this._a._loop.isRunning;
         this._a._loop.stop();
@@ -38,12 +34,6 @@ class EditCoordinator {
         return wasRunning;
     }
 
-    /**
-     * Detiene la simulación y espera a que el worker termine antes de limpiar.
-     * Versión asíncrona: necesaria al pegar o importar, donde el grid debe
-     * estar en un estado consistente antes de continuar.
-     * @returns {Promise<boolean>} wasRunning
-     */
     async _haltForEditAsync() {
         const wasRunning = this._a._loop.isRunning;
         this._a._loop.stop();
@@ -59,23 +49,15 @@ class EditCoordinator {
         return wasRunning;
     }
 
-    /**
-     * Reanuda la simulación si estaba en marcha antes de la edición.
-     * Delega en automaton.start() para que se ejecute la inicialización completa
-     * (marcado de dirty, etc.) antes de arrancar el loop.
-     * @param {boolean} wasRunning
-     */
     _restartIfWasRunning(wasRunning) {
-        if (wasRunning) {
-            requestAnimationFrame(() => this._a.start());
-        }
+        if (wasRunning) requestAnimationFrame(() => this._a.start());
     }
 
     /**
      * Propaga cambios de celda al renderer y actualiza estadísticas.
      * @param {Array<{x,y}>} changedCells
      * @param {Object}  [opts]
-     * @param {boolean} [opts.full=true] — si true: prevFlags + markAllDirty + initWorker
+     * @param {boolean} [opts.full=true] — si true: markAllDirty + reinit worker
      */
     _commitCells(changedCells, {full = true} = {}) {
         const r = this._a.renderer;
@@ -91,9 +73,9 @@ class EditCoordinator {
     }
 
     /**
-     * Aplica el resultado de undo/redo al estado del autómata.
-     * @param {Object|null} result    — devuelto por stateManager.undo/redo
-     * @param {string}      eventName — 'automaton:undo' | 'automaton:redo'
+     * Aplica el resultado de undo/redo al autómata.
+     * @param {Object|null} result
+     * @param {string}      eventName
      * @returns {boolean}
      */
     _applyHistoryStep(result, eventName) {
@@ -127,7 +109,6 @@ class EditCoordinator {
             return;
         }
 
-        // Modo estándar
         const stats = this._a.stateManager.randomize({
             density,
             saveToHistory: true,
@@ -195,20 +176,17 @@ class EditCoordinator {
     // =========================================
 
     /**
-     * Copia un área del grid incluyendo los estados extendidos del engine activo.
-     * El objeto devuelto incluye `engineStates` con los valores 0..C-1 cuando
-     * el motor activo tiene stateGrid (Generations, WireWorld, Langton).
+     * Copia un área incluyendo los estados extendidos del engine activo.
      */
     copyArea(minX, minY, maxX, maxY) {
         const area = this._a.stateManager.copyArea(minX, minY, maxX, maxY);
 
-        // Capturar estados extendidos del engine activo si existe stateGrid
         const stateGrid = this._getEngineStateGrid();
         if (stateGrid) {
             const {width, height} = area;
-            const engineStates = Array.from({length: width}, () => new Array(height).fill(0));
             const gw = this._a.gridWidth;
             const gh = this._a.gridHeight;
+            const engineStates = Array.from({length: width}, () => new Array(height).fill(0));
             for (let x = 0; x < width; x++) {
                 const gx = minX + x;
                 if (gx < 0 || gx >= gw) continue;
@@ -217,8 +195,6 @@ class EditCoordinator {
                     if (gy < 0 || gy >= gh) continue;
                     const s = stateGrid[gx]?.[gy] ?? 0;
                     engineStates[x][y] = s;
-                    // Marcar como "viva" en el grid binario cualquier celda con estado >0
-                    // para que pasteArea no la omita (estados 2..C-1 tienen grid[][]=0)
                     if (s > 0) area.grid[x][y] = true;
                 }
             }
@@ -237,7 +213,6 @@ class EditCoordinator {
         });
 
         if (result.changedCells.length > 0) {
-            // Restaurar estados extendidos del engine si el área los tenía capturados
             const stateGrid = this._getEngineStateGrid();
             if (stateGrid && area.engineStates) {
                 const gw = this._a.gridWidth;
@@ -252,7 +227,6 @@ class EditCoordinator {
                         const s = area.engineStates[x]?.[y] ?? 0;
                         if (s > 0) {
                             stateGrid[gx][gy] = s;
-                            // grid[][] debe reflejar vivo solo para estado 1
                             grid[gx][gy] = s === 1 ? 1 : 0;
                         }
                     }
@@ -273,10 +247,6 @@ class EditCoordinator {
             generation: this._a.generation
         });
 
-        // Borrar estados extendidos del engine para TODAS las celdas del área capturada,
-        // no solo las que tenían grid[][]=1. Las células moribundas (2..C-1) tienen
-        // grid[][]=0 y por eso clearPatternCells no las registra en changedCells,
-        // pero sí deben limpiarse de stateGrid para evitar estados fantasma.
         const stateGrid = this._getEngineStateGrid();
         if (stateGrid && area.engineStates) {
             const gw = this._a.gridWidth;
@@ -286,7 +256,7 @@ class EditCoordinator {
                 if (gx < 0 || gx >= gw) continue;
                 for (let y = 0; y < area.height; y++) {
                     const s = area.engineStates[x]?.[y] ?? 0;
-                    if (s <= 0) continue; // celda muerta en el área — no tocar
+                    if (s <= 0) continue;
                     const gy = offsetY + y;
                     if (gy < 0 || gy >= gh) continue;
                     stateGrid[gx][gy] = 0;
@@ -294,23 +264,17 @@ class EditCoordinator {
                 }
             }
         } else if (stateGrid && result.changedCells.length > 0) {
-            // Fallback sin engineStates: borrar por changedCells binario
             const gw = this._a.gridWidth;
             const gh = this._a.gridHeight;
             for (const {x, y} of result.changedCells) {
-                if (x >= 0 && x < gw && y >= 0 && y < gh) {
-                    stateGrid[x][y] = 0;
-                }
+                if (x >= 0 && x < gw && y >= 0 && y < gh) stateGrid[x][y] = 0;
             }
         }
 
         if (result.changedCells.length > 0) {
             this._commitCells(result.changedCells, {full: false});
-        } else {
-            // Si solo había células moribundas (sin cambios en grid binario), renderizar igual
-            if (stateGrid && area.engineStates) {
-                this._a.render();
-            }
+        } else if (stateGrid && area.engineStates) {
+            this._a.render();
         }
 
         this._restartIfWasRunning(wasRunning);
@@ -350,9 +314,7 @@ class EditCoordinator {
 
             if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) {
                 result.changedCells.forEach(cell => {
-                    if (this._a.core.getCell(cell.x, cell.y)) {
-                        langtonEngine.addAnt(cell.x, cell.y, 0);
-                    }
+                    if (this._a.core.getCell(cell.x, cell.y)) langtonEngine.addAnt(cell.x, cell.y, 0);
                     renderer.markDirty(cell.x, cell.y);
                 });
                 this._a.updateStats();
@@ -374,8 +336,7 @@ class EditCoordinator {
                 this._a.render();
 
             } else if (specialMode === SpecialEngineManager.MODES.GENERATIONS && generationsEngine?.isActive) {
-                // NO llamar syncFromGrid() — eso destruiría todos los estados moribundos.
-                // Solo actualizar stateGrid para las celdas recién escritas (estado 1).
+                // NO llamar syncFromGrid() — destruiría los estados moribundos.
                 result.changedCells.forEach(cell => {
                     if (generationsEngine.stateGrid?.[cell.x]) {
                         generationsEngine.stateGrid[cell.x][cell.y] = 1;
@@ -418,7 +379,7 @@ class EditCoordinator {
 
     /**
      * Importa un stateGrid WireWorld al engine activo, centrado en el grid.
-     * @param {Uint8Array[]} stateGrid     — columna-mayor, estados 0..3
+     * @param {Uint8Array[]} stateGrid     — column-major, estados 0..3
      * @param {number}       patternWidth
      * @param {number}       patternHeight
      * @returns {boolean}
@@ -429,11 +390,9 @@ class EditCoordinator {
 
         const gw = gridWidth;
         const gh = gridHeight;
-        // Centrar el patrón en el grid rectangular real
         const offsetX = Math.floor((gw - patternWidth) / 2);
         const offsetY = Math.floor((gh - patternHeight) / 2);
 
-        // Recrear buffers al tamaño actual del grid (puede diferir tras redimensionado)
         wireworldEngine.stateGrid = Array.from({length: gw}, () => new Uint8Array(gh));
         wireworldEngine._nextState = Array.from({length: gw}, () => new Uint8Array(gh));
 
@@ -464,21 +423,17 @@ class EditCoordinator {
     shiftGrid(dx, dy) {
         this._a.stateManager.saveState(this._a.generation);
 
-        // Seleccionar el grid manager correcto según el modo activo
         const gm = (this._a.specialMode === SpecialEngineManager.MODES.TRIANGLE && this._a.triangleEngine?.isActive)
             ? this._a.triangleEngine.gridManager
             : this._a.core.gridManager;
 
         gm.shift(dx, dy);
 
-        // Sincronizar grids adicionales de los motores que mantienen estado propio
         const {specialMode, rd2dEngine, langtonEngine, wireworldEngine} = this._a;
         if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) rd2dEngine.shift(dx, dy);
         if (specialMode === SpecialEngineManager.MODES.LANGTON && langtonEngine?.isActive) langtonEngine.shift(dx, dy);
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.shift(dx, dy);
 
-        // Resetear actividad: las celdas cambiaron de posición, el estado de highlight
-        // amarillo quedaría huérfano en las posiciones originales.
         this._a.renderer.resetActivity();
         this._a._syncWorkerGrid();
         this._a.render();
@@ -499,12 +454,11 @@ class EditCoordinator {
     }
 
     // =========================================
-    // HELPERS PRIVADOS
+    // HELPER PRIVADO
     // =========================================
 
     /**
-     * Devuelve el stateGrid del motor especial activo si tiene estados extendidos,
-     * o null si el modo activo es binario (standard, wolfram, triangle, UW).
+     * Devuelve el stateGrid del motor activo si tiene estados extendidos, o null.
      * Centraliza el acceso para copyArea, pasteArea y clearPatternCells.
      * @returns {Array|null}
      */
@@ -523,4 +477,4 @@ class EditCoordinator {
     }
 }
 
-window.EditCoordinator = EditCoordinator;
+export {EditCoordinator};

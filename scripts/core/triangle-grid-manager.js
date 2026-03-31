@@ -130,4 +130,4 @@ class TriangleGridManager {
     }
 }
 
-window.TriangleGridManager = TriangleGridManager;
+export {TriangleGridManager};

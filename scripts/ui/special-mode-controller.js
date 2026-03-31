@@ -1,3 +1,9 @@
+import {t} from './i18n.js';
+import {eventBus} from '../infrastructure/event-bus.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {SpecialModeUI} from './special-mode-ui.js';
+import {parseCustomRule} from '../config/rules.js';
+
 /**
  * SpecialModeController — Coordinador de los modos especiales del autómata.
  *
@@ -176,7 +182,7 @@ class SpecialModeController {
             this._addEventListener(generationsStates, 'input', () => {
                 const v = parseInt(generationsStates.value);
                 const display = document.getElementById('generationsStatesDisplay');
-                if (display) display.textContent = v;
+                if (display) display.textContent = String(v);
                 if (v > 2) {
                     // Marcar "Personalizada" en el selector sin disparar changeRule
                     const sel = document.getElementById('ruleSelector');
@@ -359,7 +365,18 @@ class SpecialModeController {
             this._ui.setModeSelectors(true);
 
             this.automaton.wolframEngine.activate(rule, direction);
-            this._finalizeActivation(SpecialEngineManager.MODES.WOLFRAM, t('notif.wolfram.enabled', {rule}));
+
+            // Sincronizar slider y display con la regla real del engine.
+            // Necesario al llegar desde otro modo: el slider puede estar vacío
+            // o con un valor stale, lo que mostraría NaN en el display.
+            // Se usa ruleNumber del engine (ya clampeado 0-255) como fuente de verdad.
+            const actualRule = this.automaton.wolframEngine.ruleNumber;
+            const ruleInput = document.getElementById('wolframRule');
+            const ruleDisplay = document.getElementById('wolframRuleDisplay');
+            if (ruleInput) ruleInput.value = actualRule;
+            if (ruleDisplay) ruleDisplay.textContent = String(actualRule);
+
+            this._finalizeActivation(SpecialEngineManager.MODES.WOLFRAM, t('notif.wolfram.enabled', {rule: actualRule}));
         } catch (error) {
             console.error('Error cargando WolframEngine:', error);
             this._onShowNotification(t('notif.wolfram.error'), 'warning', 3000);
@@ -867,11 +884,11 @@ class SpecialModeController {
      * Reactiva el engine de Langton con la regla/hormigas actuales.
      * Patrón común al input de regla, presets y contador de hormigas.
      * @param {string} rule
-     * @param {number} [antCount] — si se omite lee el valor del DOM
+     * @param {number} [antCount=0] — si se omite lee el valor del DOM
      */
-    _reactivateLangton(rule, antCount = null) {
+    _reactivateLangton(rule, antCount = 0) {
         this._stopIfRunning();
-        const count = antCount ?? (parseInt(document.getElementById('langtonAntCount')?.value) || 0);
+        const count = antCount || parseInt(document.getElementById('langtonAntCount')?.value) || 0;
         this.automaton.langtonEngine.activate({rule, antCount: count});
         this._ui.updateModeIndicator(SpecialEngineManager.MODES.LANGTON);
         this._onUpdateHeader();
@@ -940,4 +957,4 @@ class SpecialModeController {
     }
 }
 
-window.SpecialModeController = SpecialModeController;
+export {SpecialModeController};

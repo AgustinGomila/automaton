@@ -1,3 +1,5 @@
+import {AppConfig} from '../utils/config.js';
+
 /**
  * TriangleRenderer - Renderer para grids triangulares con grid visible
  */
@@ -461,4 +463,4 @@ class TriangleRenderer {
     }
 }
 
-window.TriangleRenderer = TriangleRenderer;
+export {TriangleRenderer};

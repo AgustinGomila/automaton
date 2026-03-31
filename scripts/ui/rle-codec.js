@@ -214,4 +214,4 @@ class RLECodec {
     }
 }
 
-window.RLECodec = RLECodec;
+export {RLECodec};

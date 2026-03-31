@@ -77,7 +77,7 @@ class MCLCodec {
     encode({stateGrid, gridWidth, gridHeight, name, description, wrap = false}) {
         // Calcular bounding box de celdas no vacías
         const bounds = this._boundingBox(stateGrid, gridWidth, gridHeight);
-        if (!bounds) return null; // grid vacío
+        if (!bounds) return ''; // grid vacío
 
         const {minX, minY, maxX, maxY} = bounds;
         const width = maxX - minX + 1;
@@ -347,4 +347,4 @@ class MCLCodec {
     }
 }
 
-window.MCLCodec = MCLCodec;
+export {MCLCodec};

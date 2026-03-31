@@ -1,3 +1,8 @@
+import {AppConfig} from '../../utils/config.js';
+import {eventBus} from '../../infrastructure/event-bus.js';
+import {TriangleGridManager} from '../triangle-grid-manager.js';
+import {TriangleWorkerManager} from '../../infrastructure/workers/triangle-worker-manager.js';
+
 /**
  * TriangleEngine - Motor de Autómatas Triangulares Elementales (ETA)
  * Versión con soporte de Web Worker para rendimiento
@@ -602,4 +607,4 @@ class TriangleEngine {
     }
 }
 
-window.TriangleEngine = TriangleEngine;
+export {TriangleEngine};

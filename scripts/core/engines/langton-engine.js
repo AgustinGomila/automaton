@@ -493,4 +493,4 @@ class LangtonEngine {
     }
 }
 
-window.LangtonEngine = LangtonEngine;
+export {LangtonEngine};

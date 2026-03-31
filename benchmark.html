@@ -256,7 +256,7 @@
         #progress-bar {
             height: 100%;
             background: var(--primary);
-            width: 0%;
+            width: 0;
             transition: width 0.1s;
         }
 
@@ -452,6 +452,112 @@
             font-style: italic;
         }
 
+        /* ── Engine selector ────────────────────────────────────── */
+        .engine-selector {
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 14px;
+            background: var(--surface);
+        }
+
+        .engine-selector-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .engine-selector-header span {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            font-weight: 400;
+        }
+
+        .sel-btn {
+            font-family: var(--mono);
+            font-size: 10px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 3px;
+            padding: 2px 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            letter-spacing: 0.04em;
+        }
+
+        .sel-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .engine-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .eng-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 9px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .eng-pill:hover {
+            border-color: rgba(16, 185, 129, 0.4);
+            color: var(--text);
+        }
+
+        .eng-pill input[type=checkbox] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 10px;
+            height: 10px;
+            border: 1px solid var(--muted);
+            border-radius: 2px;
+            background: transparent;
+            cursor: pointer;
+            flex-shrink: 0;
+            position: relative;
+            transition: all 0.1s;
+        }
+
+        .eng-pill input[type=checkbox]:checked {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .eng-pill input[type=checkbox]:checked::after {
+            content: '';
+            position: absolute;
+            left: 1px;
+            top: -1px;
+            width: 5px;
+            height: 7px;
+            border: 1.5px solid #000;
+            border-top: none;
+            border-left: none;
+            transform: rotate(45deg);
+        }
+
+        .eng-pill:has(input:checked) {
+            border-color: rgba(16, 185, 129, 0.5);
+            color: var(--text);
+        }
+
         /* ── Offscreen canvas (hidden) ─────────────────────────── */
         #offscreen {
             display: none;
@@ -483,6 +589,17 @@
 
     <button id="runBtn">▶ Run Benchmark</button>
     <button id="exportBtn">⬇ Export</button>
+</div>
+
+<div class="engine-selector">
+    <div class="engine-selector-header">
+        <span>Engines</span>
+        <button class="sel-btn" id="selAllBtn">All</button>
+        <button class="sel-btn" id="selNoneBtn">None</button>
+    </div>
+    <div class="engine-pills" id="enginePills">
+        <!-- populated dynamically after ENGINES is defined -->
+    </div>
 </div>
 
 <div id="status">Ready — configure and press Run.</div>
@@ -541,46 +658,21 @@
 <canvas id="offscreen" width="400" height="400"></canvas>
 
 <!-- ── Core dependencies (order matters) ────────────────── -->
-<script src="scripts/utils/config.js"></script>
-<script src="scripts/utils/circular-array.js"></script>
-<script src="scripts/infrastructure/event-bus.js"></script>
-<script src="scripts/core/grid-manager.js"></script>
-<script src="scripts/core/neighborhood-calculator.js"></script>
-<script src="scripts/core/engines/rule-engine.js"></script>
-<script src="scripts/config/rules.js"></script>
-<script src="scripts/core/cellular-automaton.js"></script>
-<script src="scripts/rendering/wasm-renderer.js"></script>
-<script src="scripts/rendering/grid-renderer.js"></script>
-<script src="scripts/core/engines/wolfram-engine.js"></script>
-<script src="scripts/core/engines/langton-engine.js"></script>
-<script src="scripts/core/engines/wireworld-engine.js"></script>
-<script src="scripts/core/engines/ulam-warburton-engine.js"></script>
-<script src="scripts/core/engines/rd2d-engine.js"></script>
-<script src="scripts/core/engines/generations-engine.js"></script>
-<script src="scripts/core/triangle-grid-manager.js"></script>
-<script src="scripts/infrastructure/workers/triangle-worker-manager.js"></script>
-<script src="scripts/core/engines/triangle-engine.js"></script>
-<script src="scripts/core/hex-grid-manager.js"></script>
-<script src="scripts/infrastructure/workers/hex-worker-manager.js"></script>
-<script src="scripts/core/engines/hex-engine.js"></script>
+<script type="module">
+    import {GridManager} from './scripts/core/grid-manager.js';
+    import {NeighborhoodCalculator} from './scripts/core/neighborhood-calculator.js';
+    import {CellularAutomatonCore} from './scripts/core/cellular-automaton.js';
+    import {GridRenderer} from './scripts/rendering/grid-renderer.js';
+    import {WolframEngine} from './scripts/core/engines/wolfram-engine.js';
+    import {LangtonEngine} from './scripts/core/engines/langton-engine.js';
+    import {WireWorldEngine} from './scripts/core/engines/wireworld-engine.js';
+    import {UlamWarburtonEngine} from './scripts/core/engines/ulam-warburton-engine.js';
+    import {RD2DEngine} from './scripts/core/engines/rd2d-engine.js';
+    import {GenerationsEngine} from './scripts/core/engines/generations-engine.js';
+    import {TriangleEngine} from './scripts/core/engines/triangle-engine.js';
+    import {HexEngine} from './scripts/core/engines/hex-engine.js';
 
-<script>
     'use strict';
-
-    // ── Null i18n stub (benchmark doesn't need translations) ────────────────────
-    window.t = (key) => key;
-
-    // ── Null eventBus if not loaded ──────────────────────────────────────────────
-    if (!window.eventBus) {
-        window.eventBus = {
-            on: () => (() => {
-            }),
-            emit: () => {
-            },
-            off: () => {
-            }
-        };
-    }
 
     // ============================================================================
     // ENGINE SUITE — one entry per engine to benchmark
@@ -1249,6 +1341,57 @@
     ];
 
     // ============================================================================
+    // ENGINE SELECTOR — builds pills and reads selection
+    // ============================================================================
+
+    /**
+     * Builds one checkbox pill per engine and wires All/None buttons.
+     * Called once, immediately after ENGINES is defined.
+     */
+    function buildEngineSelector() {
+        const container = document.getElementById('enginePills');
+        for (const eng of ENGINES) {
+            const label = document.createElement('label');
+            label.className = 'eng-pill';
+            label.title = eng.detail;
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = eng.id;
+            cb.checked = true;
+            cb.addEventListener('change', _syncRunBtn);
+
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(eng.name));
+            container.appendChild(label);
+        }
+
+        document.getElementById('selAllBtn').addEventListener('click', () => {
+            container.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = true);
+            _syncRunBtn();
+        });
+        document.getElementById('selNoneBtn').addEventListener('click', () => {
+            container.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = false);
+            _syncRunBtn();
+        });
+    }
+
+    /** Returns the subset of ENGINES whose pill is checked. */
+    function getSelectedEngines() {
+        const checked = new Set(
+            [...document.querySelectorAll('#enginePills input:checked')].map(cb => cb.value)
+        );
+        return ENGINES.filter(e => checked.has(e.id));
+    }
+
+    /** Disables Run if no engine is selected. */
+    function _syncRunBtn() {
+        document.getElementById('runBtn').disabled = getSelectedEngines().length === 0;
+    }
+
+    buildEngineSelector();
+
+    // ============================================================================
     // BENCHMARK RUNNER
     // ============================================================================
 
@@ -1381,13 +1524,20 @@
         const warmup = parseInt(document.getElementById('cfgWarmup').value);
         const steps = parseInt(document.getElementById('cfgSteps').value);
 
+        const activeEngines = getSelectedEngines();
+        if (activeEngines.length === 0) return;
+
         document.getElementById('runBtn').disabled = true;
         document.getElementById('progress-wrap').style.display = 'block';
         const bar = document.getElementById('progress-bar');
+        bar.style.width = '0';
 
-        buildInitialTable(ENGINES, gw, gh);
-        // Store grid dims on rows for updateRow
-        for (const eng of ENGINES) {
+        const selLabel = activeEngines.length === ENGINES.length
+            ? `all ${ENGINES.length} engines`
+            : `${activeEngines.length} of ${ENGINES.length} engines`;
+
+        buildInitialTable(activeEngines, gw, gh);
+        for (const eng of activeEngines) {
             const tr = document.getElementById(`row-${eng.id}`);
             if (tr) {
                 tr._gw = gw;
@@ -1395,21 +1545,19 @@
             }
         }
 
-        setStatus(`Warming up + running ${steps} steps per engine on ${gw}×${gh} grid…`, 'running');
+        setStatus(`Warming up + running ${steps} steps on ${gw}×${gh} — ${selLabel}…`, 'running');
 
         const results = [];
-        for (let i = 0; i < ENGINES.length; i++) {
-            const eng = ENGINES[i];
-            setStatus(`[${i + 1}/${ENGINES.length}] Running ${eng.name}…`, 'running');
+        for (let i = 0; i < activeEngines.length; i++) {
+            const eng = activeEngines[i];
+            setStatus(`[${i + 1}/${activeEngines.length}] Running ${eng.name}…`, 'running');
 
             const result = await runEngine(eng, gw, gh, warmup, steps);
             result._eng = eng;
             results.push(result);
 
-            // Update bar progress
-            bar.style.width = `${Math.round(((i + 1) / ENGINES.length) * 100)}%`;
+            bar.style.width = `${Math.round(((i + 1) / activeEngines.length) * 100)}%`;
 
-            // Partial update of this row with temporary max values
             const validResults = results.filter(r => !r.error);
             const maxS = Math.max(1, ...validResults.map(r => r.stepAvg));
             const maxR = Math.max(1, ...validResults.map(r => r.renderAvg));
@@ -1425,12 +1573,12 @@
         for (const r of results) updateRow(r._eng, r, maxS, maxR);
 
         // Re-fill grid cell (updateRow lost it due to innerHTML)
-        for (const eng of ENGINES) {
+        for (const eng of activeEngines) {
             const tr = document.getElementById(`row-${eng.id}`);
             if (tr && tr._gw) tr.cells[1].textContent = `${tr._gw}×${tr._gh}`;
         }
 
-        setStatus(`Done — ${ENGINES.length} engines × ${steps} steps on ${gw}×${gh}. (${new Date().toLocaleTimeString()})`, 'done');
+        setStatus(`Done — ${selLabel} × ${steps} steps on ${gw}×${gh}. (${new Date().toLocaleTimeString()})`, 'done');
         _lastResults = results;
         _lastConfig = {gw, gh, steps, warmup};
         document.getElementById('exportBtn').style.display = 'inline-block';

@@ -1,3 +1,5 @@
+import {AppConfig} from '../utils/config.js';
+
 /**
  * NeighborhoodCalculator — Cálculo de vecindad para autómatas celulares.
  *
@@ -131,4 +133,4 @@ class NeighborhoodCalculator {
     }
 }
 
-window.NeighborhoodCalculator = NeighborhoodCalculator;
+export {NeighborhoodCalculator};

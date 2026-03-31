@@ -6,6 +6,13 @@
  *
  * No conoce motores especiales, reglas ni estadísticas.
  */
+import {eventBus} from '../infrastructure/event-bus.js';
+import {DrawingTool} from './drawing-tool.js';
+import {SelectionManager} from './selection-manager.js';
+import {getPatternWithRotation} from '../config/patterns.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {t} from './i18n.js';
+
 class CanvasController {
     /**
      * @param {Object} options
@@ -13,11 +20,12 @@ class CanvasController {
      * @param {Object}   options.patternState    - Referencia compartida { pattern, key, rotation }
      * @param {Function} options.onUpdateDrawMode - () => void
      */
-    constructor({automaton, patternState, onUpdateDrawMode}) {
+    constructor({automaton, patternState, onUpdateDrawMode, getPatternManager}) {
         this.automaton = automaton;
         this._patternState = patternState;
         this._onUpdateDrawMode = onUpdateDrawMode || (() => {
         });
+        this._getPatternManager = getPatternManager || (() => null);
 
         // Estado de interacción del canvas
         this.isMouseDown = false;
@@ -427,11 +435,11 @@ class CanvasController {
         this._updateMouseCoords(x, y);
 
         if (this._patternState.pattern) {
-            window.patternManager?.showPatternPreview(x, y);
-            if (this.showInfluenceArea) window.patternManager?.showInfluenceArea(x, y);
+            this._getPatternManager()?.showPatternPreview(x, y);
+            if (this.showInfluenceArea) this._getPatternManager()?.showInfluenceArea(x, y);
         } else {
-            window.patternManager?.hidePatternPreview();
-            if (this.showInfluenceArea && !this.selection) window.patternManager?.showInfluenceArea(x, y);
+            this._getPatternManager()?.hidePatternPreview();
+            if (this.showInfluenceArea && !this.selection) this._getPatternManager()?.showInfluenceArea(x, y);
         }
 
         if (this.isMouseDown) {
@@ -528,8 +536,8 @@ class CanvasController {
         // siguen capturando mousemove/mouseup fuera del canvas.
         if (!this.isSelecting && this.isDragging) this._selectionManager.endDrag();
 
-        window.patternManager?.hidePatternPreview();
-        if (this.showInfluenceArea) window.patternManager?.hideInfluenceArea();
+        this._getPatternManager()?.hidePatternPreview();
+        if (this.showInfluenceArea) this._getPatternManager()?.hideInfluenceArea();
 
         this.lastCell = null;
         this._drawingTool.lastCell = null;
@@ -564,8 +572,8 @@ class CanvasController {
             });
 
             const {x, y} = this.automaton.getCellFromMouse(e);
-            window.patternManager?.showPatternPreview(x, y);
-            if (this.showInfluenceArea) window.patternManager?.showInfluenceArea(x, y);
+            this._getPatternManager()?.showPatternPreview(x, y);
+            if (this.showInfluenceArea) this._getPatternManager()?.showInfluenceArea(x, y);
         }
 
         return false;
@@ -636,4 +644,4 @@ class CanvasController {
     }
 }
 
-window.CanvasController = CanvasController;
+export {CanvasController};

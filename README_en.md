@@ -22,8 +22,8 @@ internationalization.
 
 ### Special Engines
 
-- **Wolfram 1D** — One-dimensional elementary automata (rules 0–255), vertical or horizontal evolution, free drawing as
-  seed
+- **Wolfram 1D** — One-dimensional elementary automata (rules 0–255), vertical or horizontal evolution, free drawing
+  as seed
 - **RD-2D** — 2D Recursive Distinction with 16 states encoding N/S/E/W boundaries and XOR rule
 - **ETA (Elementary Triangular Automaton)** — Triangular grid with Wolfram-style rules, edge and vertex modes,
   destroboscope
@@ -38,7 +38,7 @@ internationalization.
 ### Editing and Interaction
 
 - Free drawing, paint bucket (flood fill), and rectangular selection
-- Move, copy, and paste selected areas
+- Move, copy, and paste selected areas with extended-state support (Generations, WireWorld, Langton, RD-2D)
 - Pattern rotation (right-click or R key)
 - Unlimited undo/redo history (Ctrl+Z / Ctrl+Shift+Z)
 - Import and export patterns in RLE and MCL (WireWorld) formats
@@ -47,12 +47,15 @@ internationalization.
 
 ### Performance
 
-- Dirty rendering: only re-renders modified cells
+- **Dirty rendering**: only re-renders modified cells
 - **ImageData + Uint32Array**: pixel buffer rendering — replaces N× fillRect with 1× putImageData
 - **Dirty bounding box**: putImageData with dirty-rect, uploading only the modified region to the framebuffer
 - **WASM module** (`wasm-renderer.js`): fill_full and fill_dirty compiled to WebAssembly with shared memory with
-  ImageData (zero-copy). Active automatically for Conway, Wolfram, ETA and Generations; JS fallback for Langton,
-  WireWorld and RD-2D
+  ImageData (zero-copy). Active for Conway, Wolfram, ETA and Generations; JS fallback for Langton, WireWorld and RD-2D
+- **Ulam-Warburton — frontier tracking O(perimeter)**: instead of scanning N² cells per step, maintains a
+  `Set<number>` of candidates updated incrementally. At 1000×1000 the step time matches 400×400
+- **RD-2D — inlined neighbors**: the hot-loop computes the 4 XOR neighbors inline without `_getState()` calls,
+  using column-major loop order and cached `wrapEdges` outside the double loop
 - Background worker thread for large grids (standard and triangular modes)
 - WebGL2 accelerated renderer for the triangular grid (Canvas 2D fallback)
 - Grid up to 2000×2000 cells
@@ -61,9 +64,10 @@ internationalization.
 ### UI
 
 - Responsive design: works on mobile and desktop
-- ES/EN internationalization
+- ES/EN internationalization with live switching
 - Non-blocking temporary notifications
 - Active mode indicator with rule details
+- Performance overlay (I key): gen/s, step ms, render ms
 
 ---
 
@@ -77,7 +81,7 @@ internationalization.
 | Right click                       | Rotate selected pattern 90°         |
 | Drag                              | Draw freely                         |
 | Shift + Drag                      | Select rectangular area             |
-| Alt + Drag                        | Pan (scroll the view)               |
+| Alt + Drag                        | Pan (scroll the view toroidally)    |
 | Ctrl + Click on selection         | Move the area                       |
 | Ctrl + Shift + Click on selection | Copy the area                       |
 | Escape                            | Cancel selection or active pattern  |
@@ -95,7 +99,8 @@ internationalization.
 | Z         | Undo                   |
 | Shift + Z | Redo                   |
 | A         | Random                 |
-| I         | Performance            |
+| B         | Paint bucket           |
+| I         | Performance overlay    |
 | C         | Clear                  |
 | G         | Show / Hide grid       |
 | H         | Show / Hide highlights |
@@ -105,10 +110,79 @@ internationalization.
 
 ## Stack
 
-- **Language**: JavaScript (ES2022+), HTML5, CSS3
+- **Language**: JavaScript ES Modules (ES2022+), HTML5, CSS3
 - **Rendering**: Canvas 2D API, WebGL2, WebAssembly (WAT)
 - **Concurrency**: Web Workers
 - **No frameworks, no build system, no external dependencies**
+
+---
+
+## Architecture
+
+### ES Modules
+
+The project uses native browser ES Modules. The entry point is `scripts/main.js`
+(`<script type="module">`). No bundler — the browser resolves the import graph directly.
+This requires serving files from an HTTP server (does not work from `file://`).
+
+The three workers (`automaton-worker.js`, `triangle-worker.js`, `hex-worker.js`) remain as
+classic scripts — they run in independent Worker contexts where they don't need to import
+modules from the main thread.
+
+### Layers
+
+```
+main.js  ←  single entry point
+│
+├── rulesLoader / patternLoader    ← data loaded before building the UI
+├── CellularAutomaton              ← main coordinator
+│   ├── CellularAutomatonCore      ← B/S math engine
+│   ├── GridRenderer               ← canvas/wasm rendering
+│   ├── GridWorkerManager          ← offload to worker
+│   ├── SpecialEngineManager       ← special engine lifecycle
+│   ├── StateManager               ← undo/redo history
+│   ├── AnimationLoop              ← RAF loop
+│   ├── SimulationLimiter          ← generation/population limits
+│   └── EditCoordinator            ← grid editing operations
+│
+└── UIController                   ← UI coordinator
+    ├── CanvasController           ← mouse/touch interaction
+    ├── DisplayController          ← header and statistics
+    ├── SpecialModeController      ← special mode activation
+    ├── GridController             ← dimensions and zoom
+    ├── RuleController             ← B/S rule selector
+    ├── NeighborhoodController     ← neighborhood selector
+    ├── ImportExportController     ← RLE / MCL
+    └── EffectsController          ← colors and visual effects
+```
+
+### Event Bus
+
+Cross-layer communication uses `eventBus` (singleton exported from `event-bus.js`).
+Key events:
+
+| Event                     | Emitted by            | Consumed by                     |
+|---------------------------|-----------------------|---------------------------------|
+| `rules:loaded`            | RulesLoader           | CellularAutomaton, UIController |
+| `automaton:ready`         | CellularAutomaton     | main.js                         |
+| `app:ready`               | main.js               | grid-autofit.js                 |
+| `stats:updated`           | CellularAutomaton     | DisplayController               |
+| `automaton:ruleChanged`   | CellularAutomaton     | DisplayController               |
+| `automaton:modeChanged`   | SpecialModeController | CanvasController                |
+| `automaton:filterChanged` | SpecialModeUI         | PatternManager                  |
+| `pattern:selected`        | PatternManager        | UIController, CanvasController  |
+| `i18n:localeChanged`      | i18n                  | UIController                    |
+| `history:changed`         | StateManager          | UIController                    |
+| `perf:update`             | CellularAutomaton     | UIController                    |
+
+### Lazy Loading of Special Engines
+
+`SpecialEngineManager` loads engines with dynamic `import()` the first time they are activated.
+The browser caches the module — subsequent activations of the same mode produce no additional
+network requests.
+
+Triangle and Hexagonal modes use `Promise.all([...])` to load all their modules in parallel
+(engine, grid manager, worker manager, renderer).
 
 ---
 
@@ -116,81 +190,106 @@ internationalization.
 
 ```
 automaton/
-├── index.html                       # Main entry point, UI structure
-├── main.css                         # Global styles
+├── index.html                          # Main entry point, UI structure
+├── main.css                            # Global styles
 │
-├── main.js                          # Bootstrap: instantiates and connects all modules
-│
-├── -- Core --
-├── automaton.js                     # Main coordinator of the simulation
-├── automaton-loop.js                # Animation loop (requestAnimationFrame)
-├── cellular-automaton.js            # CA core: applies B/S rules on the grid
-├── grid-manager.js                  # 2D grid Uint8Array[], double buffer
-├── rule-engine.js                   # B/S rule engine, rule string parser
-├── neighborhood-calculator.js       # Moore and Von Neumann neighborhoods with radius
-├── state-manager.js                 # Undo/redo history, pattern import/export
-├── edit-coordinator.js              # Grid editing operations (cut, paste, clear, etc.)
-├── simulator-limiter.js             # Generation and population limits
-├── circular-array.js                # Circular buffer for history
-├── config.js                        # Centralized configuration (AppConfig: limits, defaults, colors)
-├── event-bus.js                     # Global event bus (pub/sub)
-│
-├── -- Special Engines --
-├── special-engine-manager.js        # Orchestrates activation and lifecycle of engines
-├── wolfram-engine.js                # Wolfram 1D automaton (rules 0-255)
-├── rd2d-engine.js                   # 2D Recursive Distinction (16 states)
-├── triangle-engine.js               # Elementary Triangular Automaton (ETA)
-├── triangle-grid-manager.js         # Triangular grid with neighborhood logic
-├── triangle-worker.js               # Worker for ETA computation
-├── triangle-worker-manager.js       # Triangular worker manager
-├── generations-engine.js            # Generations: multi-state extension of B/S rules
-├── ulam-warburton-engine.js         # Ulam-Warburton fractal
-├── langton-engine.js                # Multi-agent Langton's Ant
-├── wireworld-engine.js              # WireWorld (4 states: empty, head, tail, conductor)
-├── hex-engine.js                    # Hexagonal Life-like automaton (B/S rules, 6 neighbors, odd-r)
-├── hex-grid-manager.js              # Hexagonal grid with pointy-top geometry and odd-r neighborhood
-├── hex-worker.js                    # Worker for hexagonal engine computation
-├── hex-worker-manager.js            # Hexagonal worker manager
-│
-├── -- Rendering --
-├── grid-renderer.js                 # Canvas 2D renderer with dirty rendering and effects
-├── wasm-renderer.js                 # WASM module for fill_full/fill_dirty (zero-copy with ImageData)
-├── triangle-renderer.js             # Canvas 2D renderer for triangular grid
-├── triangle-webgl2-renderer.js      # WebGL2 renderer for triangular grid
-├── hex-renderer.js                  # Canvas 2D renderer for hexagonal grid (Path2D cached per zoom level)
-├── automaton-worker.js              # Worker for standard grid computation
-├── grid-worker-manager.js           # Standard worker manager
-│
-├── -- UI Controllers --
-├── ui-controller.js                 # Main UI coordinator
-├── canvas-controller.js             # Canvas interaction (drawing, pan, keyboard)
-├── drawing-tool.js                  # Bresenham pencil interpolation and flood fill
-├── selection-manager.js             # Rectangular selection, drag and copy of areas
-├── display-controller.js            # Header: active rule, neighborhood, mode indicator
-├── special-mode-controller.js       # Coordination of special engine activation
-├── special-mode-ui.js               # Panels, toggles and indicators for special modes
-├── grid-controller.js               # Grid dimensions, zoom and autofit
-├── import-export-controller.js      # Pattern import and export (RLE, MCL)
-├── rule-neighborhood-controller.js  # B/S rule selector and neighborhood visual grid
-├── effects-controller.js            # Activity effect, influence area and colors
-├── responsive-controller.js         # Adaptation to different screen sizes
-├── welcome-modal.js                 # Welcome modal
-│
-├── -- Startup Utilities --
-├── grid-autofit.js                  # Automatic grid fit to available space on load
-│
-├── -- Data and Codecs --
-├── patterns.js                      # Pattern library with mode-based filtering
-├── pattern-loader.js                # Pattern library loading and management
-├── rules.js                         # Predefined B/S rule definitions
-├── rules-loader.js                  # Rule loader
-├── rle-codec.js                     # RLE codec for pattern import/export
-├── mcl-codec.js                     # MCL codec for WireWorld patterns
-├── i18n.js                          # ES/EN internationalization
-│
-├── patterns.json                    # Predefined patterns (RLE)
-└── rules.json                       # Predefined rules
+└── scripts/
+    ├── main.js                         # ESM bootstrap: loads data, instantiates modules
+    ├── grid-autofit.js                 # Auto-fits grid to available space on load
+    │
+    ├── utils/
+    │   ├── config.js                   # AppConfig: limits, defaults and colors (export const)
+    │   └── circular-array.js           # Circular buffer for population history
+    │
+    ├── infrastructure/
+    │   ├── event-bus.js                # EventBus singleton with on() / once() / emit()
+    │   └── workers/
+    │       ├── automaton-worker.js     # Standard worker (classic script, no ESM)
+    │       ├── grid-worker-manager.js  # Standard worker manager
+    │       ├── triangle-worker.js      # ETA worker (classic script, no ESM)
+    │       ├── triangle-worker-manager.js
+    │       ├── hex-worker.js           # Hex worker (classic script, no ESM)
+    │       └── hex-worker-manager.js
+    │
+    ├── core/
+    │   ├── cellular-automaton.js       # CA core: applies B/S rules, double buffer
+    │   ├── grid-manager.js             # Uint8Array[] grid, serialization, toroidal shift
+    │   ├── neighborhood-calculator.js  # Moore / Von Neumann with configurable radius
+    │   ├── hex-engine.js               # Hexagonal Life-like (6 neighbors, odd-r)
+    │   ├── hex-grid-manager.js         # Pointy-top hexagonal grid
+    │   ├── triangle-engine.js          # ETA engine with worker support
+    │   ├── triangle-grid-manager.js    # Triangular grid with neighborhood logic
+    │   └── engines/
+    │       ├── rule-engine.js          # B/S rule engine with Moore r1 fastpath
+    │       ├── special-engine-manager.js # Engine lifecycle, dynamic import()
+    │       ├── wolfram-engine.js       # Wolfram 1D (rules 0-255)
+    │       ├── rd2d-engine.js          # RD-2D 16 states, inlined neighbors, column-major
+    │       ├── ulam-warburton-engine.js # UW fractal, O(perimeter) frontier tracking
+    │       ├── langton-engine.js       # Multi-agent multi-color Langton's Ant
+    │       ├── wireworld-engine.js     # WireWorld 4 states
+    │       └── generations-engine.js  # Multi-state Generations
+    │
+    ├── rendering/
+    │   ├── grid-renderer.js            # Canvas 2D, dirty rendering, activity effect
+    │   ├── wasm-renderer.js            # WASM fill_full/fill_dirty, zero-copy ImageData
+    │   ├── hex-renderer.js             # Hex Path2D cached per zoom level
+    │   ├── triangle-renderer.js        # Canvas 2D for triangular grid
+    │   └── triangle-webgl2-renderer.js # WebGL2 instanced for triangular grid
+    │
+    ├── app/
+    │   ├── automaton.js                # CellularAutomaton: main coordinator
+    │   ├── automaton-loop.js           # AnimationLoop (RAF + stepsPerFrame)
+    │   ├── simulator-limiter.js        # Generation and population limits
+    │   ├── state-manager.js            # Undo/redo, copy/paste with engineStates
+    │   └── edit-coordinator.js         # Randomize, clear, import, export, shift, undo/redo
+    │
+    ├── config/
+    │   ├── rules.js                    # B/S parse utilities (parseRuleString, etc.)
+    │   ├── rules-loader.js             # rulesLoader singleton, emits rules:loaded
+    │   ├── patterns.js                 # PatternManager, rotateMatrix, getPatternWithRotation
+    │   └── pattern-loader.js           # patternLoader singleton, emits patterns:loaded
+    │
+    └── ui/
+        ├── i18n.js                     # i18n singleton + t(), emits i18n:localeChanged
+        ├── ui-controller.js            # Main UI coordinator
+        ├── canvas-controller.js        # Mouse/touch, drawing, pan, selection
+        ├── drawing-tool.js             # Bresenham brush + flood fill
+        ├── selection-manager.js        # Rectangular selection, drag, copy/paste
+        ├── display-controller.js       # Header: rule, neighborhood, active mode
+        ├── special-mode-controller.js  # Special mode activation/deactivation
+        ├── special-mode-ui.js          # Panels, toggles, mode indicators
+        ├── grid-controller.js          # Grid dimensions, zoom, autofit
+        ├── import-export-controller.js # RLE and MCL import/export
+        ├── rule-neighborhood-controller.js # B/S selector and neighborhood grid
+        ├── effects-controller.js       # Colors, activity effect, influence area
+        ├── responsive-controller.js    # Mobile/desktop adaptation
+        ├── welcome-modal.js            # Welcome modal
+        ├── rle-codec.js                # RLE codec
+        └── mcl-codec.js                # MCL codec (WireWorld)
 ```
+
+---
+
+## Deployment
+
+The project requires no build. To serve locally:
+
+```bash
+# Python
+python3 -m http.server 8080
+
+# Node.js
+npx serve .
+
+# VS Code
+# Live Server extension → right-click index.html → "Open with Live Server"
+```
+
+> ES Modules do not work from `file://`. An HTTP server is required.
+
+The server must serve `.js` files with `Content-Type: application/javascript`.
+Worker paths in `GridWorkerManager`, `TriangleWorkerManager` and `HexWorkerManager`
+are relative to the HTML document (not to the module that instantiates them) — keep this convention.
 
 ---
 
