@@ -75,4 +75,4 @@ class AnimationLoop {
     }
 }
 
-window.AnimationLoop = AnimationLoop;
+export {AnimationLoop};

@@ -1,3 +1,6 @@
+import {AppConfig} from '../utils/config.js';
+import {TriangleRenderer} from './triangle-renderer.js';
+
 /**
  * TriangleWebGL2Renderer - Renderizador WebGL2 para autómata triangular
  *
@@ -765,4 +768,4 @@ class TriangleWebGL2Renderer {
     }
 }
 
-window.TriangleWebGL2Renderer = TriangleWebGL2Renderer;
+export {TriangleWebGL2Renderer};

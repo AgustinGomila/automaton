@@ -1,11 +1,22 @@
 /**
- * SpecialEngineManager - Gestiona los motores especiales de simulación.
+ * scripts/core/engines/special-engine-manager.js
  *
- * Cambios para grids rectangulares:
- *   • Todos los contextos exponen gridWidth y gridHeight además de gridSize
- *     (que se mantiene como Math.max(w,h) para compatibilidad).
- *   • stepActive() usa height para recalcular índices planos en Triangle.
+ * Gestiona los motores especiales de simulación.
+ *
+ * Los motores de carga diferida (rd2d, wolfram, triangle, hex, etc.) se cargan
+ * con `import()` dinámico la primera vez que se activan. El navegador cachea el
+ * módulo, por lo que activaciones subsiguientes del mismo modo no producen
+ * ninguna petición de red adicional.
+ *
+ * Cambios respecto a la versión global:
+ *   - `_loadScript()` eliminado; reemplazado por `import()` en cada rama.
+ *   - `typeof X === 'undefined'` eliminado; la asignación destructurada del
+ *     módulo actúa como guard implícita.
+ *   - Sin `window.SpecialEngineManager`.
  */
+
+import {AppConfig} from '../../utils/config.js';
+
 class SpecialEngineManager {
 
     static MODES = Object.freeze({
@@ -100,13 +111,6 @@ class SpecialEngineManager {
         if (!this.triangleEngine?.gridManager) return null;
         const engine = this.triangleEngine;
         engine.step();
-
-        // updateActivityAges es llamado directamente por:
-        //   - _stepSync (sync path) en triangle-engine.js
-        //   - _onWorkerResult (worker path) en triangle-engine.js
-        // No se llama aquí para evitar procesar changedCells obsoletos cuando
-        // step() delega al worker (async) y getChangedCells() devuelve el paso anterior.
-
         return {
             continued: true,
             label: 'Triangle',
@@ -122,28 +126,18 @@ class SpecialEngineManager {
     _describeHexStep() {
         if (!this.hexEngine?.gridManager) return null;
         const engine = this.hexEngine;
-
-        // Siempre _stepSync — síncrono, sin Promise sin await.
-        // La inicialización ya fue completada por activateHexMode antes del primer step.
         engine._stepSync();
-
-        // Notificar al renderer de las celdas que cambiaron de estado para que
-        // actualice los contadores de actividad (born/dying). Sin esta llamada
-        // el efecto de actividad nunca se activa porque changedCells llegaría vacío.
         engine.automaton.renderer.updateActivityAges?.(engine._changedCells);
-
-        // Devolver población del hex grid (no del grid rectangular del core)
         const population = engine.gridManager.countPopulation();
-
         return {
             continued: true,
             label: 'Hexagonal',
             stopMessage: null,
             generation: engine.generation,
-            changedCells: [],        // ya procesadas arriba — no re-procesar en automaton
+            changedCells: [],
             population,
             markDirtyFromCells: false,
-            skipActivity: true       // updateActivityAges ya fue llamado directamente
+            skipActivity: true
         };
     }
 
@@ -176,6 +170,7 @@ class SpecialEngineManager {
     async activate(engineName) {
         if (this.specialMode === engineName && this._specialEngineLoaded) return;
 
+        // Desactivar el motor anterior
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
         this.triangleEngine?.deactivate?.();
@@ -187,51 +182,52 @@ class SpecialEngineManager {
         this._restoreOriginals();
 
         if (engineName === SpecialEngineManager.MODES.RD2D) {
-            if (typeof RD2DEngine === 'undefined') await this._loadScript('scripts/core/engines/rd2d-engine.js');
+            const {RD2DEngine} = await import('./rd2d-engine.js');
             this.rd2dEngine = new RD2DEngine(this._buildRD2DContext());
             this.specialMode = SpecialEngineManager.MODES.RD2D;
 
         } else if (engineName === SpecialEngineManager.MODES.WOLFRAM) {
-            if (typeof WolframEngine === 'undefined') await this._loadScript('scripts/core/engines/wolfram-engine.js');
+            const {WolframEngine} = await import('./wolfram-engine.js');
             this.wolframEngine = new WolframEngine(this._buildWolframContext());
             this.specialMode = SpecialEngineManager.MODES.WOLFRAM;
 
         } else if (engineName === SpecialEngineManager.MODES.ULAM_WARBURTON) {
-            if (typeof UlamWarburtonEngine === 'undefined') await this._loadScript('scripts/core/engines/ulam-warburton-engine.js');
+            const {UlamWarburtonEngine} = await import('./ulam-warburton-engine.js');
             this.uwEngine = new UlamWarburtonEngine(this._buildUWContext());
             this.specialMode = SpecialEngineManager.MODES.ULAM_WARBURTON;
 
         } else if (engineName === SpecialEngineManager.MODES.LANGTON) {
-            if (typeof LangtonEngine === 'undefined') await this._loadScript('scripts/core/engines/langton-engine.js');
+            const {LangtonEngine} = await import('./langton-engine.js');
             this.langtonEngine = new LangtonEngine(this._buildLangtonContext());
             this.specialMode = SpecialEngineManager.MODES.LANGTON;
 
         } else if (engineName === SpecialEngineManager.MODES.WIREWORLD) {
-            if (typeof WireWorldEngine === 'undefined') await this._loadScript('scripts/core/engines/wireworld-engine.js');
+            const {WireWorldEngine} = await import('./wireworld-engine.js');
             this.wireworldEngine = new WireWorldEngine(this._buildWireworldContext());
             this.specialMode = SpecialEngineManager.MODES.WIREWORLD;
 
         } else if (engineName === SpecialEngineManager.MODES.GENERATIONS) {
-            if (typeof GenerationsEngine === 'undefined') await this._loadScript('scripts/core/engines/generations-engine.js');
+            const {GenerationsEngine} = await import('./generations-engine.js');
             this.generationsEngine = new GenerationsEngine(this._buildGenerationsContext());
             this.specialMode = SpecialEngineManager.MODES.GENERATIONS;
 
         } else if (engineName === SpecialEngineManager.MODES.TRIANGLE) {
-            if (typeof TriangleGridManager === 'undefined') await this._loadScript('scripts/core/triangle-grid-manager.js');
-            if (typeof TriangleWorkerManager === 'undefined') await this._loadScript('scripts/infrastructure/workers/triangle-worker-manager.js');
-            if (typeof TriangleEngine === 'undefined') await this._loadScript('scripts/core/engines/triangle-engine.js');
-            if (typeof TriangleRenderer === 'undefined') await this._loadScript('scripts/rendering/triangle-renderer.js');
-            if (typeof TriangleWebGL2Renderer === 'undefined') await this._loadScript('scripts/rendering/triangle-webgl2-renderer.js');
+            const [
+                {TriangleGridManager},
+                {TriangleWorkerManager},
+                {TriangleEngine},
+                {TriangleRenderer},
+                {TriangleWebGL2Renderer}
+            ] = await Promise.all([
+                import('../triangle-grid-manager.js'),
+                import('../../infrastructure/workers/triangle-worker-manager.js'),
+                import('../engines/triangle-engine.js'),
+                import('../../rendering/triangle-renderer.js'),
+                import('../../rendering/triangle-webgl2-renderer.js')
+            ]);
 
-            // Destruir el overlay DOM del GridRenderer ANTES del swap de renderer.
-            // El GridRenderer puede tener un canvas overlay de grilla rectangular
-            // insertado en el DOM; si no se retira aquí, permanece visible debajo
-            // del overlay triangular y produce una superposición de ambas grillas.
-            // El GridRenderer recreará su overlay automáticamente al ser restaurado
-            // y se llame a _buildGridCache() con showGrid activo.
             const currentRenderer = this._getRenderer();
             currentRenderer?._destroyGridOverlay?.();
-
             this._originalRenderer = currentRenderer;
             this._originalCore = this._getCore();
 
@@ -244,34 +240,12 @@ class SpecialEngineManager {
 
             const useWebGL2 = this._detectWebGL2Support();
 
-            // Calcular el cellSize que preserva las proporciones del canvas original.
-            //
-            // Geometría del canvas triangular (igual en TriangleRenderer y WebGL2):
-            //   canvasWidth  = ceil((gridWidth  + 0.5) × cs)
-            //   canvasHeight = ceil( gridHeight × √3/2  × cs)
-            //
-            // Con triWidth = gridWidth×2 y triHeight = gridHeight, despejamos cs:
-            //   csFromWidth  = origW / (gridWidth  + 0.5)   ≈ origCellSize
-            //   csFromHeight = origH / (gridHeight × √3/2)  ≈ origCellSize × 1.155
-            //
-            // Math.round en lugar de Math.floor: floor(2.99)=2 pierde un entero completo
-            // y genera un canvas mucho más pequeño que el original. round(2.99)=3 mantiene
-            // cs=origCellSize en todos los casos habituales, con un desborde de 1-4 px en
-            // ancho (inferior al padding del contenedor y completamente imperceptible).
-            //
-            // El cssHeight lo calcula el renderer internamente como bitmapH × 2/√3,
-            // lo que produce triángulos equiláteros correctos sin importar el historial
-            // de cambios de cellSize. No se necesita targetHeight externo.
-            // Respetar el cellSize actual sin modificarlo: ETA adapta sus dims al cs
-            // heredado (activateTriangleMode calcula gw/gh que caben al cs actual).
-            // Validar cs contra las dims del grid rectangular anterior es incorrecto —
-            // la geometría triangular necesita distinto espacio por celda y produciría
-            // un maxFit artificialmente bajo que forzaría cs a 1 entre cambios de modo.
             const currentCs = this._getCellSize();
-            const fittedCellSize = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
-                Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
+            const fittedCellSize = Math.max(
+                AppConfig.GRID.MIN_CELL_SIZE,
+                Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs)
+            );
 
-            // Leer estado y colores actuales del sidebar para preservarlos al activar
             const prevRenderer = this._getRenderer();
             const showActivityEffect = prevRenderer?.getConfig('showActivityEffect') ?? true;
             const colorAlive = document.getElementById('colorAlive')?.value ?? AppConfig.RENDER.COLOR_ALIVE;
@@ -287,7 +261,7 @@ class SpecialEngineManager {
                 colorDead: '#0f172a',
                 colorGrid: 'rgba(255,255,255,0.1)',
                 colorBorn,
-                colorDying,
+                colorDying
             };
 
             const newRenderer = useWebGL2
@@ -297,27 +271,27 @@ class SpecialEngineManager {
             this._setRenderer(newRenderer);
             this.specialMode = SpecialEngineManager.MODES.TRIANGLE;
 
-            // Sincronizar automaton.cellSize con el cellSize real del renderer.
-            // fittedCellSize puede diferir de automaton.cellSize (calculado para que el
-            // canvas triangular ocupe el mismo espacio que el rectangular original).
-            // Sin esta sincronización, autoSizeGrid y setCellSize operan con valores
-            // distintos, produciendo grids sobredimensionados o distorsión de triángulos.
             const automaton = this._getAutomaton();
             automaton.cellSize = fittedCellSize;
-            // Actualizar el slider y su display para reflejar el zoom real.
             const cellSizeSlider = document.getElementById('cellSize');
             if (cellSizeSlider) {
                 cellSizeSlider.value = fittedCellSize;
-                // Actualizar el display asociado si existe
                 const cellSizeDisplay = document.getElementById('cellSizeValue');
                 if (cellSizeDisplay) cellSizeDisplay.textContent = `${fittedCellSize}px`;
             }
 
         } else if (engineName === SpecialEngineManager.MODES.HEXAGONAL) {
-            if (typeof HexGridManager === 'undefined') await this._loadScript('scripts/core/hex-grid-manager.js');
-            if (typeof HexWorkerManager === 'undefined') await this._loadScript('scripts/infrastructure/workers/hex-worker-manager.js');
-            if (typeof HexEngine === 'undefined') await this._loadScript('scripts/core/engines/hex-engine.js');
-            if (typeof HexRenderer === 'undefined') await this._loadScript('scripts/rendering/hex-renderer.js');
+            const [
+                {HexGridManager},
+                {HexWorkerManager},
+                {HexEngine},
+                {HexRenderer}
+            ] = await Promise.all([
+                import('../hex-grid-manager.js'),
+                import('../../infrastructure/workers/hex-worker-manager.js'),
+                import('../engines/hex-engine.js'),
+                import('../../rendering/hex-renderer.js')
+            ]);
 
             const currentRenderer = this._getRenderer();
             currentRenderer?._destroyGridOverlay?.();
@@ -329,16 +303,12 @@ class SpecialEngineManager {
             const ctx2d = canvas.getContext('2d');
             if (ctx2d) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Respetar el cellSize actual sin modificarlo: Hex adapta sus dims al cs
-            // heredado (activateHexMode calcula hexCols/hexRows que caben al cs actual).
-            // Validar cs contra _getGridWidth() del grid rectangular es incorrecto —
-            // la geometría hex es √3× más ancha por columna y daría un maxFit bajo
-            // que forzaría cs a 1 entre cambios de modo.
             const currentCs = this._getCellSize();
-            const cs = Math.max(AppConfig.GRID.MIN_CELL_SIZE,
-                Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs));
+            const cs = Math.max(
+                AppConfig.GRID.MIN_CELL_SIZE,
+                Math.min(AppConfig.GRID.MAX_CELL_SIZE, currentCs)
+            );
 
-            // Leer estado y colores actuales del sidebar para preservarlos al activar
             const prevRenderer = this._getRenderer();
             const showActivityEffect = prevRenderer?.getConfig('showActivityEffect') ?? true;
             const colorAlive = document.getElementById('colorAlive')?.value ?? AppConfig.RENDER.COLOR_ALIVE;
@@ -354,17 +324,13 @@ class SpecialEngineManager {
                 colorDead: '#0f172a',
                 colorGrid: 'rgba(255,255,255,0.1)',
                 colorBorn,
-                colorDying,
+                colorDying
             });
 
             this._setRenderer(hexRenderer);
             this.specialMode = SpecialEngineManager.MODES.HEXAGONAL;
-
-            // HexEngine se crea aquí; activate() y setGridManager() los llama
-            // activateHexMode() en special-mode-controller, igual que Triangle.
             this.hexEngine = new HexEngine(this._buildHexContext());
 
-            // Sincronizar cellSize al autómata y al slider de la UI
             const automaton2 = this._getAutomaton();
             automaton2.cellSize = cs;
             const cellSizeSlider2 = document.getElementById('cellSize');
@@ -376,6 +342,141 @@ class SpecialEngineManager {
         }
 
         this._specialEngineLoaded = true;
+    }
+
+    // =========================================
+    // DISPATCH DE GEOMETRÍA
+    // Centraliza la lógica engine-específica que antes vivía en automaton.js,
+    // de modo que agregar un motor con geometría propia no requiera tocar el
+    // coordinador principal.
+    // =========================================
+
+    /**
+     * Delega el resize al motor con geometría propia y sincroniza el estado
+     * interno de cualquier motor que dependa de las dimensiones del grid.
+     *
+     * Debe llamarse DESPUÉS de actualizar automaton.gridWidth/gridHeight con los
+     * valores reales del core, para que w y h sean las dimensiones definitivas.
+     *
+     * @param {number} w — ancho real post-resize
+     * @param {number} h — alto real post-resize
+     * @returns {{ handledRenderer: boolean }}
+     *   handledRenderer: true si el motor ya ajustó su propio renderer
+     *   (caller no debe llamar renderer.resize()).
+     */
+    onResize(w, h) {
+        const M = SpecialEngineManager.MODES;
+        let handledRenderer = false;
+
+        if (this.specialMode === M.TRIANGLE && this.triangleEngine?.isActive) {
+            this.triangleEngine.resize(w, h);
+            handledRenderer = true;
+
+        } else if (this.specialMode === M.HEXAGONAL && this.hexEngine?.isActive) {
+            this.hexEngine.gridManager?.resize(w, h);
+            this.hexEngine._newGrid = Array.from(
+                {length: this.hexEngine.gridManager.width},
+                () => new Uint8Array(this.hexEngine.gridManager.height)
+            );
+            // Notificar al HexRenderer las nuevas dimensiones del gridManager
+            this._getRenderer().setGridManager?.(this.hexEngine.gridManager);
+            handledRenderer = true;
+        }
+
+        // RD2D no tiene renderer propio pero necesita sincronizar sus dimensiones
+        // internas independientemente de qué otro modo esté activo.
+        if (this.specialMode === M.RD2D && this.rd2dEngine?.isActive) {
+            this.rd2dEngine.gridWidth = w;
+            this.rd2dEngine.gridHeight = h;
+            this.rd2dEngine._initStateGrid();
+            this.rd2dEngine.initialized = false;
+        }
+
+        return {handledRenderer};
+    }
+
+    /**
+     * Retorna true si el modo activo usa su propio mecanismo de worker y el
+     * worker estándar no debe activarse.
+     * @returns {boolean}
+     */
+    usesOwnWorker() {
+        return this.specialMode === SpecialEngineManager.MODES.TRIANGLE ||
+            this.specialMode === SpecialEngineManager.MODES.HEXAGONAL;
+    }
+
+    /**
+     * Delega el cambio de tamaño de celda al motor con firma de renderer propia.
+     * Triangle usa renderer.resize(gridWidth, newSize) en lugar de la firma
+     * estándar de tres argumentos (gridWidth, gridHeight, newSize).
+     *
+     * @param {number} gridWidth
+     * @param {number} gridHeight
+     * @param {number} newSize
+     * @returns {{ handled: boolean }}
+     */
+    onCellSizeChange(gridWidth, gridHeight, newSize) {
+        if (this.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.triangleEngine?.isActive) {
+            this._getRenderer().resize(gridWidth, newSize);
+            return {handled: true};
+        }
+        return {handled: false};
+    }
+
+    /**
+     * Traduce coordenadas de mouse a coordenadas de celda para motores con
+     * geometría propia. Retorna null si el modo activo no requiere tratamiento
+     * especial (el caller debe usar el path estándar).
+     *
+     * Triangle y Hex pasan clientX/clientY directamente al renderer en lugar
+     * de envolver en un objeto tipo Event.
+     *
+     * @param {number} clientX
+     * @param {number} clientY
+     * @returns {Object|null} coords si handled, null si usar path estándar
+     */
+    getCellCoords(clientX, clientY) {
+        const M = SpecialEngineManager.MODES;
+        if (this.specialMode === M.TRIANGLE && this.triangleEngine?.isActive) {
+            return this._getRenderer().getCellFromMouse(clientX, clientY);
+        }
+        if (this.specialMode === M.HEXAGONAL && this.hexEngine?.isActive) {
+            return this._getRenderer().getCellFromMouse(clientX, clientY);
+        }
+        return null;
+    }
+
+    /**
+     * Dibuja una celda en motores con geometría propia (Triangle, Hex).
+     * Retorna handled: false si el modo activo usa el grid estándar.
+     *
+     * @param {Object} coords  — { q, r } para Triangle; { col, row } para Hex
+     * @param {number} state
+     * @returns {{ handled: boolean, changed: boolean, dirtyX: number, dirtyY: number, population: number|null }}
+     */
+    onDrawCell(coords, state) {
+        const M = SpecialEngineManager.MODES;
+        if (this.specialMode === M.TRIANGLE && this.triangleEngine?.isActive) {
+            const changed = this.triangleEngine.gridManager.setCell(coords.q, coords.r, state);
+            return {
+                handled: true,
+                changed: !!changed,
+                dirtyX: coords.q,
+                dirtyY: coords.r,
+                population: changed ? this.triangleEngine.gridManager.countPopulation() : null
+            };
+        }
+        if (this.specialMode === M.HEXAGONAL && this.hexEngine?.isActive) {
+            const changed = this.hexEngine.gridManager.setCell(coords.col, coords.row, state);
+            return {
+                handled: true,
+                changed: !!changed,
+                dirtyX: coords.col,
+                dirtyY: coords.row,
+                population: changed ? this.hexEngine.gridManager.countPopulation() : null
+            };
+        }
+        return {handled: false, changed: false, dirtyX: 0, dirtyY: 0, population: null};
     }
 
     destroy() {
@@ -426,9 +527,7 @@ class SpecialEngineManager {
                 this.triangleEngine?.reset?.();
                 return true;
             case SpecialEngineManager.MODES.HEXAGONAL:
-                if (this.hexEngine?.gridManager) {
-                    this.hexEngine.gridManager.clear();
-                }
+                this.hexEngine?.gridManager?.clear();
                 return true;
             case SpecialEngineManager.MODES.LANGTON:
                 this.langtonEngine?.reset();
@@ -449,7 +548,7 @@ class SpecialEngineManager {
             const {width, height} = this.triangleEngine.gridManager;
             for (let q = 0; q < width; q++) {
                 for (let r = 0; r < height; r++) {
-                    this.triangleEngine.gridManager.setCell(q, r, Math.random() < density ? 1 : 0);
+                    this.triangleEngine.gridManager.grid[q][r] = Math.random() < density ? 1 : 0;
                 }
             }
             return {
@@ -512,7 +611,7 @@ class SpecialEngineManager {
     }
 
     // =========================================
-    // CONTEXTOS — incluyen gridWidth y gridHeight
+    // CONTEXTOS
     // =========================================
 
     /** Construye un contexto base con propiedades compartidas por todos los engines. */
@@ -538,8 +637,7 @@ class SpecialEngineManager {
     }
 
     _buildWolframContext() {
-        const self = this;
-        const automaton = self._getAutomaton();
+        const automaton = this._getAutomaton();
         const base = this._buildBaseContext(automaton);
         return Object.assign(Object.create(base), {
             get generation() {
@@ -558,13 +656,12 @@ class SpecialEngineManager {
     }
 
     _buildRD2DContext() {
-        const automaton = this._getAutomaton();
-        return this._buildBaseContext(automaton);
+        return this._buildBaseContext(this._getAutomaton());
     }
 
     _buildTriangleContext() {
         const self = this;
-        const automaton = self._getAutomaton();
+        const automaton = this._getAutomaton();
         const base = this._buildBaseContext(automaton);
         return Object.assign(Object.create(base), {
             get cellSize() {
@@ -587,23 +684,20 @@ class SpecialEngineManager {
     }
 
     _buildLangtonContext() {
-        const automaton = this._getAutomaton();
-        return this._buildBaseContext(automaton);
+        return this._buildBaseContext(this._getAutomaton());
     }
 
     _buildWireworldContext() {
-        const automaton = this._getAutomaton();
-        return this._buildBaseContext(automaton);
+        return this._buildBaseContext(this._getAutomaton());
     }
 
     _buildGenerationsContext() {
-        const automaton = this._getAutomaton();
-        return this._buildBaseContext(automaton);
+        return this._buildBaseContext(this._getAutomaton());
     }
 
     _buildHexContext() {
         const self = this;
-        const automaton = self._getAutomaton();
+        const automaton = this._getAutomaton();
         const base = this._buildBaseContext(automaton);
         return Object.assign(Object.create(base), {
             get cellSize() {
@@ -611,20 +705,23 @@ class SpecialEngineManager {
             },
             render() {
                 return automaton.render();
-            },
+            }
         });
     }
 
-    /**
-     * Desactiva el modo hexagonal y restaura el renderer/core originales.
-     * Sigue el mismo patrón que deactivateTriangle().
-     */
-    deactivateHex() {
-        if (this.hexEngine) {
-            this.hexEngine.deactivate();
-            this.hexEngine = null;
-        }
+    // =========================================
+    // DESACTIVACIÓN DE MODOS CON RENDERER PROPIO
+    // =========================================
 
+    /**
+     * Desactiva el modo triangular y restaura renderer/core originales.
+     */
+    deactivateTriangle() {
+        if (this.triangleEngine) {
+            this.triangleEngine.clear?.();
+            this.triangleEngine.deactivate();
+            this.triangleEngine = null;
+        }
         if (this._originalRenderer) {
             const oldRenderer = this._getRenderer();
             this._setRenderer(this._originalRenderer);
@@ -632,7 +729,27 @@ class SpecialEngineManager {
             oldRenderer?.destroy?.();
             this._getAutomaton()._resizeRenderer();
         }
+        if (this._originalCore) {
+            this._setCore(this._originalCore);
+            this._originalCore = null;
+        }
+    }
 
+    /**
+     * Desactiva el modo hexagonal y restaura renderer/core originales.
+     */
+    deactivateHex() {
+        if (this.hexEngine) {
+            this.hexEngine.deactivate();
+            this.hexEngine = null;
+        }
+        if (this._originalRenderer) {
+            const oldRenderer = this._getRenderer();
+            this._setRenderer(this._originalRenderer);
+            this._originalRenderer = null;
+            oldRenderer?.destroy?.();
+            this._getAutomaton()._resizeRenderer();
+        }
         if (this._originalCore) {
             this._setCore(this._originalCore);
             this._originalCore = null;
@@ -642,43 +759,6 @@ class SpecialEngineManager {
     // =========================================
     // UTILIDADES PRIVADAS
     // =========================================
-
-    /**
-     * Desactiva el engine triangular y restaura el renderer/core originales.
-     *
-     * Centraliza la lógica que antes vivía en SpecialModeController._deactivateTriangleEngine(),
-     * eliminando el acceso directo desde el controlador UI a las propiedades internas
-     * del autómata (triangleEngine, _originalRenderer, _originalCore).
-     *
-     * Pasos:
-     *  1. Limpiar y desactivar el triangleEngine
-     *  2. Restaurar el renderer original y destruir el triangular
-     *  3. Restaurar el core original
-     *  4. Redimensionar el renderer estándar a las dimensiones actuales del grid
-     */
-    deactivateTriangle() {
-        if (this.triangleEngine) {
-            this.triangleEngine.clear?.();
-            this.triangleEngine.deactivate();
-            this.triangleEngine = null;
-        }
-
-        if (this._originalRenderer) {
-            const oldRenderer = this._getRenderer();
-            this._setRenderer(this._originalRenderer);
-            this._originalRenderer = null;
-            oldRenderer?.destroy?.();
-
-            // Redimensionar el renderer estándar con las dimensiones actuales del grid.
-            // Sin argumentos _resizeRenderer usa automaton.gridWidth/gridHeight/cellSize.
-            this._getAutomaton()._resizeRenderer();
-        }
-
-        if (this._originalCore) {
-            this._setCore(this._originalCore);
-            this._originalCore = null;
-        }
-    }
 
     _restoreOriginals() {
         if (this._originalRenderer) {
@@ -702,16 +782,6 @@ class SpecialEngineManager {
             return false;
         }
     }
-
-    _loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = src;
-            script.onload = () => resolve();
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
-    }
 }
 
-window.SpecialEngineManager = SpecialEngineManager;
+export {SpecialEngineManager};

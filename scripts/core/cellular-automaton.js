@@ -1,3 +1,8 @@
+import {AppConfig} from '../utils/config.js';
+import {GridManager} from './grid-manager.js';
+import {NeighborhoodCalculator} from './neighborhood-calculator.js';
+import {RuleEngine} from './engines/rule-engine.js';
+
 /**
  * CellularAutomatonCore — Núcleo puro del autómata celular.
  *
@@ -205,4 +210,4 @@ class CellularAutomatonCore {
     }
 }
 
-window.CellularAutomatonCore = CellularAutomatonCore;
+export {CellularAutomatonCore};

@@ -1,8 +1,14 @@
+import {t} from './i18n.js';
+import {eventBus} from '../infrastructure/event-bus.js';
+import {parseCustomRule} from '../config/rules.js';
+import {rulesLoader} from '../config/rules-loader.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+
 /**
  * RuleController — Gestión del selector de reglas B/S y la regla custom.
  *
  * Responsabilidades:
- *   - Poblar #ruleSelector con las reglas de window.RULES
+ *   - Poblar #ruleSelector con las reglas de rulesLoader.RULES
  *   - Cambiar la regla activa (changeRule)
  *   - Aplicar una regla custom B/S/C (applyCustomRule)
  *
@@ -47,8 +53,8 @@ class RuleController {
 
         while (selector.options.length > 0) selector.removeItem(0);
 
-        Object.keys(window.RULES).forEach(key => {
-            const rule = window.RULES[key];
+        Object.keys(rulesLoader.RULES).forEach(key => {
+            const rule = rulesLoader.RULES[key];
             const option = document.createElement('option');
             option.value = key;
 
@@ -59,9 +65,9 @@ class RuleController {
             selector.appendChild(option);
         });
 
-        if (window.RULES.conway) {
+        if (rulesLoader.RULES.conway) {
             selector.value = 'conway';
-            this._onUpdateRuleInfo(window.RULES.conway);
+            this._onUpdateRuleInfo(rulesLoader.RULES.conway);
         }
     }
 
@@ -72,8 +78,8 @@ class RuleController {
             document.getElementById('birthInput').value = this.automaton.rule.birth.join(',');
             document.getElementById('survivalInput').value = this.automaton.rule.survival.join(',');
 
-        } else if (window.RULES?.[selector.value]) {
-            const rule = window.RULES[selector.value];
+        } else if (rulesLoader.RULES?.[selector.value]) {
+            const rule = rulesLoader.RULES[selector.value];
             document.getElementById('birthInput').value = rule.birth.join(',');
             document.getElementById('survivalInput').value = rule.survival.join(',');
 
@@ -86,7 +92,7 @@ class RuleController {
                 if (statesSlider) statesSlider.value = '2';
                 if (statesDisplay) statesDisplay.textContent = '2';
 
-                this.automaton.setRule(rule.survival, rule.birth);
+                this.automaton.setRule(rule.birth, rule.survival);
                 this._onUpdateHeader();
                 eventBus.emit('automaton:filterChanged', {
                     mode: SpecialEngineManager.MODES.STANDARD,
@@ -115,21 +121,21 @@ class RuleController {
                 this._onDeactivateGenerations();
             }
 
-            this.automaton.setRule(customRule.survival, customRule.birth);
+            this.automaton.setRule(customRule.birth, customRule.survival);
 
-            if (window.RULES?.custom) {
-                window.RULES.custom.survival = customRule.survival;
-                window.RULES.custom.birth = customRule.birth;
-                window.RULES.custom.ruleString = `B${customRule.birth.join('')}/S${customRule.survival.join('')}`;
+            if (rulesLoader.RULES?.custom) {
+                rulesLoader.RULES.custom.survival = customRule.survival;
+                rulesLoader.RULES.custom.birth = customRule.birth;
+                rulesLoader.RULES.custom.ruleString = `B${customRule.birth.join('')}/S${customRule.survival.join('')}`;
 
                 const selector = document.getElementById('ruleSelector');
                 const selectedOption = selector.options[selector.selectedIndex];
-                selectedOption.textContent = `${t('config.rule.custom')} (${window.RULES.custom.ruleString})`;
+                selectedOption.textContent = `${t('config.rule.custom')} (${rulesLoader.RULES.custom.ruleString})`;
 
-                this._onUpdateRuleInfo(window.RULES.custom);
+                this._onUpdateRuleInfo(rulesLoader.RULES.custom);
                 eventBus.emit('automaton:filterChanged', {
                     mode: SpecialEngineManager.MODES.STANDARD,
-                    rule: window.RULES.custom.ruleString
+                    rule: rulesLoader.RULES.custom.ruleString
                 });
             }
         } catch (error) {
@@ -274,8 +280,8 @@ class NeighborhoodController {
                 const isCenter = dx === 0 && dy === 0;
                 const cell = document.createElement('div');
                 cell.className = 'neighborhood-cell' + (isCenter ? ' center' : '');
-                cell.dataset.dx = dx;
-                cell.dataset.dy = dy;
+                cell.dataset.dx = String(dx);
+                cell.dataset.dy = String(dy);
 
                 if (isCenter) {
                     cell.textContent = '●';
@@ -371,9 +377,8 @@ class NeighborhoodController {
         const countEl = document.getElementById('customNeighborCount');
         if (!countEl) return;
         const active = document.querySelectorAll('#neighborhoodGrid .neighborhood-cell.active').length;
-        countEl.textContent = active;
+        countEl.textContent = String(active);
     }
 }
 
-window.RuleController = RuleController;
-window.NeighborhoodController = NeighborhoodController;
+export {RuleController, NeighborhoodController};

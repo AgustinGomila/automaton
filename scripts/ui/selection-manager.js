@@ -389,4 +389,4 @@ class SelectionManager {
     }
 }
 
-window.SelectionManager = SelectionManager;
+export {SelectionManager};

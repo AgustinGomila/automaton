@@ -348,4 +348,4 @@ class WireWorldEngine {
     }
 }
 
-window.WireWorldEngine = WireWorldEngine;
+export {WireWorldEngine};

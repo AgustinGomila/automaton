@@ -35,6 +35,22 @@ class EventBus {
     }
 
     /**
+     * Suscribe callback al evento y lo desuscribe automáticamente
+     * tras la primera invocación.
+     * @param   {string}   event
+     * @param   {Function} callback
+     * @param   {Object}   [context]
+     * @returns {Function} unsuscribe anticipado (si se necesita cancelar antes del disparo)
+     */
+    once(event, callback, context = null) {
+        const unsub = this.on(event, (...args) => {
+            unsub();
+            callback.apply(context, args);
+        });
+        return unsub;
+    }
+
+    /**
      * Emite un evento hacia todos sus listeners.
      * No loguea: este método se ejecuta en el hot path de la simulación.
      */
@@ -56,4 +72,5 @@ class EventBus {
     }
 }
 
-window.eventBus = new EventBus();
+/** Instancia singleton compartida por toda la aplicación. */
+export const eventBus = new EventBus();

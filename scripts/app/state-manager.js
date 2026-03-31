@@ -1,3 +1,6 @@
+import {AppConfig} from '../utils/config.js';
+import {CircularArray} from '../utils/circular-array.js';
+
 /**
  * StateManager - Gestión completa del estado del autómata.
  *
@@ -389,4 +392,4 @@ class StateManager {
     }
 }
 
-window.StateManager = StateManager;
+export {StateManager};

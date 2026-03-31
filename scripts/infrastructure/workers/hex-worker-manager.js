@@ -192,4 +192,4 @@ class HexWorkerManager {
     }
 }
 
-window.HexWorkerManager = HexWorkerManager;
+export {HexWorkerManager};

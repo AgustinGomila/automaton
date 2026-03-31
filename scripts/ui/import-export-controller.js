@@ -1,3 +1,8 @@
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {t} from './i18n.js';
+import {RLECodec} from './rle-codec.js';
+import {MCLCodec} from './mcl-codec.js';
+
 /**
  * ImportExportController — Importación y exportación de patrones.
  *
@@ -173,6 +178,7 @@ class ImportExportController {
             }
 
             const cx = Math.floor(this.automaton.gridWidth / 2);
+            const cy = Math.floor(this.automaton.gridHeight / 2);
             this.automaton.importPattern(patternData, cx, cy);
             this.automaton.updateStats();
             this.automaton.render();
@@ -272,4 +278,4 @@ class ImportExportController {
     }
 }
 
-window.ImportExportController = ImportExportController;
+export {ImportExportController};

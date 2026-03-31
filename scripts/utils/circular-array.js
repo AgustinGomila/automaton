@@ -60,4 +60,4 @@ class CircularArray {
     }
 }
 
-window.CircularArray = CircularArray;
+export {CircularArray};

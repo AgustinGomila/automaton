@@ -1,3 +1,6 @@
+import {AppConfig} from '../utils/config.js';
+import {HexGridManager} from '../core/hex-grid-manager.js';
+
 /**
  * HexRenderer — Renderer Canvas 2D para grids hexagonales (pointy-top, odd-r).
  *
@@ -546,4 +549,4 @@ class HexRenderer {
     }
 }
 
-window.HexRenderer = HexRenderer;
+export {HexRenderer};

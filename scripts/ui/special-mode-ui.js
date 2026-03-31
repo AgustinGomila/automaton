@@ -1,3 +1,6 @@
+import {eventBus} from '../infrastructure/event-bus.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+
 /**
  * SpecialModeUI — Capa de presentación para los modos especiales del autómata.
  *
@@ -196,4 +199,4 @@ class SpecialModeUI {
     }
 }
 
-window.SpecialModeUI = SpecialModeUI;
+export {SpecialModeUI};

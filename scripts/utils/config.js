@@ -9,7 +9,7 @@
  *   const { GRID, RENDER, WORKER, STATE } = window.AppConfig;
  */
 
-window.AppConfig = Object.freeze({
+export const AppConfig = Object.freeze({
 
     // =========================================================================
     // GRID

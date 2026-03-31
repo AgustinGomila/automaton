@@ -1026,64 +1026,11 @@
         </div>
     </div>
 </div>
-<!-- Scripts base -->
-<script src="scripts/utils/circular-array.js"></script>
-<script src="scripts/utils/config.js"></script>
-<script src="scripts/infrastructure/event-bus.js"></script>
-<script src="scripts/ui/i18n.js"></script>
-
-<!-- Core matemático -->
-<script src="scripts/core/grid-manager.js"></script>
-<script src="scripts/core/neighborhood-calculator.js"></script>
-<script src="scripts/core/engines/rule-engine.js"></script>
-<script src="scripts/core/cellular-automaton.js"></script>
-
-<!-- Renderizado estándar (necesario en startup) -->
-<script src="scripts/rendering/wasm-renderer.js"></script>
-<script src="scripts/rendering/grid-renderer.js"></script>
-
-<!-- Infraestructura -->
-<script src="scripts/infrastructure/workers/grid-worker-manager.js"></script>
-
-<!-- Motores especiales: cargados bajo demanda por SpecialEngineManager._loadScript()
-     rd2d-engine, wolfram-engine, triangle-grid-manager,
-     scripts/infrastructure/workers/triangle-worker-manager.js,
-     triangle-engine, triangle-renderer, triangle-webgl2-renderer,
-     ulam-warburton-engine, langton-engine, generations-engine -->
-<script src="scripts/core/engines/special-engine-manager.js"></script>
-<script src="scripts/core/engines/generations-engine.js"></script>
-
-<!-- Configuración -->
-<script src="scripts/config/rules.js"></script>
-<script src="scripts/config/rules-loader.js"></script>
-<script src="scripts/config/patterns.js"></script>
-<script src="scripts/config/pattern-loader.js"></script>
-
-<!-- Aplicación: AnimationLoop y SimulationLimiter ANTES de automaton.js -->
-<script src="scripts/app/automaton-loop.js"></script>
-<script src="scripts/app/simulator-limiter.js"></script>
-<script src="scripts/app/state-manager.js"></script>
-<script src="scripts/app/edit-coordinator.js"></script>
-<script src="scripts/app/automaton.js"></script>
-
-<!-- UI -->
-<script src="scripts/ui/display-controller.js"></script>
-<script src="scripts/ui/rle-codec.js"></script>
-<script src="scripts/ui/mcl-codec.js"></script>
-<script src="scripts/ui/drawing-tool.js"></script>
-<script src="scripts/ui/selection-manager.js"></script>
-<script src="scripts/ui/canvas-controller.js"></script>
-<script src="scripts/ui/special-mode-ui.js"></script>
-<script src="scripts/ui/special-mode-controller.js"></script>
-<script src="scripts/ui/grid-controller.js"></script>
-<script src="scripts/ui/import-export-controller.js"></script>
-<script src="scripts/ui/rule-neighborhood-controller.js"></script>
-<script src="scripts/ui/effects-controller.js"></script>
-<script src="scripts/ui/ui-controller.js"></script>
-<script src="scripts/ui/responsive-controller.js"></script>
-<script src="scripts/ui/welcome-modal.js"></script>
-<script src="scripts/main.js"></script>
-
-<script src="scripts/grid-autofit.js"></script>
+<!-- Un único punto de entrada ESM — reemplaza todos los <script src="..."> anteriores.
+     El navegador resuelve el grafo de imports automáticamente; no hay orden manual.
+     Los workers (automaton-worker.js, triangle-worker.js, hex-worker.js) permanecen
+     como scripts clásicos porque corren en un contexto Worker separado. -->
+<script type="module" src="scripts/main.js"></script>
+<script type="module" src="scripts/grid-autofit.js"></script>
 </body>
 </html>

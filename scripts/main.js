@@ -1,4 +1,23 @@
-// scripts/main.js
+/**
+ * scripts/main.js — Punto de entrada ESM de la aplicación.
+ *
+ * Cambios respecto a la versión global:
+ *   - Todo importado explícitamente; sin dependencias en window.*.
+ *   - eventBus.once() usado en lugar del patrón manual unbind/resolve.
+ *   - window.app permanece para compatibilidad con grid-autofit y depuración.
+ *   - patternManager se pasa a través de CanvasController vía UIController.
+ */
+
+import {eventBus} from './infrastructure/event-bus.js';
+import {rulesLoader} from './config/rules-loader.js';
+import {patternLoader} from './config/pattern-loader.js';
+import {i18n} from './ui/i18n.js';
+import {CellularAutomaton} from './app/automaton.js';
+import {UIController} from './ui/ui-controller.js';
+import {PatternManager} from './config/patterns.js';
+import {ResponsiveController} from './ui/responsive-controller.js';
+import {WelcomeModal} from './ui/welcome-modal.js';
+
 class Application {
     constructor() {
         this.automaton = null;
@@ -10,9 +29,9 @@ class Application {
 
     async _init() {
         try {
-            // 1. Cargar reglas y patrones primero
-            await this._loadRules();
-            await window.patternLoader.load();
+            // 1. Cargar reglas y patrones antes de construir la UI
+            await rulesLoader.load();
+            await patternLoader.load();
 
             // 2. Inicializar DOM de i18n (con reglas disponibles)
             i18n.initDOM();
@@ -20,42 +39,31 @@ class Application {
             // 3. Crear autómata
             this.automaton = new CellularAutomaton();
 
-            // 4. Esperar que esté listo
-            await new Promise(resolve => {
-                const unbind = eventBus.on('automaton:ready', () => {
-                    unbind();
-                    resolve();
-                });
-            });
+            // 4. Esperar señal de listo usando eventBus.once()
+            await new Promise(resolve => eventBus.once('automaton:ready', resolve));
 
             // 5. Crear PatternManager
             this.patternManager = new PatternManager(this.automaton);
-            window.patternManager = this.patternManager;
 
-            // 6. Crear UI Controller
-            this.uiController = new UIController(this.automaton);
+            // 6. Crear UIController — recibe un getter de patternManager para
+            //    inyectarlo en CanvasController sin acoplamiento directo al módulo.
+            this.uiController = new UIController(this.automaton, {
+                getPatternManager: () => this.patternManager
+            });
 
-            // Compartir el estado de patrón entre UIController y PatternManager
-            // usando la API pública en lugar del campo interno _patternState.
+            // Sincronizar el estado de patrón compartido entre UIController y PatternManager
             this.patternManager.setPatternState(this.uiController.getPatternState());
 
             // 7. Cleanup global
             this._setupGlobalCleanup();
 
-            eventBus.emit('app:ready');
+            eventBus.emit('app:ready', {automaton: this.automaton, uiController: this.uiController});
 
         } catch (error) {
             console.error('❌ Error en inicialización:', error);
             eventBus.emit('app:error', error);
             this._emergencyCleanup();
         }
-    }
-
-    async _loadRules() {
-        if (!window.rulesLoader) {
-            throw new Error('RulesLoader no está disponible');
-        }
-        return window.rulesLoader.load();
     }
 
     _setupGlobalCleanup() {
@@ -71,29 +79,30 @@ class Application {
             this.uiController?.destroy();
             this.automaton?.destroy();
             this.patternManager?.destroy();
-            window.eventBus?.destroy();
+            eventBus.destroy();
         } catch (e) {
             console.warn('Error en cleanup de emergencia:', e);
         }
     }
 }
 
-// Inicialización ÚNICA
+// Inicialización única al cargar el DOM
 document.addEventListener('DOMContentLoaded', () => {
+    // Exponer window.app para compatibilidad con grid-autofit y herramientas de depuración
     window.app = new Application();
 
-    // ResponsiveController recibe automaton y uiController directamente
-    // para evitar el acoplamiento a window.app dentro del controlador.
-    eventBus.on('app:ready', () => {
-        setTimeout(() => {
+    // ResponsiveController se inicializa una vez que app:ready lleva las dependencias
+    eventBus.on('app:ready', ({automaton, uiController}) => {
+        // requestAnimationFrame garantiza que el layout esté pintado antes de medir
+        // el área disponible para el canvas (necesario para el autofit inicial).
+        requestAnimationFrame(() => {
             if (!window.responsiveController) {
                 window.responsiveController = new ResponsiveController();
             }
-            const {automaton, uiController} = window.app;
             window.responsiveController.init(automaton, uiController);
 
             // Mostrar cartel de bienvenida la primera vez
             new WelcomeModal().show();
-        }, 50);
+        });
     });
 });

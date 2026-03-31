@@ -218,4 +218,4 @@ class HexGridManager {
     }
 }
 
-window.HexGridManager = HexGridManager;
+export {HexGridManager};

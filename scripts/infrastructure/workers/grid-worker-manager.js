@@ -1,3 +1,5 @@
+import {AppConfig} from '../../utils/config.js';
+
 /**
  * GridWorkerManager — Worker stateful con doble buffer.
  *
@@ -220,4 +222,4 @@ class GridWorkerManager {
     }
 }
 
-window.GridWorkerManager = GridWorkerManager;
+export {GridWorkerManager};
