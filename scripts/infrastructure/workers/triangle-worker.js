@@ -17,8 +17,11 @@
     let width = 0;
     let height = 0;
     let ruleTable = new Uint8Array(8);
+    let twinRuleTable = new Uint8Array(8);
+    let destroboscope = false;
     let wrapEdges = true;
     let generation = 0;
+    let twinGrid = null;
     let isInitialized = false;
 
     const neighborOffsets = {
@@ -43,6 +46,15 @@
             ruleTable[i] = binary[7 - i] === '1' ? 1 : 0;
         }
 
+        destroboscope = !!data.destroboscope;
+        if (destroboscope) {
+            // Twin rule: twin[k] = rule[7-k]
+            let twinRev = 0;
+            for (let i = 0; i < 8; i++) twinRev = (twinRev << 1) | ((data.ruleNumber >> i) & 1);
+            const twinBin = (twinRev & 0xFF).toString(2).padStart(8, '0');
+            for (let i = 0; i < 8; i++) twinRuleTable[i] = twinBin[7 - i] === '1' ? 1 : 0;
+        }
+
         if (data.gridBuffer instanceof ArrayBuffer) {
             const flatGrid = new Uint8Array(data.gridBuffer);
             grid = new Array(width);
@@ -63,6 +75,10 @@
         for (let q = 0; q < width; q++) {
             newGrid[q] = new Uint8Array(height);
         }
+
+        twinGrid = destroboscope
+            ? Array.from({length: width}, () => new Uint8Array(height))
+            : null;
 
         changedCellsBuffer = new Int32Array(width * height * 2);
         isInitialized = true;
@@ -113,6 +129,8 @@
 
     function step() {
         const computeFn = wrapEdges ? computeConfigWrapped : computeConfigBounded;
+
+        // Paso 1: regla principal
         let changedCount = 0;
 
         for (let r = 0; r < height; r++) {
@@ -136,6 +154,34 @@
         newGrid = temp;
 
         generation++;
+
+        // Destroboscopia: paso adicional con twin rule, solo cuando activo
+        if (destroboscope && twinGrid) {
+            let tc = 0;
+
+            for (let r = 0; r < height; r++) {
+                for (let q = 0; q < width; q++) {
+                    const orientation = ((q + r) & 1) === 0 ? 'up' : 'down';
+                    const config = computeFn(q, r, orientation);
+                    const ns = twinRuleTable[config];
+
+                    twinGrid[q][r] = ns;
+
+                    if (ns !== grid[q][r]) {
+                        changedCellsBuffer[tc * 2] = q;
+                        changedCellsBuffer[tc * 2 + 1] = r;
+                        tc++;
+                    }
+                }
+            }
+
+            const t = grid;
+            grid = twinGrid;
+            twinGrid = temp;
+
+            generation++;
+            changedCount = tc;
+        }
 
         return {
             changedCount,

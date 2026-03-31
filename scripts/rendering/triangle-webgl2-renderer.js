@@ -501,6 +501,7 @@ class TriangleWebGL2Renderer {
                     canvas: this.canvas, container: this.container,
                     cellSize: this.cellSize, showGrid: this.showGrid,
                     showActivityEffect: this.showActivityEffect,
+                    destroboscope: this.destroboscope,
                     colorAlive: this.colorAlive, colorDead: this.colorDead,
                     colorGrid: this.colorGrid,
                     colorBorn: this.colorBorn, colorDying: this.colorDying,
@@ -620,10 +621,15 @@ class TriangleWebGL2Renderer {
             if (this._fallbackRenderer) this._fallbackRenderer.setConfig('showGrid', value);
         } else if (key === 'showActivityEffect') {
             this.showActivityEffect = value;
-            this._useFallback = value;   // activar/desactivar canvas 2D según opción
+            // Volver a WebGL2 solo si gl está disponible; si no, mantener fallback.
+            this._useFallback = value || !this.gl;
             if (this._fallbackRenderer) this._fallbackRenderer.setConfig('showActivityEffect', value);
             this._isFirstRender = true;
             this.markAllDirty();
+        } else if (key === 'destroboscope') {
+            this.destroboscope = value;
+            if (this._fallbackRenderer) this._fallbackRenderer.setConfig('destroboscope', value);
+            this._isFirstRender = true;
         }
     }
 

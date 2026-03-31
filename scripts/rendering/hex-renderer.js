@@ -145,7 +145,16 @@ class HexRenderer {
 
         const cooldown = this._activityCooldown;
         const rows = this.gridManager.height;
+        const total = this.gridManager.width * rows;
         const grid = this.gridManager.grid;
+
+        // Si más del 20% del grid cambió, el tracking de actividad es costoso
+        // (sets O(N)) y visualmente poco significativo — saltearlo este frame.
+        if (changedCells.length > total * 0.2) {
+            this._coolingCells.clear();
+            this._dyingCells.clear();
+            return;
+        }
 
         for (const {x, y} of changedCells) {
             const idx = x * rows + y;
