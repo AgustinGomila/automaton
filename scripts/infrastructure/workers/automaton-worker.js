@@ -135,22 +135,55 @@ function step(count) {
 function _stepSingle() {
     const changed = _runStep();
     const transferBuf = _changedBuf.buffer.slice(0, changed * 4);
+    const valuesBuf = _buildChangedValues(changed);
     const pop = _countPopulation();
 
     self.postMessage(
-        {type: 'result', changedCells: transferBuf, changedCount: changed, population: pop, generation},
-        [transferBuf]
+        {
+            type: 'result',
+            changedCells: transferBuf,
+            changedValues: valuesBuf.buffer,
+            changedCount: changed,
+            population: pop,
+            generation
+        },
+        [transferBuf, valuesBuf.buffer]
     );
 }
 
 /** Emite resultado tras N pasos. changedCount índices ya escritos en _changedBuf. */
 function _emitResult(changedCount) {
     const transferBuf = _changedBuf.buffer.slice(0, changedCount * 4);
+    const valuesBuf = _buildChangedValues(changedCount);
     const pop = _countPopulation();
     self.postMessage(
-        {type: 'result', changedCells: transferBuf, changedCount, population: pop, generation},
-        [transferBuf]
+        {
+            type: 'result',
+            changedCells: transferBuf,
+            changedValues: valuesBuf.buffer,
+            changedCount,
+            population: pop,
+            generation
+        },
+        [transferBuf, valuesBuf.buffer]
     );
+}
+
+/**
+ * Construye un Uint8Array con el nuevo estado (0 o 1) de cada celda en _changedBuf.
+ * Leído desde frontGrid tras el swap, refleja el estado definitivo del worker.
+ * El receptor aplica grid[x][y] = values[i] en lugar de un toggle XOR, lo que
+ * hace _applyResult inmune a ediciones concurrentes del hilo principal.
+ * @param {number} count
+ * @returns {Uint8Array}
+ */
+function _buildChangedValues(count) {
+    const values = new Uint8Array(count);
+    for (let i = 0; i < count; i++) {
+        const idx = _changedBuf[i];
+        values[i] = frontGrid[(idx / height) | 0][idx % height];
+    }
+    return values;
 }
 
 /**

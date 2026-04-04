@@ -193,21 +193,25 @@ class GridWorkerManager {
     }
 
     /**
-     * Aplica el resultado del paso al grid del core usando los índices
-     * de celdas cambiadas — sin recibir el grid completo.
-     * Índice plano: x * height + y
+     * Aplica el resultado del paso al grid del core.
+     * Usa changedValues (nuevo estado real de cada celda) en lugar de un toggle XOR,
+     * lo que hace la operación idempotente y segura ante ediciones concurrentes
+     * del hilo principal: si el usuario modificó una celda durante el paso del worker,
+     * el assign directo no introduce celdas fantasma ni borra dibujos del usuario
+     * (el worker "gana" sólo en celdas que él calculó; celdas ajenas no se tocan).
      */
     _applyResult(data) {
         const h = this._getGridHeight();
         const grid = this._getCore().gridManager.grid;
         const changed = new Uint32Array(data.changedCells);
+        const values = new Uint8Array(data.changedValues);
         const count = data.changedCount;
 
         for (let i = 0; i < count; i++) {
             const idx = changed[i];
             const x = (idx / h) | 0;
             const y = idx % h;
-            grid[x][y] = grid[x][y] ? 0 : 1;
+            grid[x][y] = values[i];
         }
     }
 
