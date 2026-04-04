@@ -31,6 +31,7 @@ class GridWorkerManager {
         this._handlerId = null;
         this.isProcessing = false;
         this._isReady = false;
+        this._hadShiftDuringStep = false;
     }
 
     // ── Getters ────────────────────────────────────────────────────────────────
@@ -65,12 +66,22 @@ class GridWorkerManager {
 
                 if (type === 'result') {
                     this.isProcessing = false;
-                    this._applyResult(e.data);
+                    const hadShift = this._hadShiftDuringStep;
+                    this._hadShiftDuringStep = false;
+
+                    if (!hadShift) {
+                        this._applyResult(e.data);
+                    }
+                    // Si hubo shift, el resultado del worker tiene coordenadas pre-shift
+                    // y aplicarlas sobre el grid ya desplazado corrompería el estado.
+                    // El grid del main thread ya es correcto (G' del shift).
+                    // Pasamos changedCount=0 para forzar markAllDirty y re-render completo.
+                    // El worker ya recibió {type:'sync', G'} encolado por shiftGrid.
                     this._onResult({
                         generation: e.data.generation,
                         population: e.data.population,
-                        changedCells: new Uint32Array(e.data.changedCells),
-                        changedCount: e.data.changedCount,
+                        changedCells: hadShift ? new Uint32Array(0) : new Uint32Array(e.data.changedCells),
+                        changedCount: hadShift ? 0 : e.data.changedCount,
                         width: this._getGridWidth(),
                         height: this._getGridHeight()
                     });
@@ -133,6 +144,16 @@ class GridWorkerManager {
     updateConfig(config) {
         if (!this._worker || !this._isReady) return;
         this._worker.postMessage({type: 'config', data: config});
+    }
+
+    /**
+     * Indica que el main thread hizo un shift mientras el worker procesaba un paso.
+     * El resultado del worker tendrá coordenadas pre-shift y no debe aplicarse.
+     */
+    markShiftDuringStep() {
+        if (this.isProcessing) {
+            this._hadShiftDuringStep = true;
+        }
     }
 
     cleanup() {
@@ -222,6 +243,7 @@ class GridWorkerManager {
             this._worker = null;
             this._isReady = false;
             this.isProcessing = false;
+            this._hadShiftDuringStep = false;
         }
     }
 }

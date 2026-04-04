@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Shift Race Diagnostic — automaton-worker</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 2rem;
+        }
+
+        h1 {
+            color: #38bdf8;
+            margin-bottom: 0.25rem;
+        }
+
+        p.subtitle {
+            color: #94a3b8;
+            margin-top: 0;
+            margin-bottom: 2rem;
+        }
+
+        .case {
+            padding: 0.75rem 1rem;
+            margin: 0.5rem 0;
+            border-radius: 6px;
+        }
+
+        .pass {
+            background: #052e16;
+            border-left: 4px solid #22c55e;
+        }
+
+        .fail {
+            background: #2d0a0a;
+            border-left: 4px solid #ef4444;
+        }
+
+        .info {
+            background: #1e293b;
+            border-left: 4px solid #94a3b8;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        .label {
+            font-weight: bold;
+        }
+
+        .pass .label {
+            color: #4ade80;
+        }
+
+        .fail .label {
+            color: #f87171;
+        }
+
+        .detail {
+            margin-top: 0.35rem;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
+        .mono {
+            color: #fbbf24;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Shift Race Condition Diagnostic</h1>
+<p class="subtitle">
+    Verifica si <code>_applyResult</code> corrompe el grid cuando el main thread hace shift<br>
+    mientras el worker está procesando un paso.
+</p>
+
+<div id="results"></div>
+
+<script>
+    const resultsEl = document.getElementById('results');
+
+    function addCase(title, passed, detail) {
+        const div = document.createElement('div');
+        div.className = 'case ' + (passed ? 'pass' : 'fail');
+        div.innerHTML = `<div class="label">${passed ? '✓ PASS' : '✗ FAIL'} — ${title}</div><div class="detail">${detail}</div>`;
+        resultsEl.appendChild(div);
+    }
+
+    function addInfo(text) {
+        const div = document.createElement('div');
+        div.className = 'case info';
+        div.textContent = text;
+        resultsEl.appendChild(div);
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+    function makeGrid(w, h) {
+        return Array.from({length: w}, () => new Uint8Array(h));
+    }
+
+    function serializeGrid(grid, w, h) {
+        const flat = new Uint8Array(w * h);
+        for (let x = 0; x < w; x++) {
+            const base = x * h;
+            for (let y = 0; y < h; y++) flat[base + y] = grid[x][y];
+        }
+        return flat;
+    }
+
+    // Shift toroidal — idéntico a GridManager.shift
+    function shiftGrid(grid, w, h, dx, dy) {
+        const dst = Array.from({length: w}, () => new Uint8Array(h));
+        for (let x = 0; x < w; x++) {
+            const srcX = ((x - dx) % w + w) % w;
+            for (let y = 0; y < h; y++) {
+                dst[x][y] = grid[srcX][((y - dy) % h + h) % h];
+            }
+        }
+        return dst;
+    }
+
+    // Avanza una generación en JS puro (Conway, bordes fijos) — referencia ground-truth
+    function stepJS(grid, w, h) {
+        const next = makeGrid(w, h);
+        for (let x = 0; x < w; x++) {
+            for (let y = 0; y < h; y++) {
+                let n = 0;
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < w && ny >= 0 && ny < h) n += grid[nx][ny];
+                    }
+                }
+                const cur = grid[x][y];
+                next[x][y] = cur ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
+            }
+        }
+        return next;
+    }
+
+    function gridEqual(a, b, w, h) {
+        for (let x = 0; x < w; x++)
+            for (let y = 0; y < h; y++)
+                if (a[x][y] !== b[x][y]) return false;
+        return true;
+    }
+
+    function countDiff(a, b, w, h) {
+        let d = 0;
+        for (let x = 0; x < w; x++)
+            for (let y = 0; y < h; y++)
+                if (a[x][y] !== b[x][y]) d++;
+        return d;
+    }
+
+    // ─── Worker helpers ───────────────────────────────────────────────────────────
+
+    const MOORE_1 = [
+        {dx: -1, dy: -1}, {dx: 0, dy: -1}, {dx: 1, dy: -1},
+        {dx: -1, dy: 0}, {dx: 1, dy: 0},
+        {dx: -1, dy: 1}, {dx: 0, dy: 1}, {dx: 1, dy: 1}
+    ];
+    const CONWAY = {birth: [3], survival: [2, 3]};
+
+    function initWorker(worker, grid, w, h) {
+        return new Promise(resolve => {
+            worker.addEventListener('message', function f(e) {
+                if (e.data.type === 'ready') {
+                    worker.removeEventListener('message', f);
+                    resolve();
+                }
+            });
+            worker.postMessage({
+                type: 'init',
+                data: {
+                    gridFlat: serializeGrid(grid, w, h),
+                    width: w, height: h,
+                    rule: CONWAY,
+                    wrapEdges: false,
+                    neighborOffsets: MOORE_1,
+                    generation: 0
+                }
+            });
+        });
+    }
+
+    function stepWorker(worker) {
+        return new Promise(resolve => {
+            worker.addEventListener('message', function f(e) {
+                if (e.data.type === 'result') {
+                    worker.removeEventListener('message', f);
+                    resolve(e.data);
+                }
+            });
+            worker.postMessage({type: 'step', data: {count: 1}});
+        });
+    }
+
+    // _applyResult con fix (assign directo, changedValues)
+    function applyResult(grid, data, h) {
+        const changed = new Uint32Array(data.changedCells);
+        const values = new Uint8Array(data.changedValues);
+        for (let i = 0; i < data.changedCount; i++) {
+            const idx = changed[i];
+            grid[(idx / h) | 0][idx % h] = values[i];
+        }
+    }
+
+    // Versión con fix de shift: si hubo shift, salta _applyResult
+    function applyResultWithShiftFix(grid, data, h, hadShift) {
+        if (!hadShift) applyResult(grid, data, h);
+        // Si hadShift: grid ya es correcto (G' del shift), no tocamos nada
+    }
+
+    // ─── TEST 1: Baseline — paso + shift DESPUÉS del resultado ────────────────────
+    //
+    //   Orden correcto: step → recibir resultado → aplicar → shift → sync
+    //   El grid debe ser: shift(step(G))
+    //   Si este test falla, el problema está en otra parte.
+
+    async function testBaseline() {
+        const W = 30, H = 30;
+        const grid = makeGrid(W, H);
+        // Glider en (5,5)
+        grid[5][4] = 1;
+        grid[6][5] = 1;
+        grid[4][6] = 1;
+        grid[5][6] = 1;
+        grid[6][6] = 1;
+
+        const DX = 3, DY = 5;
+        // Ground truth: step luego shift
+        const stepped = stepJS(grid, W, H);
+        const expected = shiftGrid(stepped, W, H, DX, DY);
+
+        const worker = new Worker('scripts/infrastructure/workers/automaton-worker.js');
+        await initWorker(worker, grid, W, H);
+
+        // Orden correcto: esperamos el resultado ANTES de hacer shift
+        const data = await stepWorker(worker);
+        applyResultWithShiftFix(grid, data, H, false);  // sin shift → aplica normalmente
+        const shifted = shiftGrid(grid, W, H, DX, DY);
+
+        const passed = gridEqual(shifted, expected, W, H);
+        worker.terminate();
+
+        addCase(
+            'Baseline: step → apply → shift (orden correcto)',
+            passed,
+            passed
+                ? 'Grid resultante coincide con shift(step(G))'
+                : `Diferencias: <span class="mono">${countDiff(shifted, expected, W, H)}</span> celdas`
+        );
+        return passed;
+    }
+
+    // ─── TEST 2: Race — shift concurrente al paso del worker ─────────────────────
+    //
+    //   Reproduce el escenario del bug:
+    //     1. postMessage(step)  → worker empieza a computar sobre G
+    //     2. shiftGrid()        → main thread grid pasa a G'  (síncrono, antes del resultado)
+    //     3. syncGrid()         → envía G' al worker  (queda en cola)
+    //     4. resultado llega    → applyResult escribe valores de G en coordenadas de G'
+    //
+    //   Expected:  grid resultante = step(G') = step(shift(G))   [el shift se hizo primero]
+    //   Actual con bug: applyResult mezcla coordenadas de G sobre G', corrompiendo ambos
+    //
+    //   Verificamos que el grid final NO coincide con ninguna de las dos opciones
+    //   razonables (step(G') o shift(step(G))), evidenciando la corrupción.
+
+    async function testShiftDuringStep() {
+        const W = 30, H = 30;
+        const grid = makeGrid(W, H);
+        grid[5][4] = 1;
+        grid[6][5] = 1;
+        grid[4][6] = 1;
+        grid[5][6] = 1;
+        grid[6][6] = 1;
+
+        const DX = 3, DY = 5;
+
+        // Con el fix, el step en vuelo se descarta → grid queda en G' (shift aplicado, step omitido).
+        // El resultado correcto es exactamente G' = shiftGrid(G).
+        const expectedGPrime = shiftGrid(grid, W, H, DX, DY);
+
+        const worker = new Worker('scripts/infrastructure/workers/automaton-worker.js');
+        await initWorker(worker, grid, W, H);
+
+        const resultPromise = stepWorker(worker);
+
+        const gridShifted = shiftGrid(grid, W, H, DX, DY);
+        for (let x = 0; x < W; x++) grid[x].set(gridShifted[x]);
+        worker.postMessage({type: 'sync', data: {gridFlat: serializeGrid(grid, W, H)}});
+
+        const data = await resultPromise;
+
+        // FIX: skip applyResult porque hubo shift — grid ya es G' correcto
+        applyResultWithShiftFix(grid, data, H, true);
+
+        const matchesGPrime = gridEqual(grid, expectedGPrime, W, H);
+        const diff = countDiff(grid, expectedGPrime, W, H);
+
+        // El fix es correcto si el grid es exactamente G' (sin corrupción del step en vuelo)
+        const passed = matchesGPrime;
+
+        addCase(
+            'Race: shift concurrente al paso del worker',
+            passed,
+            `Grid resultante = G' (shift aplicado, step descartado): <span class="mono">${matchesGPrime}</span>` +
+            (!passed ? ` (diff con G': <span class="mono">${diff}</span>) → <strong>El step en vuelo corrompió G'</strong>` : '')
+        );
+
+        worker.terminate();
+        return passed;
+    }
+
+    // ─── TEST 3: Múltiples shifts rápidos ────────────────────────────────────────
+    //
+    //   Simula el arrastre rápido con mousemove: varios shifts mientras el worker
+    //   procesa un único paso. Cada sync encola un grid diferente en el worker.
+    //   La corrupción se acumula.
+
+    async function testMultipleShiftsDuringStep() {
+        const W = 30, H = 30;
+        const grid = makeGrid(W, H);
+        grid[5][4] = 1;
+        grid[6][5] = 1;
+        grid[4][6] = 1;
+        grid[5][6] = 1;
+        grid[6][6] = 1;
+
+        const SHIFTS = [{dx: 1, dy: 0}, {dx: 1, dy: 1}, {dx: 0, dy: 1}];
+        const totalDX = SHIFTS.reduce((a, s) => a + s.dx, 0);
+        const totalDY = SHIFTS.reduce((a, s) => a + s.dy, 0);
+
+        // Con el fix, el grid debe quedar en G' = shift total aplicado, step descartado
+        const expectedGPrime = shiftGrid(grid, W, H, totalDX, totalDY);
+
+        const worker = new Worker('scripts/infrastructure/workers/automaton-worker.js');
+        await initWorker(worker, grid, W, H);
+
+        const resultPromise = stepWorker(worker);
+
+        for (const {dx, dy} of SHIFTS) {
+            const shifted = shiftGrid(grid, W, H, dx, dy);
+            for (let x = 0; x < W; x++) grid[x].set(shifted[x]);
+            worker.postMessage({type: 'sync', data: {gridFlat: serializeGrid(grid, W, H)}});
+        }
+
+        const data = await resultPromise;
+        applyResultWithShiftFix(grid, data, H, true);  // FIX: skip applyResult
+
+        const matchesGPrime = gridEqual(grid, expectedGPrime, W, H);
+        const diff = countDiff(grid, expectedGPrime, W, H);
+
+        addCase(
+            'Race: múltiples shifts (simula mousemove rápido)',
+            matchesGPrime,
+            `Shifts: <span class="mono">${JSON.stringify(SHIFTS)}</span> | ` +
+            `Grid resultante = G' (shift total acumulado, step descartado): <span class="mono">${matchesGPrime}</span>` +
+            (!matchesGPrime ? ` (diff con G': <span class="mono">${diff}</span>) → <strong>Corrupción acumulada por shifts concurrentes</strong>` : '')
+        );
+
+        worker.terminate();
+        return matchesGPrime;
+    }
+
+    // ─── Runner ───────────────────────────────────────────────────────────────────
+
+    async function run() {
+        addInfo('FIX: cuando hubo shift durante el paso, _applyResult se omite. El grid queda en G\' (shift aplicado). El step en vuelo se pierde — pérdida de 1 generación aceptable vs. corrupción de celdas.');
+        addInfo('Resultado esperado con fix: grid = G\' (= shiftGrid(G)). No es A ni B — es el grid desplazado sin evolucionar, correcto y sin fantasmas.');
+
+        const results = [];
+        results.push(await testBaseline());
+        results.push(await testShiftDuringStep());
+        results.push(await testMultipleShiftsDuringStep());
+
+        const failed = results.filter(r => !r).length;
+        const passed = results.filter(r => r).length;
+        addInfo(`─── Resultado: ${passed} pasaron, ${failed} fallaron ───`);
+    }
+
+    run().catch(err => {
+        const div = document.createElement('div');
+        div.className = 'case fail';
+        div.innerHTML = `<div class="label">ERROR</div><div class="detail">${err.message}<br>Servir desde HTTP server en el directorio raíz del proyecto.</div>`;
+        resultsEl.appendChild(div);
+    });
+</script>
+</body>
+</html>

@@ -435,6 +435,7 @@ class EditCoordinator {
         if (specialMode === SpecialEngineManager.MODES.WIREWORLD && wireworldEngine?.isActive) wireworldEngine.shift(dx, dy);
 
         this._a.renderer.resetActivity();
+        this._a._workerManager.markShiftDuringStep();
         this._a._syncWorkerGrid();
         this._a.render();
     }
