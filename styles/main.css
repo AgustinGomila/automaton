@@ -1072,25 +1072,28 @@ canvas {
 }
 
 .patterns-scroll-wrapper {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     max-width: 100%;
 }
 
 .patterns-grid-container {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;           /* siempre wrap — sin scroll horizontal */
+    align-content: flex-start;
     gap: 6px;
     padding: 4px 2px 2px;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    /* 1 fila normal por defecto: botón 60px + padding */
     max-height: 74px;
     scrollbar-width: thin;
     scrollbar-color: var(--primary) transparent;
 }
 
 .patterns-grid-container::-webkit-scrollbar {
-    height: 6px;
+    width: 4px;
+    height: 4px;
 }
 
 .patterns-grid-container::-webkit-scrollbar-track {
@@ -1103,15 +1106,19 @@ canvas {
     border-radius: 3px;
 }
 
+/* 2 filas: el doble de alto */
 .patterns-grid-container.two-rows {
-    max-height: 160px;
-    flex-wrap: wrap;
-    overflow-y: auto;
-    overflow-x: hidden;
+    max-height: 154px;
 }
 
+/* Vista compacta: botón 50px + padding → 1 fila compacta */
 .patterns-grid-container.compact-view {
-    max-height: 66px;
+    max-height: 64px;
+}
+
+/* 2 filas + compacta */
+.patterns-grid-container.two-rows.compact-view {
+    max-height: 132px;
 }
 
 /* ============================================================
@@ -2431,19 +2438,20 @@ canvas {
 
     /* Contenedor de scroll de patrones */
     .patterns-grid-container {
-        max-height: 74px;
+        max-height: 66px;   /* botón mobile 52px + gap + padding */
         gap: 5px;
     }
 
     .patterns-grid-container.two-rows {
-        max-height: 152px;
-        flex-wrap: wrap;
-        overflow-y: auto;
-        overflow-x: hidden;
+        max-height: 136px;
     }
 
     .patterns-grid-container.compact-view {
-        max-height: 64px;
+        max-height: 56px;   /* botón compact mobile ~44px + gap */
+    }
+
+    .patterns-grid-container.two-rows.compact-view {
+        max-height: 116px;
     }
 
     /* Tamaño de botones de patrón en móvil */
@@ -2572,11 +2580,19 @@ canvas {
     }
 
     .patterns-grid-container {
-        max-height: 62px;
+        max-height: 56px;
     }
 
     .patterns-grid-container.two-rows {
-        max-height: 130px;
+        max-height: 116px;
+    }
+
+    .patterns-grid-container.compact-view {
+        max-height: 48px;
+    }
+
+    .patterns-grid-container.two-rows.compact-view {
+        max-height: 100px;
     }
 
     .pattern-btn-horizontal {
@@ -2607,11 +2623,19 @@ canvas {
     }
 
     .patterns-grid-container {
-        max-height: 56px;
+        max-height: 52px;
     }
 
     .patterns-grid-container.two-rows {
-        max-height: 112px;
+        max-height: 108px;
+    }
+
+    .patterns-grid-container.compact-view {
+        max-height: 44px;
+    }
+
+    .patterns-grid-container.two-rows.compact-view {
+        max-height: 92px;
     }
 }
 

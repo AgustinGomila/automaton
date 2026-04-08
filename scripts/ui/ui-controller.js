@@ -40,7 +40,7 @@ class UIController {
         this._getPatternManager = options.getPatternManager || (() => null);
 
         this.showInfluenceArea = true;
-        this.patternsTwoRows = true;
+        this.patternsTwoRows = false;
         this.patternsCompactView = true;
         this.patternsSortByCount = false;
         this.patternsShowAll = false;
@@ -802,8 +802,6 @@ class UIController {
                     ? 'fas fa-grip-lines-vertical'
                     : 'fas fa-grip-lines';
             });
-            container.classList.add('two-rows');
-            toggleRowsBtn.querySelector('i')?.classList.add('fa-grip-lines-vertical');
         }
 
         if (toggleCompactBtn && container) {
@@ -816,8 +814,6 @@ class UIController {
                 const icon = toggleCompactBtn.querySelector('i');
                 if (icon) icon.className = this.patternsCompactView ? 'fas fa-expand-alt' : 'fas fa-compress';
             });
-            container.classList.add('compact-view');
-            toggleCompactBtn.querySelector('i')?.classList.add('fa-expand-alt');
         }
 
         const pm = this._getPatternManager();
@@ -832,6 +828,29 @@ class UIController {
             });
             pm.renderPatterns(false);
             toggleSortBtn.querySelector('i')?.classList.add('fa-sort-alpha-down');
+        }
+
+        // Aplicar estado inicial DESPUÉS de renderPatterns para que los botones existan.
+        // PatternManager llama renderPatterns() en su constructor (antes de que UIController
+        // corra), por lo que cualquier clase aplicada antes quedaría sin efecto sobre los
+        // botones recién creados por ese primer render.
+        if (container) {
+            // 1 fila por defecto
+            this.patternsTwoRows = false;
+            container.classList.remove('two-rows');
+            if (toggleRowsBtn) {
+                const icon = toggleRowsBtn.querySelector('i');
+                if (icon) icon.className = 'fas fa-grip-lines';
+            }
+
+            // Vista compacta por defecto
+            this.patternsCompactView = true;
+            container.classList.add('compact-view');
+            document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => btn.classList.add('compact'));
+            if (toggleCompactBtn) {
+                const icon = toggleCompactBtn.querySelector('i');
+                if (icon) icon.className = 'fas fa-expand-alt';
+            }
         }
 
         const showAllBtn = document.getElementById('patternsShowAll');
