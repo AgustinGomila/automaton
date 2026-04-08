@@ -303,18 +303,22 @@ class UIController {
         this._ruleController.bindEvents();
         this._effectsController.bindEvents();
 
-        const wrapToggle = document.getElementById('wrapToggle');
-        if (wrapToggle) {
-            this._addEventListener(wrapToggle, 'change', () => {
-                const wrap = wrapToggle.checked;
-                this.automaton.wrapEdges = wrap;
+        const wrapModeSelect = document.getElementById('wrapModeSelect');
+        if (wrapModeSelect) {
+            // Sincronizar select con el estado inicial del autómata
+            wrapModeSelect.value = this.automaton.wrapMode;
+
+            this._addEventListener(wrapModeSelect, 'change', () => {
+                const mode = wrapModeSelect.value;
+                this.automaton.wrapMode = mode;
                 this.automaton._markAllDirty();
                 this.automaton.render();
                 this._displayController?.updateNeighborhoodInfo();
                 if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine) {
-                    this.automaton.triangleEngine.wrapEdges = wrap;
+                    this.automaton.triangleEngine.wrapEdges = (mode === 'both');
                 }
-                eventBus.emit('automaton:wrapChanged', {wrap});
+                eventBus.emit('automaton:wrapChanged', {wrapMode: mode, wrap: mode === 'both'});
+                wrapModeSelect.blur();
             });
         }
 

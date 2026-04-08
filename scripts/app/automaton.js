@@ -213,6 +213,24 @@ class CellularAutomaton {
 
     set wrapEdges(value) {
         this.core?.neighborhood?.configure({wrapEdges: value});
+        this._workerManager?.updateConfig({
+            wrapX: this.core.neighborhood.wrapX,
+            wrapY: this.core.neighborhood.wrapY
+        });
+    }
+
+    get wrapMode() {
+        return this.core?.neighborhood?.wrapMode ?? 'both';
+    }
+
+    set wrapMode(value) {
+        this.core?.neighborhood?.configure({wrapMode: value});
+        // Propagar al worker en caliente — no requiere reinit completo porque
+        // solo cambia el comportamiento de borde, no el grid ni la regla.
+        this._workerManager.updateConfig({
+            wrapX: this.core.neighborhood.wrapX,
+            wrapY: this.core.neighborhood.wrapY
+        });
     }
 
     get undoCount() {

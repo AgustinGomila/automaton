@@ -32,7 +32,10 @@ class CellularAutomatonCore {
         this.neighborhood = new NeighborhoodCalculator({
             type: options.neighborhoodType || 'moore',
             radius: options.neighborhoodRadius || 1,
-            wrapEdges: options.wrapEdges !== false,
+            // Acepta wrapMode (nuevo) o wrapEdges boolean (backward-compat)
+            ...(options.wrapMode !== undefined
+                ? {wrapMode: options.wrapMode}
+                : {wrapEdges: options.wrapEdges !== false}),
             gridWidth: this.width,
             gridHeight: this.height
         });
@@ -72,7 +75,9 @@ class CellularAutomatonCore {
 
         const result = this.neighborhood.isFastPath
             ? this.ruleEngine.nextGenerationMoore(
-                this.gridManager.grid, outGrid, this.neighborhood.wrapEdges, width, height)
+                this.gridManager.grid, outGrid,
+                this.neighborhood.wrapX, this.neighborhood.wrapY,
+                width, height)
             : this.ruleEngine.nextGeneration(
                 this.gridManager.grid,
                 (x, y) => this.neighborhood.countNeighbors(x, y,

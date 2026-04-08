@@ -174,13 +174,16 @@
                             </div>
 
                             <div class="config-group">
-                                <div class="toggle-switch">
-                                    <input checked class="toggle-checkbox" id="wrapToggle" type="checkbox">
-                                    <label class="toggle-label" for="wrapToggle">
-                                        <i class="fas fa-infinity"></i> <span data-i18n="config.wrap">Modo Toroidal (wrap)</span>
-                                        <span class="toggle-switch-slider"></span>
-                                    </label>
-                                </div>
+                                <label class="config-label" for="wrapModeSelect">
+                                    <i class="fas fa-infinity"></i>
+                                    <span data-i18n="config.wrap">Bordes</span>
+                                </label>
+                                <select class="config-select" id="wrapModeSelect">
+                                    <option value="both"       data-i18n="config.wrap.both">Toroidal ∞</option>
+                                    <option value="horizontal" data-i18n="config.wrap.horizontal">Cilíndrico ↔</option>
+                                    <option value="vertical"   data-i18n="config.wrap.vertical">Cilíndrico ↕</option>
+                                    <option value="none"       data-i18n="config.wrap.none">Plano □</option>
+                                </select>
                             </div>
                         </div>
                     </div>
