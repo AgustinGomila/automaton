@@ -632,6 +632,9 @@ class SpecialEngineManager {
             },
             get wrapEdges() {
                 return automaton.wrapEdges;
+            },
+            get wrapMode() {
+                return automaton.wrapMode;
             }
         };
     }

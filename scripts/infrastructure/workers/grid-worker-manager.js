@@ -134,12 +134,12 @@ class GridWorkerManager {
 
     /**
      * Actualiza parámetros de simulación en el worker sin reinicializarlo.
-     * Solo se envía si el worker existe, está listo y no está procesando un
-     * paso — el worker es idle entre mensajes, por lo que el cambio se aplica
-     * antes del siguiente 'step'.
+     * Acepta wrapX/wrapY (nuevo) o wrapEdges boolean (backward-compat).
      *
-     * @param {Object} config
-     * @param {boolean} [config.wrapEdges] — activa/desactiva modo toroidal
+     * @param {Object}  config
+     * @param {boolean} [config.wrapX]
+     * @param {boolean} [config.wrapY]
+     * @param {boolean} [config.wrapEdges]  — legacy
      */
     updateConfig(config) {
         if (!this._worker || !this._isReady) return;
@@ -187,7 +187,8 @@ class GridWorkerManager {
                     birth: core.ruleEngine.birth,
                     survival: core.ruleEngine.survival
                 },
-                wrapEdges: core.neighborhood.wrapEdges,
+                wrapX: core.neighborhood.wrapX,
+                wrapY: core.neighborhood.wrapY,
                 neighborOffsets: core.neighborhood._offsets,
                 generation: 0
             }

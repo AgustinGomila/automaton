@@ -2,10 +2,10 @@
  * automaton-worker.js — Worker stateful con doble buffer.
  *
  * Protocolo de mensajes:
- *   → { type: 'init',   data: { gridFlat, width, height, rule, wrapEdges, neighborOffsets } }
+ *   → { type: 'init',   data: { gridFlat, width, height, rule, wrapX, wrapY, neighborOffsets } }
  *   → { type: 'step',   data: { count } }
  *   → { type: 'sync',   data: { gridFlat } }
- *   → { type: 'config', data: { wrapEdges? } }  — actualización en caliente sin reinit
+ *   → { type: 'config', data: { wrapX?, wrapY? } }  — actualización en caliente sin reinit
  *   ← { type: 'ready' }
  *   ← { type: 'result', changedCells: ArrayBuffer, changedCount, population, generation }
  *   ← { type: 'error',  message }
@@ -20,7 +20,8 @@
 
 let width = 0;
 let height = 0;
-let wrapEdges = true;
+let wrapX = true;
+let wrapY = true;
 let generation = 0;
 
 /** Doble buffer — cada columna es una Uint8Array de longitud `height`. */
@@ -39,7 +40,13 @@ let isMoore1 = false;
 function init(data) {
     width = data.width;
     height = data.height;
-    wrapEdges = data.wrapEdges;
+    // Backward-compat: acepta wrapEdges boolean o wrapX/wrapY separados
+    if (data.wrapX !== undefined) {
+        wrapX = data.wrapX;
+        wrapY = data.wrapY;
+    } else {
+        wrapX = wrapY = data.wrapEdges !== false;
+    }
     generation = data.generation ?? 0;
 
     birthTable.fill(0);
@@ -192,11 +199,11 @@ function _buildChangedValues(count) {
  * @returns {number} celdas cambiadas en este paso
  */
 function _runStep() {
-    const changed = isMoore1 && wrapEdges
-        ? stepMoore1Wrap()
-        : isMoore1
-            ? stepMoore1Bounded()
-            : stepGeneric();
+    const changed = isMoore1
+        ? (wrapX && wrapY ? stepMoore1WrapBoth()
+            : !wrapX && !wrapY ? stepMoore1WrapNone()
+                : stepMoore1WrapPartial())
+        : stepGeneric();
 
     const tmp = frontGrid;
     frontGrid = backGrid;
@@ -219,9 +226,9 @@ function _countPopulation() {
 }
 
 
-// ─── Fastpath Moore radio-1, wrap toroidal ────────────────────────────────────
+// ─── Fastpath Moore radio-1, wrap en ambos ejes ───────────────────────────────
 
-function stepMoore1Wrap() {
+function stepMoore1WrapBoth() {
     let changedCount = 0;
 
     for (let x = 0; x < width; x++) {
@@ -243,18 +250,15 @@ function stepMoore1Wrap() {
             const cur = col[y];
             const next = cur ? survivalTable[n] : birthTable[n];
             out[y] = next;
-
-            if (next !== cur) {
-                _changedBuf[changedCount++] = x * height + y;
-            }
+            if (next !== cur) _changedBuf[changedCount++] = x * height + y;
         }
     }
     return changedCount;
 }
 
-// ─── Fastpath Moore radio-1, bordes fijos ────────────────────────────────────
+// ─── Fastpath Moore radio-1, sin wrap ────────────────────────────────────────
 
-function stepMoore1Bounded() {
+function stepMoore1WrapNone() {
     let changedCount = 0;
 
     for (let x = 0; x < width; x++) {
@@ -280,6 +284,47 @@ function stepMoore1Bounded() {
     return changedCount;
 }
 
+// ─── Fastpath Moore radio-1, wrap parcial (H o V) ────────────────────────────
+
+function stepMoore1WrapPartial() {
+    let changedCount = 0;
+
+    for (let x = 0; x < width; x++) {
+        const xm = wrapX ? (x === 0 ? width - 1 : x - 1) : x - 1;
+        const xp = wrapX ? (x === width - 1 ? 0 : x + 1) : x + 1;
+        const colM = (xm >= 0) ? frontGrid[xm] : null;
+        const col = frontGrid[x];
+        const colP = (xp < width) ? frontGrid[xp] : null;
+        const out = backGrid[x];
+
+        for (let y = 0; y < height; y++) {
+            const ym = wrapY ? (y === 0 ? height - 1 : y - 1) : y - 1;
+            const yp = wrapY ? (y === height - 1 ? 0 : y + 1) : y + 1;
+            const ymOk = ym >= 0, ypOk = yp < height;
+
+            let n = 0;
+            if (colM) {
+                if (ymOk) n += colM[ym];
+                n += colM[y];
+                if (ypOk) n += colM[yp];
+            }
+            if (ymOk) n += col[ym];
+            if (ypOk) n += col[yp];
+            if (colP) {
+                if (ymOk) n += colP[ym];
+                n += colP[y];
+                if (ypOk) n += colP[yp];
+            }
+
+            const cur = col[y];
+            const next = cur ? survivalTable[n] : birthTable[n];
+            out[y] = next;
+            if (next !== cur) _changedBuf[changedCount++] = x * height + y;
+        }
+    }
+    return changedCount;
+}
+
 // ─── Genérico para vecindades no-Moore-1 ─────────────────────────────────────
 
 function stepGeneric() {
@@ -293,13 +338,11 @@ function stepGeneric() {
             for (let i = 0; i < offsets.length; i++) {
                 let nx = x + offsets[i].dx;
                 let ny = y + offsets[i].dy;
-                if (wrapEdges) {
-                    nx = ((nx % width) + width) % width;
-                    ny = ((ny % height) + height) % height;
-                    n += frontGrid[nx][ny];
-                } else if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                    n += frontGrid[nx][ny];
-                }
+                if (wrapX) nx = ((nx % width) + width) % width;
+                else if (nx < 0 || nx >= width) continue;
+                if (wrapY) ny = ((ny % height) + height) % height;
+                else if (ny < 0 || ny >= height) continue;
+                n += frontGrid[nx][ny];
             }
             const cur = frontGrid[x][y];
             const next = cur ? survivalTable[n] : birthTable[n];
@@ -324,8 +367,12 @@ function stepGeneric() {
  * @param {boolean} [data.wrapEdges]
  */
 function configure(data) {
-    if (data.wrapEdges !== undefined) {
-        wrapEdges = data.wrapEdges;
+    // Acepta wrapX/wrapY explícitos o wrapEdges boolean (backward-compat)
+    if (data.wrapX !== undefined) {
+        wrapX = data.wrapX;
+        wrapY = data.wrapY !== undefined ? data.wrapY : data.wrapX;
+    } else if (data.wrapEdges !== undefined) {
+        wrapX = wrapY = data.wrapEdges;
     }
 }
 

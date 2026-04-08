@@ -27,7 +27,7 @@ class DisplayController {
 
     updateHeaderInfo() {
         const {mode, info} = this.automaton.getActiveEngineInfo();
-        const wrap = this.automaton.wrapEdges ? '∞' : '■';
+        const wrap = this._wrapSymbol();
         const M = SpecialEngineManager.MODES;
 
         switch (mode) {
@@ -162,7 +162,7 @@ class DisplayController {
         const nType = this.automaton.neighborhoodType;
         const type = nType === 'moore' ? 'Moore' : nType === 'neumann' ? 'Neumann' : t('config.neighborhood.custom.short');
         const radius = this.automaton.neighborhoodRadius;
-        const wrap = this.automaton.wrapEdges ? '∞' : '■';
+        const wrap = this._wrapSymbol();
         this._setNeighborhoodText(t('header.neighborhood', {type, radius, wrap}));
     }
 
@@ -170,7 +170,7 @@ class DisplayController {
         const el = document.getElementById('neighborhoodInfo');
         if (!el || !this.automaton) return;
 
-        const wrap = this.automaton.wrapEdges ? '∞' : '■';
+        const wrap = this._wrapSymbol();
         const M = SpecialEngineManager.MODES;
 
         const templates = {
@@ -259,6 +259,12 @@ class DisplayController {
     _setNeighborhoodText(text) {
         const el = document.getElementById('neighborhoodText');
         if (el) el.textContent = text;
+    }
+
+    _wrapSymbol() {
+        const mode = this.automaton.wrapMode;
+        const symbols = {both: '∞', horizontal: '↔', vertical: '↕', none: '□'};
+        return symbols[mode] ?? '∞';
     }
 
     destroy() {

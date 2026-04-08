@@ -359,8 +359,17 @@ select::-webkit-scrollbar-thumb:hover {
     background: var(--primary-dark);
 }
 
-.limit-select, #ruleSelector, #neighborhoodType {
+.limit-select, #ruleSelector, #neighborhoodType, #wrapModeSelect {
     background-color: var(--dark-card);
+}
+
+.config-label {
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    color: var(--text-secondary);
 }
 
 /* ============================================================

@@ -106,78 +106,65 @@ class RuleEngine {
     /**
      * Fastpath para Moore radio-1: el caso más común (~95% del uso).
      *
-     * Mejoras sobre nextGeneration():
-     *   • Pre-cachea referencias de columna (colM / col / colP).
-     *   • Aritmética condicional en lugar de módulo para wrap de índices.
-     *   • Sin callback countNeighbors() y su overhead de llamada.
-     *   • Índice plano x * height + y (column-major rectangular).
-     *
      * @param {Uint8Array[]} currentGrid
      * @param {Uint8Array[]} outGrid       — back buffer (no null)
-     * @param {boolean}      wrap          — true = toroidal
+     * @param {boolean}      wrapX         — wrap en eje X
+     * @param {boolean}      wrapY         — wrap en eje Y
      * @param {number}       [width]       — columnas
      * @param {number}       [height]      — filas
      * @returns {{ newGrid, changedCells: Uint32Array, changedCount, generationStats }}
      */
-    nextGenerationMoore(currentGrid, outGrid, wrap,
+    nextGenerationMoore(currentGrid, outGrid, wrapX, wrapY,
                         width = currentGrid.length,
                         height = currentGrid[0]?.length ?? width) {
+
+        // Backward-compat: si wrapX es boolean y wrapY es number, se llamó con la
+        // firma legacy (wrap, width, height). Normalizamos.
+        if (typeof wrapY === 'number') {
+            height = width;
+            width = wrapY;
+            wrapY = wrapX;
+        }
 
         const buf = this._ensureChangedBuf(width, height);
         let changedCount = 0, births = 0, deaths = 0;
 
-        if (wrap) {
-            for (let x = 0; x < width; x++) {
-                const xm = x === 0 ? width - 1 : x - 1;
-                const xp = x === width - 1 ? 0 : x + 1;
-                const colM = currentGrid[xm];
-                const col = currentGrid[x];
-                const colP = currentGrid[xp];
+        for (let x = 0; x < width; x++) {
+            const xm = wrapX ? (x === 0 ? width - 1 : x - 1) : x - 1;
+            const xp = wrapX ? (x === width - 1 ? 0 : x + 1) : x + 1;
+            const colM = (xm >= 0) ? currentGrid[xm] : null;
+            const col = currentGrid[x];
+            const colP = (xp < width) ? currentGrid[xp] : null;
 
-                for (let y = 0; y < height; y++) {
-                    const ym = y === 0 ? height - 1 : y - 1;
-                    const yp = y === height - 1 ? 0 : y + 1;
+            for (let y = 0; y < height; y++) {
+                const ym = wrapY ? (y === 0 ? height - 1 : y - 1) : y - 1;
+                const yp = wrapY ? (y === height - 1 ? 0 : y + 1) : y + 1;
 
-                    const n = colM[ym] + colM[y] + colM[yp]
-                        + col[ym] + col[yp]
-                        + colP[ym] + colP[y] + colP[yp];
+                const ymOk = ym >= 0, ypOk = yp < height;
 
-                    const current = col[y];
-                    const next = current
-                        ? (this._survivalSet.has(n) ? 1 : 0)
-                        : (this._birthSet.has(n) ? 1 : 0);
-                    outGrid[x][y] = next;
-
-                    if (next !== current) {
-                        buf[changedCount++] = x * height + y;
-                        if (current === 0) births++; else deaths++;
-                    }
+                let n = 0;
+                if (colM) {
+                    if (ymOk) n += colM[ym];
+                    n += colM[y];
+                    if (ypOk) n += colM[yp];
                 }
-            }
-        } else {
-            // Bounded: maneja bordes con offsets (-1..1) verificando bounds.
-            for (let x = 0; x < width; x++) {
-                for (let y = 0; y < height; y++) {
-                    let n = 0;
-                    for (let dx = -1; dx <= 1; dx++) {
-                        const nx = x + dx;
-                        if (nx < 0 || nx >= width) continue;
-                        const ncol = currentGrid[nx];
-                        for (let dy = -1; dy <= 1; dy++) {
-                            if (dx === 0 && dy === 0) continue;
-                            const ny = y + dy;
-                            if (ny >= 0 && ny < height) n += ncol[ny];
-                        }
-                    }
-                    const current = currentGrid[x][y];
-                    const next = current
-                        ? (this._survivalSet.has(n) ? 1 : 0)
-                        : (this._birthSet.has(n) ? 1 : 0);
-                    outGrid[x][y] = next;
-                    if (next !== current) {
-                        buf[changedCount++] = x * height + y;
-                        if (current === 0) births++; else deaths++;
-                    }
+                if (ymOk) n += col[ym];
+                if (ypOk) n += col[yp];
+                if (colP) {
+                    if (ymOk) n += colP[ym];
+                    n += colP[y];
+                    if (ypOk) n += colP[yp];
+                }
+
+                const current = col[y];
+                const next = current
+                    ? (this._survivalSet.has(n) ? 1 : 0)
+                    : (this._birthSet.has(n) ? 1 : 0);
+                outGrid[x][y] = next;
+
+                if (next !== current) {
+                    buf[changedCount++] = x * height + y;
+                    if (current === 0) births++; else deaths++;
                 }
             }
         }
