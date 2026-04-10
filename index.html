@@ -88,37 +88,47 @@
                                 </select>
                             </div>
 
-                            <!-- Controles de regla personalizada — siempre visible -->
-                            <div class="custom-rule-group" id="customRuleGroup">
-                                <div class="config-group">
-                                    <label for="birthInput">
-                                        <i class="fas fa-seedling"></i> B (<span data-i18n="header.rules.birth">Nacimiento</span>):
-                                    </label>
-                                    <input id="birthInput" placeholder="Ej: 3,7" type="text" value="3">
-                                </div>
-                                <div class="config-group">
-                                    <label for="survivalInput">
-                                        <i class="fas fa-heart"></i> S (<span data-i18n="header.rules.survival">Supervivencia</span>):
-                                    </label>
-                                    <input id="survivalInput" placeholder="Ej: 4,5,6,7" type="text" value="2,3">
-                                </div>
-                                <!-- Selector de estados: C=2 → modo estándar, C>2 → Generaciones -->
-                                <div class="config-group">
-                                    <label for="generationsStates">
-                                        <i class="fas fa-layer-group"></i> C (<span
-                                            data-i18n="generations.states.label">Estados</span>):
-                                        <span class="value-display" id="generationsStatesDisplay">2</span>
-                                    </label>
-                                    <input type="range" id="generationsStates" min="2" max="16" value="2" step="1"
-                                           oninput="document.getElementById('generationsStatesDisplay').textContent=this.value">
-                                    <div class="range-ticks">
-                                        <span>2</span><span data-i18n="generations.states.hint">Generaciones activas si C>2</span><span>16</span>
+                            <!-- Controles de regla personalizada — colapsable -->
+                            <div class="accordion-group" style="margin-top: 6px;">
+                                <button class="accordion-header" data-accordion="custom-rule">
+                                    <i class="fas fa-sliders-h"></i>
+                                    <span data-i18n="config.rule.custom">Personalizar</span>
+                                    <i class="fas fa-chevron-down accordion-icon"></i>
+                                </button>
+                                <div class="accordion-content">
+                                    <div class="custom-rule-group" id="customRuleGroup">
+                                        <div class="config-group">
+                                            <label for="birthInput">
+                                                <i class="fas fa-seedling"></i> B (<span data-i18n="header.rules.birth">Nacimiento</span>):
+                                            </label>
+                                            <input id="birthInput" placeholder="Ej: 3,7" type="text" value="3">
+                                        </div>
+                                        <div class="config-group">
+                                            <label for="survivalInput">
+                                                <i class="fas fa-heart"></i> S (<span data-i18n="header.rules.survival">Supervivencia</span>):
+                                            </label>
+                                            <input id="survivalInput" placeholder="Ej: 4,5,6,7" type="text" value="2,3">
+                                        </div>
+                                        <!-- Selector de estados: C=2 → modo estándar, C>2 → Generaciones -->
+                                        <div class="config-group">
+                                            <label for="generationsStates">
+                                                <i class="fas fa-layer-group"></i> C (<span
+                                                    data-i18n="generations.states.label">Estados</span>):
+                                                <span class="value-display" id="generationsStatesDisplay">2</span>
+                                            </label>
+                                            <input type="range" id="generationsStates" min="2" max="16" value="2"
+                                                   step="1"
+                                                   oninput="document.getElementById('generationsStatesDisplay').textContent=this.value">
+                                            <div class="range-ticks">
+                                                <span>2</span><span data-i18n="generations.states.hint">Generaciones activas si C>2</span><span>16</span>
+                                            </div>
+                                        </div>
+                                        <button class="btn-control" id="applyCustomRuleBtn"
+                                                style="margin-top: 8px; width: 100%;">
+                                            <i class="fas fa-check"></i> <span data-i18n="config.rule.custom.apply">Aplicar Regla</span>
+                                        </button>
                                     </div>
                                 </div>
-                                <button class="btn-control" id="applyCustomRuleBtn"
-                                        style="margin-top: 8px; width: 100%;">
-                                    <i class="fas fa-check"></i> <span data-i18n="config.rule.custom.apply">Aplicar Regla</span>
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -179,10 +189,10 @@
                                     <span data-i18n="config.wrap">Bordes</span>
                                 </label>
                                 <select class="config-select" id="wrapModeSelect">
-                                    <option value="both"       data-i18n="config.wrap.both">Toroidal ∞</option>
+                                    <option value="both" data-i18n="config.wrap.both">Toroidal ∞</option>
                                     <option value="horizontal" data-i18n="config.wrap.horizontal">Cilíndrico ↔</option>
-                                    <option value="vertical"   data-i18n="config.wrap.vertical">Cilíndrico ↕</option>
-                                    <option value="none"       data-i18n="config.wrap.none">Plano □</option>
+                                    <option value="vertical" data-i18n="config.wrap.vertical">Cilíndrico ↕</option>
+                                    <option value="none" data-i18n="config.wrap.none">Plano □</option>
                                 </select>
                             </div>
                         </div>
