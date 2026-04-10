@@ -796,23 +796,14 @@ class UIController {
         if (toggleRowsBtn && container) {
             this._addEventListener(toggleRowsBtn, 'click', () => {
                 this.patternsTwoRows = !this.patternsTwoRows;
-                container.classList.toggle('two-rows', this.patternsTwoRows);
-                const icon = toggleRowsBtn.querySelector('i');
-                if (icon) icon.className = this.patternsTwoRows
-                    ? 'fas fa-grip-lines-vertical'
-                    : 'fas fa-grip-lines';
+                this._applyPatternsDisplayState();
             });
         }
 
         if (toggleCompactBtn && container) {
             this._addEventListener(toggleCompactBtn, 'click', () => {
                 this.patternsCompactView = !this.patternsCompactView;
-                container.classList.toggle('compact-view', this.patternsCompactView);
-                document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
-                    btn.classList.toggle('compact', this.patternsCompactView);
-                });
-                const icon = toggleCompactBtn.querySelector('i');
-                if (icon) icon.className = this.patternsCompactView ? 'fas fa-expand-alt' : 'fas fa-compress';
+                this._applyPatternsDisplayState();
             });
         }
 
@@ -834,24 +825,12 @@ class UIController {
         // PatternManager llama renderPatterns() en su constructor (antes de que UIController
         // corra), por lo que cualquier clase aplicada antes quedaría sin efecto sobre los
         // botones recién creados por ese primer render.
-        if (container) {
-            // 1 fila por defecto
-            this.patternsTwoRows = false;
-            container.classList.remove('two-rows');
-            if (toggleRowsBtn) {
-                const icon = toggleRowsBtn.querySelector('i');
-                if (icon) icon.className = 'fas fa-grip-lines';
-            }
-
-            // Vista compacta por defecto
-            this.patternsCompactView = true;
-            container.classList.add('compact-view');
-            document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => btn.classList.add('compact'));
-            if (toggleCompactBtn) {
-                const icon = toggleCompactBtn.querySelector('i');
-                if (icon) icon.className = 'fas fa-expand-alt';
-            }
-        }
+        // Además suscribimos patterns:rendered para re-aplicar el estado en cada re-render
+        // posterior (cambio de regla, filtro, etc.) sin depender del orden de ejecución.
+        this._applyPatternsDisplayState();
+        this._cleanups.push(
+            eventBus.on('patterns:rendered', () => this._applyPatternsDisplayState())
+        );
 
         const showAllBtn = document.getElementById('patternsShowAll');
         if (showAllBtn && pm) {
@@ -882,6 +861,35 @@ class UIController {
         const cancelBtn = document.getElementById('cancelPatternBtn');
         if (cancelBtn) {
             this._addEventListener(cancelBtn, 'click', () => this.deselectPattern());
+        }
+    }
+
+    /**
+     * Aplica el estado visual actual de filas y compacto al container y botones.
+     * Llamado en el init y después de cada renderPatterns (via patterns:rendered).
+     */
+    _applyPatternsDisplayState() {
+        const container = document.getElementById('patternsContainer');
+        if (!container) return;
+
+        container.classList.toggle('two-rows', this.patternsTwoRows);
+        container.classList.toggle('compact-view', this.patternsCompactView);
+        document.querySelectorAll('.pattern-btn-horizontal').forEach(btn => {
+            btn.classList.toggle('compact', this.patternsCompactView);
+        });
+
+        const toggleRowsBtn = document.getElementById('patternsToggleRows');
+        if (toggleRowsBtn) {
+            const icon = toggleRowsBtn.querySelector('i');
+            if (icon) icon.className = this.patternsTwoRows
+                ? 'fas fa-grip-lines-vertical'
+                : 'fas fa-grip-lines';
+        }
+
+        const toggleCompactBtn = document.getElementById('patternsToggleCompact');
+        if (toggleCompactBtn) {
+            const icon = toggleCompactBtn.querySelector('i');
+            if (icon) icon.className = this.patternsCompactView ? 'fas fa-expand-alt' : 'fas fa-compress';
         }
     }
 

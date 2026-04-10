@@ -243,6 +243,9 @@ class PatternManager {
 
             const patternBtn = document.createElement('button');
             patternBtn.className = 'pattern-btn-horizontal';
+            if (container.classList.contains('compact-view')) {
+                patternBtn.classList.add('compact');
+            }
             patternBtn.dataset.patternKey = key;
 
             const categoryText = pattern.category ? `[${pattern.category}]\n` : '';
@@ -333,6 +336,7 @@ class PatternManager {
             this._patternState.rotation = 0;
         }
         this._updatePatternInfo();
+        eventBus.emit('patterns:rendered');
     }
 
     _getRandomDensity() {
