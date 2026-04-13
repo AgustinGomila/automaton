@@ -686,7 +686,10 @@ class CellularAutomaton {
         const w = Math.min(Math.max(newWidth, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
         const h = Math.min(Math.max(newHeight, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
 
-        if (this.isRunning) this.stop();
+        if (this.isRunning) {
+            this.stop();
+            eventBus.emit('automaton:runningChanged', {isRunning: false});
+        }
 
         this.core.resize(w, h);
         this.gridWidth = this.core.gridManager.width;
