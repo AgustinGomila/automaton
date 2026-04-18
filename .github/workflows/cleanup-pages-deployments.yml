@@ -1,0 +1,102 @@
+name: Cleanup old Pages deployments
+
+on:
+  deployment_status:
+
+jobs:
+  cleanup:
+    name: Delete old deployments and logs
+    if: |
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'github-pages'
+    runs-on: ubuntu-latest
+    permissions:
+      deployments: write
+      actions: write
+
+    steps:
+      - name: Delete old deployments
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+
+            // --- 1. Clean up old deployments ---
+            const deployments = await github.paginate(
+              github.rest.repos.listDeployments,
+              { owner, repo, environment: 'github-pages', per_page: 100 }
+            );
+
+            // Keep the most recent one (index 0), delete the rest
+            const toDelete = deployments.slice(1);
+            console.log(`Found ${deployments.length} deployment(s). Deleting ${toDelete.length} old one(s).`);
+
+            for (const deployment of toDelete) {
+              // GitHub requires a deployment to be inactive before it can be deleted
+              try {
+                await github.rest.repos.createDeploymentStatus({
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                  state: 'inactive',
+                });
+              } catch (e) {
+                console.log(`Could not deactivate deployment ${deployment.id}: ${e.message}`);
+              }
+
+              try {
+                await github.rest.repos.deleteDeployment({
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                });
+                console.log(`Deleted deployment ${deployment.id}`);
+              } catch (e) {
+                console.log(`Could not delete deployment ${deployment.id}: ${e.message}`);
+              }
+            }
+
+            // --- 2. Clean up old workflow run logs for Pages-related workflows ---
+            const workflows = await github.paginate(
+              github.rest.actions.listRepoWorkflows,
+              { owner, repo, per_page: 100 }
+            );
+
+            // Target workflows typically used by GitHub Pages
+            const pagesWorkflowNames = [
+              'pages-build-deployment',
+              'pages/pages-build-deployment',
+            ];
+
+            const pagesWorkflows = workflows.filter(w =>
+              pagesWorkflowNames.some(name =>
+                w.name.toLowerCase().includes('pages') ||
+                w.path.includes(name)
+              )
+            );
+
+            for (const workflow of pagesWorkflows) {
+              const runs = await github.paginate(
+                github.rest.actions.listWorkflowRuns,
+                { owner, repo, workflow_id: workflow.id, per_page: 100 }
+              );
+
+              // Keep the most recent run, delete the rest
+              const runsToDelete = runs.slice(1);
+              console.log(`Workflow "${workflow.name}": deleting ${runsToDelete.length} old run(s).`);
+
+              for (const run of runsToDelete) {
+                try {
+                  await github.rest.actions.deleteWorkflowRun({
+                    owner,
+                    repo,
+                    run_id: run.id,
+                  });
+                  console.log(`Deleted run ${run.id}`);
+                } catch (e) {
+                  console.log(`Could not delete run ${run.id}: ${e.message}`);
+                }
+              }
+            }
