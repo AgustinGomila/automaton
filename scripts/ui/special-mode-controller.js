@@ -1,7 +1,7 @@
 import {t} from './i18n.js';
 import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {SpecialEngineManager, WolframDirection} from '../core/engines/special-engine-manager.js';
-import {NeighborhoodType} from '../core/neighborhood-calculator.js';
+import {NeighborhoodType, WrapMode} from '../core/neighborhood-calculator.js';
 import {SpecialModeUI} from './special-mode-ui.js';
 import {parseCustomRule} from '../config/rules.js';
 
@@ -263,18 +263,6 @@ class SpecialModeController {
             });
         }
 
-        // Reset semilla Wolfram
-        const resetSeedBtn = document.getElementById('resetWolframSeed');
-        if (resetSeedBtn) {
-            this._addEventListener(resetSeedBtn, 'click', () => {
-                if (this.automaton.wolframEngine?.isActive) {
-                    this.automaton.wolframEngine.forceInitializeSeed();
-                    this.automaton.render();
-                    this._onShowNotification(t('wolfram.resetSeed'), 'info', 1500);
-                }
-            });
-        }
-
         // Regla Wolfram (slider)
         const wolframRuleInput = document.getElementById('wolframRule');
         if (wolframRuleInput) {
@@ -407,6 +395,18 @@ class SpecialModeController {
         this._returnToStandard();
     }
 
+    /**
+     * Deriva el booleano de envoltura para Triangle/Hex desde #wrapModeSelect.
+     * Estos motores manejan un wrap binario (toroidal vs paredes): cualquier modo
+     * de envoltura del selector cuenta como toroidal y solo 'Plano' (none) = paredes.
+     * Default true si el selector no está (comportamiento previo al selector de 4 modos).
+     * @returns {boolean}
+     */
+    _readWrapEnabled() {
+        const select = document.getElementById('wrapModeSelect');
+        return select ? select.value !== WrapMode.NONE : true;
+    }
+
     async activateTriangleMode(rule = 50) {
         if (!this.automaton?.grid) {
             this._onShowNotification(t('notif.automata.error'), 'warning', 3000);
@@ -428,8 +428,7 @@ class SpecialModeController {
             this._ui.toggleTriangleControls(true);
             this._ui.setModeSelectors(true);
 
-            const wrapToggle = document.getElementById('wrapToggle');
-            const wrap = wrapToggle ? wrapToggle.checked : true;
+            const wrap = this._readWrapEnabled();
 
             this.automaton.triangleEngine.activate({rule, wrap});
 
@@ -802,7 +801,7 @@ class SpecialModeController {
 
             const birth = this._readHexBirth();
             const survival = this._readHexSurvival();
-            const wrap = document.getElementById('wrapToggle')?.checked ?? true;
+            const wrap = this._readWrapEnabled();
             const cs = this.automaton.cellSize;   // ya fue ajustado por special-engine-manager
             const SQRT3 = Math.sqrt(3);
 
