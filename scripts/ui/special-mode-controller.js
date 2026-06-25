@@ -532,7 +532,6 @@ class SpecialModeController {
         } catch (e) {
             this._onShowNotification(`Error en regla: ${e.message}`, 'warning', 3000);
         }
-        this._onToggleActivityEffect(false);
     }
 
     async activateGenerationsMode(birth, survival, numStates) {
@@ -554,6 +553,11 @@ class SpecialModeController {
             const colorsBlock = document.getElementById('activityColors');
             if (colorsBlock) colorsBlock.style.display = '';
             this._onSyncActivityColors(true);
+            // El efecto de actividad binario se apaga al entrar a Generations (usa su
+            // propia paleta por estado). Va en el camino de éxito —y no en el handler
+            // de UI— para que ambas vías de entrada (slider y dropdown) sean simétricas
+            // y no se desactive si la activación falla.
+            this._onToggleActivityEffect(false);
         } catch (error) {
             console.error('Error cargando GenerationsEngine:', error);
             this._onShowNotification(t('notif.generations.error'), 'warning', 3000);
