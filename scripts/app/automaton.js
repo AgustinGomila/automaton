@@ -427,11 +427,6 @@ class CellularAutomaton {
                 this._initWorker();
                 eventBus.emit(Events.AUTOMATON_NEIGHBORHOOD_CHANGED, event.info);
                 break;
-            case 'randomize':
-                this.renderer.resetActivity();
-                this.renderer.markAllDirty();
-                eventBus.emit(Events.AUTOMATON_RANDOMIZED, event);
-                break;
             case 'deserialize':
                 this.renderer.markAllDirty();
                 this.updateStats();
@@ -440,7 +435,6 @@ class CellularAutomaton {
     }
 
     _handleStateChange(event) {
-        eventBus.emit(Events.STATE_CHANGED, event);
         switch (event.type) {
             case 'clear':
             case 'randomize':

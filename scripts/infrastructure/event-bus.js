@@ -97,7 +97,6 @@ export const Events = Object.freeze({
     AUTOMATON_MODE_CHANGED: 'automaton:modeChanged',
     AUTOMATON_NEIGHBORHOOD_CHANGED: 'automaton:neighborhoodChanged',
     AUTOMATON_RADIUS_CHANGED: 'automaton:radiusChanged',
-    AUTOMATON_RANDOMIZED: 'automaton:randomized',
     AUTOMATON_READY: 'automaton:ready',
     AUTOMATON_RESIZED: 'automaton:resized',
     AUTOMATON_RULE_CHANGED: 'automaton:ruleChanged',
@@ -107,9 +106,8 @@ export const Events = Object.freeze({
     AUTOMATON_WRAP_CHANGED: 'automaton:wrapChanged',
     AUTOMATON_ZOOM_CHANGED: 'automaton:zoomChanged',
 
-    // history / state / stats / perf
+    // history / stats / perf
     HISTORY_CHANGED: 'history:changed',
-    STATE_CHANGED: 'state:changed',
     STATS_UPDATED: 'stats:updated',
     PERF_UPDATE: 'perf:update',
 
