@@ -105,10 +105,12 @@ class UIController {
             getSelection: () => this._canvasController?.selection,
             onShowNotification: (msg, type, dur) => this._showNotification(msg, type, dur),
             onGridResized: (newSize) => {
-                const slider = document.getElementById('gridSize');
-                const display = document.getElementById('gridSizeValue');
-                if (slider) slider.value = newSize;
-                if (display) display.textContent = `${newSize}×${newSize}`;
+                // resizeGrid(newSize) deja el grid cuadrado. Se delega en el método
+                // canónico del gridController (sincroniza sliders W/H, displays y
+                // badge). El callback anterior apuntaba a #gridSize/#gridSizeValue,
+                // removidos al separar el control en ancho/alto (commit "Remove
+                // legacy GridSize"), por lo que no sincronizaba nada.
+                this._gridController?._syncAllGridDisplays(newSize, newSize);
             },
             addEventListener: (target, event, handler, opts) =>
                 this._addEventListener(target, event, handler, opts)
@@ -521,10 +523,9 @@ class UIController {
         const isRunning = this.automaton.isRunning;
         const playIcon = document.getElementById('playIcon');
         const playBtn = document.getElementById('playBtn');
-        const playText = document.getElementById('playText');
         const stepBtn = document.getElementById('stepBtn');
         if (playIcon) playIcon.className = isRunning ? 'fas fa-pause' : 'fas fa-play';
-        const textEl = playText || playBtn?.querySelector('span');
+        const textEl = playBtn?.querySelector('span');
         if (textEl) textEl.textContent = t(isRunning ? 'controls.pause' : 'controls.play');
         if (stepBtn) stepBtn.disabled = isRunning;
     }
