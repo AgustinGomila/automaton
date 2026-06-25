@@ -25,6 +25,7 @@ import {EffectsController} from './effects-controller.js';
 import {DisplayController} from './display-controller.js';
 import {AppConfig} from '../utils/config.js';
 import {LimitType} from '../app/simulator-limiter.js';
+import {WrapMode} from '../core/neighborhood-calculator.js';
 
 class UIController {
     /**
@@ -316,9 +317,9 @@ class UIController {
                 this.automaton.render();
                 this._displayController?.updateNeighborhoodInfo();
                 if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine) {
-                    this.automaton.triangleEngine.wrapEdges = (mode === 'both');
+                    this.automaton.triangleEngine.wrapEdges = (mode === WrapMode.BOTH);
                 }
-                eventBus.emit(Events.AUTOMATON_WRAP_CHANGED, {wrapMode: mode, wrap: mode === 'both'});
+                eventBus.emit(Events.AUTOMATON_WRAP_CHANGED, {wrapMode: mode, wrap: mode === WrapMode.BOTH});
                 wrapModeSelect.blur();
             });
         }

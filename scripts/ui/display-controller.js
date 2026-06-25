@@ -1,7 +1,7 @@
 import {t} from './i18n.js';
 import {rulesLoader} from '../config/rules-loader.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
-import {NeighborhoodType} from '../core/neighborhood-calculator.js';
+import {NeighborhoodType, WrapMode} from '../core/neighborhood-calculator.js';
 
 /**
  * DisplayController — Gestiona todas las actualizaciones del DOM informativo.
@@ -264,7 +264,12 @@ class DisplayController {
 
     _wrapSymbol() {
         const mode = this.automaton.wrapMode;
-        const symbols = {both: '∞', horizontal: '↔', vertical: '↕', none: '□'};
+        const symbols = {
+            [WrapMode.BOTH]: '∞',
+            [WrapMode.HORIZONTAL]: '↔',
+            [WrapMode.VERTICAL]: '↕',
+            [WrapMode.NONE]: '□',
+        };
         return symbols[mode] ?? '∞';
     }
 

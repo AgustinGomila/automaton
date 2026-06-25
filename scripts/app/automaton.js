@@ -13,7 +13,7 @@ import {AppConfig} from '../utils/config.js';
 import {eventBus, Events} from '../infrastructure/event-bus.js';
 
 import {CellularAutomatonCore, CoreStateChange} from '../core/cellular-automaton.js';
-import {NeighborhoodType} from '../core/neighborhood-calculator.js';
+import {NeighborhoodType, WrapMode} from '../core/neighborhood-calculator.js';
 import {GridRenderer} from '../rendering/grid-renderer.js';
 import {GridWorkerManager} from '../infrastructure/workers/grid-worker-manager.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
@@ -221,7 +221,7 @@ class CellularAutomaton {
     }
 
     get wrapMode() {
-        return this.core?.neighborhood?.wrapMode ?? 'both';
+        return this.core?.neighborhood?.wrapMode ?? WrapMode.BOTH;
     }
 
     set wrapMode(value) {

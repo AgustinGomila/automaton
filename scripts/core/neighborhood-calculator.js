@@ -27,8 +27,20 @@ export const NeighborhoodType = Object.freeze({
     CUSTOM: 'custom',
 });
 
+/**
+ * Modos de borde (wrap) del grid. Compartido con automaton, ui-controller (select de wrap)
+ * y display-controller (símbolos). NO confundir con la `direction` del motor Wolfram, que
+ * reusa los valores 'horizontal'/'vertical' para otro concepto (eje de barrido).
+ */
+export const WrapMode = Object.freeze({
+    BOTH: 'both',
+    HORIZONTAL: 'horizontal',
+    VERTICAL: 'vertical',
+    NONE: 'none',
+});
+
 /** Valores válidos de wrapMode. */
-const WRAP_MODES = Object.freeze(['both', 'horizontal', 'vertical', 'none']);
+const WRAP_MODES = Object.freeze(Object.values(WrapMode));
 
 class NeighborhoodCalculator {
     /**
@@ -64,15 +76,15 @@ class NeighborhoodCalculator {
 
     /** Backward-compat: true si hay wrap en ambos ejes. */
     get wrapEdges() {
-        return this.wrapMode === 'both';
+        return this.wrapMode === WrapMode.BOTH;
     }
 
     get wrapX() {
-        return this.wrapMode === 'both' || this.wrapMode === 'horizontal';
+        return this.wrapMode === WrapMode.BOTH || this.wrapMode === WrapMode.HORIZONTAL;
     }
 
     get wrapY() {
-        return this.wrapMode === 'both' || this.wrapMode === 'vertical';
+        return this.wrapMode === WrapMode.BOTH || this.wrapMode === WrapMode.VERTICAL;
     }
 
     /**
@@ -84,9 +96,9 @@ class NeighborhoodCalculator {
             return options.wrapMode;
         }
         if (options.wrapEdges !== undefined) {
-            return options.wrapEdges ? 'both' : 'none';
+            return options.wrapEdges ? WrapMode.BOTH : WrapMode.NONE;
         }
-        return 'both';
+        return WrapMode.BOTH;
     }
 
     _computeOffsets() {
