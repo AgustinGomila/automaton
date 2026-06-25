@@ -39,8 +39,6 @@ class WolframEngine {
         this.currentRow = 0;
         this.currentCol = 0;
         this.initialized = false;
-        this._forceReinit = false;
-
         // Dimensiones snapshot — se sincronizan en step() para detectar resize
         this.gridWidth = 0;
         this.gridHeight = 0;
@@ -65,9 +63,7 @@ class WolframEngine {
         this.ruleTable = this._generateRuleTable(this.ruleNumber);
         this.direction = direction;
         this.isActive = true;
-        this.initialized = false;
-        this._forceReinit = false;
-        this.generation = 0;
+        this.initialized = false;        this.generation = 0;
         this.currentRow = 0;
         this.currentCol = 0;
         this._changedCells = [];
@@ -83,9 +79,7 @@ class WolframEngine {
     }
 
     reset() {
-        this.initialized = false;
-        this._forceReinit = false;
-        this.currentRow = 0;
+        this.initialized = false;        this.currentRow = 0;
         this.currentCol = 0;
         this.generation = 0;
         this._changedCells = [];
@@ -174,15 +168,6 @@ class WolframEngine {
         return this._changedCells;
     }
 
-    /** Fuerza re-inicialización de la semilla en el próximo step(). */
-    forceInitializeSeed() {
-        this._forceReinit = true;
-        this.initialized = false;
-        this.currentRow = 0;
-        this.currentCol = 0;
-        this._initializeSeed();
-    }
-
     // =========================================
     // INFO
     // =========================================
@@ -229,7 +214,7 @@ class WolframEngine {
      */
     _initializeSeed() {
         if (!this.automaton?.grid) return;
-        if (this.initialized && !this._forceReinit) return;
+        if (this.initialized) return;
 
         const gw = this.gridWidth || this.automaton.gridWidth || 200;
         const gh = this.gridHeight || this.automaton.gridHeight || 200;
@@ -248,9 +233,7 @@ class WolframEngine {
             this.currentCol = 1;
         }
 
-        this.initialized = true;
-        this._forceReinit = false;
-        if (typeof this.automaton._markAllDirty === 'function') {
+        this.initialized = true;        if (typeof this.automaton._markAllDirty === 'function') {
             this.automaton._markAllDirty();
         }
     }
