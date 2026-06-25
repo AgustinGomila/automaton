@@ -74,6 +74,11 @@ class Application {
         window.addEventListener('error', (e) => {
             console.error('Error no capturado:', e.error ?? e.message);
         });
+        // Varias operaciones async (importPattern/pasteArea al dibujar) se llaman
+        // sin await: un rechazo aquí sería invisible. Se registra sin desmontar.
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Promesa rechazada sin manejar:', e.reason);
+        });
     }
 
     _emergencyCleanup() {
