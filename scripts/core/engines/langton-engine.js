@@ -26,6 +26,19 @@
  *
  * Referencia: Langton (1986), Gale et al. (2002).
  */
+
+/**
+ * Tipos de giro de la tabla de reglas (un char por estado en el ruleString).
+ * R=horario, L=antihorario, U=media vuelta, N=sin giro. Los ruleString
+ * ('RL', 'LLRR'...) son secuencias de estos chars, no constantes sueltas.
+ */
+export const LangtonTurn = Object.freeze({
+    RIGHT: 'R',
+    LEFT: 'L',
+    UTURN: 'U',
+    NONE: 'N',
+});
+
 class LangtonEngine {
 
     /**
@@ -440,14 +453,14 @@ class LangtonEngine {
     /** Rotación de dirección según tipo de giro. */
     _rotate(dir, turn) {
         switch (turn) {
-            case 'R':
+            case LangtonTurn.RIGHT:
                 return (dir + 1) % 4;
-            case 'L':
+            case LangtonTurn.LEFT:
                 return (dir + 3) % 4;
-            case 'U':
+            case LangtonTurn.UTURN:
                 return (dir + 2) % 4;
             default:
-                return dir;             // 'N' y cualquier valor desconocido
+                return dir;             // LangtonTurn.NONE y cualquier valor desconocido
         }
     }
 
