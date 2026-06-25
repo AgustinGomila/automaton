@@ -6,7 +6,7 @@
  *
  * No conoce motores especiales, reglas ni estadísticas.
  */
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {DrawingTool} from './drawing-tool.js';
 import {SelectionManager} from './selection-manager.js';
 import {getPatternWithRotation} from '../config/patterns.js';
@@ -168,7 +168,7 @@ class CanvasController {
         this._addEventListener(canvas, 'contextmenu', (e) => this._handleRightClick(e));
 
         // Actualizar cursor cuando cambia el modo especial (activa/desactiva dibujo)
-        const modeUnsub = eventBus.on('automaton:modeChanged', () => this._updateCursor());
+        const modeUnsub = eventBus.on(Events.AUTOMATON_MODE_CHANGED, () => this._updateCursor());
         this._cleanups.push(modeUnsub);
 
         this._setupTouchEvents();
@@ -340,7 +340,7 @@ class CanvasController {
             } else {
                 this.automaton.addEngineAgentAt(x, y);
             }
-            eventBus.emit('automaton:ruleChanged');
+            eventBus.emit(Events.AUTOMATON_RULE_CHANGED);
             return;
         }
 
@@ -465,7 +465,7 @@ class CanvasController {
                     }
                     this.lastCell = {x, y};
                     if (changed) {
-                        eventBus.emit('automaton:ruleChanged');
+                        eventBus.emit(Events.AUTOMATON_RULE_CHANGED);
                     }
                 }
             } else if (this.automaton.specialMode === SpecialEngineManager.MODES.WIREWORLD && this.automaton.wireworldEngine?.isActive && !this._patternState.pattern) {
@@ -566,7 +566,7 @@ class CanvasController {
                 this._patternState.rotation
             );
 
-            eventBus.emit('pattern:rotationChanged', {
+            eventBus.emit(Events.PATTERN_ROTATION_CHANGED, {
                 pattern: this._patternState.pattern,
                 rotation: this._patternState.rotation
             });

@@ -3,14 +3,14 @@
  *
  * Carga los patrones desde assets/patterns.json (con fallback a los patrones
  * embebidos mínimos definidos en patterns.js).
- * Emite 'patterns:loaded' cuando los datos están disponibles.
+ * Emite Events.PATTERNS_LOADED cuando los datos están disponibles.
  *
  * El dato canónico vive en la propiedad `.PATTERNS` de la instancia exportada.
  * Los consumidores importan `patternLoader` y acceden a `patternLoader.PATTERNS`
  * en lugar de usar `window.PATTERNS`.
  */
 
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 
 /** Patrones mínimos de fallback — usados cuando el fetch falla. */
 const DEFAULT_PATTERNS = {
@@ -62,7 +62,7 @@ class PatternLoader {
             const data = await response.json();
             this.PATTERNS = data.patterns || {};
             this.isLoaded = true;
-            eventBus.emit('patterns:loaded', {patterns: this.PATTERNS});
+            eventBus.emit(Events.PATTERNS_LOADED, {patterns: this.PATTERNS});
             return this.PATTERNS;
         } catch (error) {
             console.error('Error cargando patrones:', error);
@@ -74,7 +74,7 @@ class PatternLoader {
     _loadEmbeddedPatterns() {
         this.PATTERNS = DEFAULT_PATTERNS;
         this.isLoaded = true;
-        eventBus.emit('patterns:loaded', {patterns: this.PATTERNS});
+        eventBus.emit(Events.PATTERNS_LOADED, {patterns: this.PATTERNS});
         return this.PATTERNS;
     }
 }

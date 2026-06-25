@@ -12,7 +12,7 @@
  *   - Todos los sub-controladores importados explícitamente.
  */
 
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {i18n, t} from './i18n.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 import {getPatternWithRotation} from '../config/patterns.js';
@@ -153,11 +153,11 @@ class UIController {
         if (document.getElementById('ruleSelector')?.options?.length > 0) {
             proceed();
         } else {
-            // Las reglas se cargan vía rulesLoader que ya emitió 'rules:loaded'
+            // Las reglas se cargan vía rulesLoader que ya emitió Events.RULES_LOADED
             // antes de construir UIController (ver main.js), por lo que siempre
             // llegamos aquí con las reglas disponibles. El eventBus.once es
             // un seguro ante condiciones de carrera en entornos lentos.
-            const unsub = eventBus.on('rules:loaded', () => {
+            const unsub = eventBus.on(Events.RULES_LOADED, () => {
                 unsub();
                 proceed();
             });
@@ -179,10 +179,10 @@ class UIController {
         this._displayController?.updateNeighborhoodInfo();
         this._ruleController.loadRules();
 
-        eventBus.on('automaton:runningChanged', () => this._syncPlayButtonState());
-        eventBus.on('app:ready', () => setTimeout(() => this._gridController.initGridRectUI(), 60));
+        eventBus.on(Events.AUTOMATON_RUNNING_CHANGED, () => this._syncPlayButtonState());
+        eventBus.on(Events.APP_READY, () => setTimeout(() => this._gridController.initGridRectUI(), 60));
 
-        eventBus.emit('ui:ready');
+        eventBus.emit(Events.UI_READY);
     }
 
     // =========================================
@@ -216,7 +216,7 @@ class UIController {
         this._displayController?.destroy();
         this._displayController = null;
 
-        eventBus.emit('ui:destroyed');
+        eventBus.emit(Events.UI_DESTROYED);
     }
 
     _addEventListener(target, event, handler, options) {
@@ -229,27 +229,27 @@ class UIController {
     _subscribeToAutomatonEvents() {
         const weakThis = new WeakRef(this);
         this._cleanups.push(
-            eventBus.on('stats:updated', (stats) => {
+            eventBus.on(Events.STATS_UPDATED, (stats) => {
                 weakThis.deref()?._displayController?.updateStats(stats);
             }),
-            eventBus.on('automaton:ruleChanged', () => {
+            eventBus.on(Events.AUTOMATON_RULE_CHANGED, () => {
                 weakThis.deref()?._displayController?.updateHeaderInfo();
             }),
-            eventBus.on('automaton:neighborhoodChanged', () => {
+            eventBus.on(Events.AUTOMATON_NEIGHBORHOOD_CHANGED, () => {
                 const ui = weakThis.deref();
                 if (ui) {
                     ui._displayController?.updateHeaderInfo();
                     ui._displayController?.updateNeighborhoodInfo();
                 }
             }),
-            eventBus.on('automaton:radiusChanged', () => {
+            eventBus.on(Events.AUTOMATON_RADIUS_CHANGED, () => {
                 const ui = weakThis.deref();
                 if (ui) {
                     ui._displayController?.updateHeaderInfo();
                     ui._displayController?.updateNeighborhoodInfo();
                 }
             }),
-            eventBus.on('automaton:wrapChanged', () => {
+            eventBus.on(Events.AUTOMATON_WRAP_CHANGED, () => {
                 const ui = weakThis.deref();
                 if (ui) {
                     ui._displayController?.updateHeaderInfo();
@@ -317,7 +317,7 @@ class UIController {
                 if (this.automaton.specialMode === SpecialEngineManager.MODES.TRIANGLE && this.automaton.triangleEngine) {
                     this.automaton.triangleEngine.wrapEdges = (mode === 'both');
                 }
-                eventBus.emit('automaton:wrapChanged', {wrapMode: mode, wrap: mode === 'both'});
+                eventBus.emit(Events.AUTOMATON_WRAP_CHANGED, {wrapMode: mode, wrap: mode === 'both'});
                 wrapModeSelect.blur();
             });
         }
@@ -337,7 +337,7 @@ class UIController {
                 workerToggle.checked = this.automaton.worker !== null;
             };
             syncWorkerToggle();
-            this._cleanups.push(eventBus.on('automaton:resized', syncWorkerToggle));
+            this._cleanups.push(eventBus.on(Events.AUTOMATON_RESIZED, syncWorkerToggle));
             this._addEventListener(workerToggle, 'change', (e) => {
                 if (e.target.checked) {
                     this.automaton._initWorker();
@@ -359,7 +359,7 @@ class UIController {
         if (perfToggle) {
             this._addEventListener(perfToggle, 'click', () => this._togglePerf());
         }
-        this._cleanups.push(eventBus.on('perf:update', (perf) => this._updatePerfOverlay(perf)));
+        this._cleanups.push(eventBus.on(Events.PERF_UPDATE, (perf) => this._updatePerfOverlay(perf)));
 
         this._specialModeController.bindEvents();
     }
@@ -446,7 +446,7 @@ class UIController {
                     this._patternState.pattern = getPatternWithRotation(
                         this._patternState.key, this._patternState.rotation
                     );
-                    eventBus.emit('pattern:rotationChanged', {
+                    eventBus.emit(Events.PATTERN_ROTATION_CHANGED, {
                         pattern: this._patternState.pattern,
                         rotation: this._patternState.rotation
                     });
@@ -546,7 +546,7 @@ class UIController {
     _stopAutomaton() {
         this.automaton.stop();
         this.automaton.isRunning = false;
-        eventBus.emit('automaton:runningChanged', {isRunning: false});
+        eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
     }
 
     clear() {
@@ -783,7 +783,7 @@ class UIController {
         }
 
         this._cleanups.push(
-            eventBus.on('pattern:selected', () => {
+            eventBus.on(Events.PATTERN_SELECTED, () => {
                 if (this._canvasController?.bucketToolActive) {
                     this._canvasController.bucketToolActive = false;
                     document.getElementById('bucketToolBtn')?.classList.remove('active');
@@ -829,7 +829,7 @@ class UIController {
         // posterior (cambio de regla, filtro, etc.) sin depender del orden de ejecución.
         this._applyPatternsDisplayState();
         this._cleanups.push(
-            eventBus.on('patterns:rendered', () => this._applyPatternsDisplayState())
+            eventBus.on(Events.PATTERNS_RENDERED, () => this._applyPatternsDisplayState())
         );
 
         const showAllBtn = document.getElementById('patternsShowAll');
@@ -840,7 +840,7 @@ class UIController {
                 pm.setShowAll(this.patternsShowAll);
             });
             this._cleanups.push(
-                eventBus.on('automaton:filterChanged', () => {
+                eventBus.on(Events.AUTOMATON_FILTER_CHANGED, () => {
                     if (this.patternsShowAll) {
                         this.patternsShowAll = false;
                         showAllBtn.classList.remove('active');
@@ -853,9 +853,9 @@ class UIController {
 
     _bindPatternEvents() {
         this._cleanups.push(
-            eventBus.on('pattern:selected', () => this._displayController?.updateDrawModeIndicator()),
-            eventBus.on('pattern:updated', () => this._displayController?.updateDrawModeIndicator()),
-            eventBus.on('pattern:cleared', () => this._displayController?.updateDrawModeIndicator())
+            eventBus.on(Events.PATTERN_SELECTED, () => this._displayController?.updateDrawModeIndicator()),
+            eventBus.on(Events.PATTERN_UPDATED, () => this._displayController?.updateDrawModeIndicator()),
+            eventBus.on(Events.PATTERN_CLEARED, () => this._displayController?.updateDrawModeIndicator())
         );
 
         const cancelBtn = document.getElementById('cancelPatternBtn');

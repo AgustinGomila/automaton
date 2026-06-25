@@ -4,13 +4,13 @@
  * CellularAutomaton — Coordinador del autómata celular.
  *
  * Cambios ESM:
- *   - window.RULES / polling → rulesLoader.RULES + eventBus.once('rules:loaded')
+ *   - window.RULES / polling → rulesLoader.RULES + eventBus.once(Events.RULES_LOADED)
  *   - Todas las clases colaboradoras importadas explícitamente.
  *   - Sin `window.CellularAutomaton`.
  */
 
 import {AppConfig} from '../utils/config.js';
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 
 import {CellularAutomatonCore} from '../core/cellular-automaton.js';
 import {GridRenderer} from '../rendering/grid-renderer.js';
@@ -138,7 +138,7 @@ class CellularAutomaton {
         this._limiter = new SimulationLimiter({
             onLimitReached: () => {
                 this.stop();
-                eventBus.emit('automaton:runningChanged', {isRunning: false});
+                eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
             }
         });
 
@@ -152,7 +152,7 @@ class CellularAutomaton {
 
         this._init().catch(err => {
             console.error('Error inicializando autómata:', err);
-            eventBus.emit('automaton:error', err);
+            eventBus.emit(Events.AUTOMATON_ERROR, err);
         });
     }
 
@@ -356,12 +356,12 @@ class CellularAutomaton {
         await this._initRule();
         this.renderer.markAllDirty();
         this.renderer.render({generation: 0});
-        eventBus.emit('automaton:ready', this);
+        eventBus.emit(Events.AUTOMATON_READY, this);
     }
 
     /**
      * Aplica la regla por defecto (Conway) una vez que las reglas están disponibles.
-     * Usa el evento 'rules:loaded' en lugar de polling activo sobre window.RULES.
+     * Usa el evento Events.RULES_LOADED en lugar de polling activo sobre window.RULES.
      */
     async _initRule() {
         let rules = rulesLoader.RULES;
@@ -369,7 +369,7 @@ class CellularAutomaton {
         // Si las reglas aún no están cargadas, esperar el evento con timeout de seguridad
         if (!rules || Object.keys(rules).length === 0) {
             rules = await Promise.race([
-                new Promise(resolve => eventBus.once('rules:loaded', ({rules}) => resolve(rules))),
+                new Promise(resolve => eventBus.once(Events.RULES_LOADED, ({rules}) => resolve(rules))),
                 new Promise((_, reject) =>
                     setTimeout(() => reject(new Error('Timeout esperando rules:loaded')), 5000)
                 )
@@ -392,7 +392,7 @@ class CellularAutomaton {
     _handleCoreGeneration(stats) {
         this.generation = stats.generation;
         this.stateManager.recordPopulation(stats.population);
-        eventBus.emit('stats:updated', stats);
+        eventBus.emit(Events.STATS_UPDATED, stats);
     }
 
     _handleCoreCellChange(indices, count) {
@@ -418,19 +418,19 @@ class CellularAutomaton {
                 this.renderer.markAllDirty();
                 this.render();
                 this._initWorker();
-                eventBus.emit('automaton:ruleChanged', this.core.ruleEngine);
+                eventBus.emit(Events.AUTOMATON_RULE_CHANGED, this.core.ruleEngine);
                 break;
             case 'neighborhoodChange':
                 this.generation = 0;
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
                 this._initWorker();
-                eventBus.emit('automaton:neighborhoodChanged', event.info);
+                eventBus.emit(Events.AUTOMATON_NEIGHBORHOOD_CHANGED, event.info);
                 break;
             case 'randomize':
                 this.renderer.resetActivity();
                 this.renderer.markAllDirty();
-                eventBus.emit('automaton:randomized', event);
+                eventBus.emit(Events.AUTOMATON_RANDOMIZED, event);
                 break;
             case 'deserialize':
                 this.renderer.markAllDirty();
@@ -440,7 +440,7 @@ class CellularAutomaton {
     }
 
     _handleStateChange(event) {
-        eventBus.emit('state:changed', event);
+        eventBus.emit(Events.STATE_CHANGED, event);
         switch (event.type) {
             case 'clear':
             case 'randomize':
@@ -454,7 +454,7 @@ class CellularAutomaton {
     }
 
     _handleHistoryChange(stats) {
-        eventBus.emit('history:changed', stats);
+        eventBus.emit(Events.HISTORY_CHANGED, stats);
     }
 
     // =========================================
@@ -492,7 +492,7 @@ class CellularAutomaton {
 
         if (!desc.continued) {
             this.stop();
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
             if (desc.stopMessage) console.debug(desc.stopMessage);
         }
 
@@ -597,7 +597,7 @@ class CellularAutomaton {
             this._perf.lastSecond = tRender;
         }
 
-        if (this._perfVisible) eventBus.emit('perf:update', this._perf);
+        if (this._perfVisible) eventBus.emit(Events.PERF_UPDATE, this._perf);
 
         if (!this._lastDebugLog || tRender - this._lastDebugLog >= 2000) {
             this._lastDebugLog = tRender;
@@ -688,7 +688,7 @@ class CellularAutomaton {
 
         if (this.isRunning) {
             this.stop();
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
         }
 
         this.core.resize(w, h);
@@ -713,7 +713,7 @@ class CellularAutomaton {
             this._cleanupWorker();
         }
 
-        eventBus.emit('automaton:resized', {width: w, height: h});
+        eventBus.emit(Events.AUTOMATON_RESIZED, {width: w, height: h});
     }
 
     setCellSize(size) {
@@ -727,7 +727,7 @@ class CellularAutomaton {
 
         this.renderer.resetActivity();
         this.render();
-        eventBus.emit('automaton:zoomChanged', {zoom: newSize});
+        eventBus.emit(Events.AUTOMATON_ZOOM_CHANGED, {zoom: newSize});
     }
 
     setNeighborhoodType(type) {
@@ -748,7 +748,7 @@ class CellularAutomaton {
             ? populationOverride
             : this.core.getPopulation();
         const density = (population / (this.gridWidth * this.gridHeight) * 100).toFixed(1);
-        eventBus.emit('stats:updated', {generation: this.generation, population, density});
+        eventBus.emit(Events.STATS_UPDATED, {generation: this.generation, population, density});
     }
 
     checkLimits() {
@@ -761,7 +761,7 @@ class CellularAutomaton {
 
     setLimit(type, value) {
         this._limiter.setLimit(type, value);
-        eventBus.emit('automaton:limitChanged', {type, value});
+        eventBus.emit(Events.AUTOMATON_LIMIT_CHANGED, {type, value});
     }
 
     getCellFromMouse(e) {
@@ -771,21 +771,21 @@ class CellularAutomaton {
     toggleGrid() {
         const newState = this.renderer.toggleGrid();
         this.render();
-        eventBus.emit('automaton:gridToggled', {showGrid: newState});
+        eventBus.emit(Events.AUTOMATON_GRID_TOGGLED, {showGrid: newState});
         return newState;
     }
 
     toggleGridHighlights() {
         const newState = this.renderer.toggleGridHighlights();
         this.render();
-        eventBus.emit('automaton:gridHighlightsToggled', {showGridHighlights: newState});
+        eventBus.emit(Events.AUTOMATON_GRID_HIGHLIGHTS_TOGGLED, {showGridHighlights: newState});
         return newState;
     }
 
     setShowActivityEffect(enabled) {
         this.renderer.setConfig('showActivityEffect', enabled);
         this.render();
-        eventBus.emit('automaton:showActivityEffectChanged', {enabled});
+        eventBus.emit(Events.AUTOMATON_SHOW_ACTIVITY_EFFECT_CHANGED, {enabled});
         return enabled;
     }
 
@@ -824,7 +824,7 @@ class CellularAutomaton {
 
     setSpeed(level) {
         const result = this._loop.setSpeed(level);
-        eventBus.emit('automaton:speedChanged', {speed: result.interval, stepsPerFrame: result.stepsPerFrame});
+        eventBus.emit(Events.AUTOMATON_SPEED_CHANGED, {speed: result.interval, stepsPerFrame: result.stepsPerFrame});
         return result.interval;
     }
 
@@ -1025,7 +1025,7 @@ class CellularAutomaton {
         this._editor = null;
 
         this._isDestroyed = true;
-        eventBus.emit('automaton:destroyed');
+        eventBus.emit(Events.AUTOMATON_DESTROYED);
     }
 
     _addEventListener(target, event, handler, options) {

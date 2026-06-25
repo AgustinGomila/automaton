@@ -2,14 +2,14 @@
  * scripts/config/rules-loader.js
  *
  * Carga las reglas B/S desde assets/rules.json (con fallback embebido).
- * Emite 'rules:loaded' en el eventBus cuando las reglas están disponibles.
+ * Emite Events.RULES_LOADED en el eventBus cuando las reglas están disponibles.
  *
  * El dato canónico vive en la propiedad `.RULES` de la instancia exportada.
  * Los consumidores importan `rulesLoader` y acceden a `rulesLoader.RULES`
  * en lugar de usar `window.RULES`.
  */
 
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {getLexicographicSortKey} from './rules.js';
 
 class RulesLoader {
@@ -31,7 +31,7 @@ class RulesLoader {
             const data = await response.json();
             this.RULES = this._sortRulesLexicographically(data.rules || {});
             this.isLoaded = true;
-            eventBus.emit('rules:loaded', {rules: this.RULES});
+            eventBus.emit(Events.RULES_LOADED, {rules: this.RULES});
             return this.RULES;
         } catch (error) {
             console.warn('⚠️ Fetch fallido, usando embedded:', error.message);
@@ -71,7 +71,7 @@ class RulesLoader {
             }
         });
         this.isLoaded = true;
-        eventBus.emit('rules:loaded', {rules: this.RULES});
+        eventBus.emit(Events.RULES_LOADED, {rules: this.RULES});
         return this.RULES;
     }
 

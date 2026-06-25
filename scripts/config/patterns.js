@@ -11,7 +11,7 @@
  *   - Exporta PatternManager, rotateMatrix, getPatternWithRotation.
  */
 
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {t} from '../ui/i18n.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 import {rulesLoader} from './rules-loader.js';
@@ -132,10 +132,10 @@ class PatternManager {
         this.renderPatterns();
 
         this._cleanups.push(
-            eventBus.on('pattern:selected', () => this._updatePatternInfo()),
-            eventBus.on('pattern:updated', () => this._updatePatternInfo()),
-            eventBus.on('pattern:rotationChanged', () => this._updatePatternInfo()),
-            eventBus.on('automaton:filterChanged', ({mode, rule}) => this.setFilter(mode, rule))
+            eventBus.on(Events.PATTERN_SELECTED, () => this._updatePatternInfo()),
+            eventBus.on(Events.PATTERN_UPDATED, () => this._updatePatternInfo()),
+            eventBus.on(Events.PATTERN_ROTATION_CHANGED, () => this._updatePatternInfo()),
+            eventBus.on(Events.AUTOMATON_FILTER_CHANGED, ({mode, rule}) => this.setFilter(mode, rule))
         );
 
         // Actualizar el thumbnail del patrón "random" al mover el slider de densidad
@@ -297,7 +297,7 @@ class PatternManager {
                 this._patternState.key = key;
                 this._patternState.pattern = getPatternWithRotation(key, 0);
                 this._updatePatternInfo();
-                eventBus.emit('pattern:selected', {patternKey: key, pattern: patterns[key]});
+                eventBus.emit(Events.PATTERN_SELECTED, {patternKey: key, pattern: patterns[key]});
             });
 
             patternBtn.addEventListener('contextmenu', (e) => {
@@ -315,7 +315,7 @@ class PatternManager {
                         this._renderPatternToCanvas(ctx, rotatedPattern.pattern, pattern.color);
                     }
                     this._updatePatternInfo();
-                    eventBus.emit('pattern:updated', {pattern: this._patternState.pattern});
+                    eventBus.emit(Events.PATTERN_UPDATED, {pattern: this._patternState.pattern});
                 }
                 return false;
             });
@@ -336,7 +336,7 @@ class PatternManager {
             this._patternState.rotation = 0;
         }
         this._updatePatternInfo();
-        eventBus.emit('patterns:rendered');
+        eventBus.emit(Events.PATTERNS_RENDERED);
     }
 
     _getRandomDensity() {

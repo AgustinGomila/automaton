@@ -1,5 +1,5 @@
 import {AppConfig} from '../../utils/config.js';
-import {eventBus} from '../../infrastructure/event-bus.js';
+import {eventBus, Events} from '../../infrastructure/event-bus.js';
 import {TriangleGridManager} from '../triangle-grid-manager.js';
 import {TriangleWorkerManager} from '../../infrastructure/workers/triangle-worker-manager.js';
 
@@ -224,7 +224,7 @@ class TriangleEngine {
             const population = this.gridManager?.countPopulation() ?? 0;
             const totalCells = this.gridManager.width * this.gridManager.height;
             const density = (population / totalCells * 100).toFixed(1);
-            eventBus.emit('stats:updated', {generation: this.generation, population, density});
+            eventBus.emit(Events.STATS_UPDATED, {generation: this.generation, population, density});
         }
 
         // Si hubo un paso pendiente mientras el worker estaba ocupado, ejecutarlo ahora

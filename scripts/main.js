@@ -8,7 +8,7 @@
  *   - patternManager se pasa a través de CanvasController vía UIController.
  */
 
-import {eventBus} from './infrastructure/event-bus.js';
+import {eventBus, Events} from './infrastructure/event-bus.js';
 import {rulesLoader} from './config/rules-loader.js';
 import {patternLoader} from './config/pattern-loader.js';
 import {i18n} from './ui/i18n.js';
@@ -40,7 +40,7 @@ class Application {
             this.automaton = new CellularAutomaton();
 
             // 4. Esperar señal de listo usando eventBus.once()
-            await new Promise(resolve => eventBus.once('automaton:ready', resolve));
+            await new Promise(resolve => eventBus.once(Events.AUTOMATON_READY, resolve));
 
             // 5. Crear PatternManager
             this.patternManager = new PatternManager(this.automaton);
@@ -57,11 +57,11 @@ class Application {
             // 7. Cleanup global
             this._setupGlobalCleanup();
 
-            eventBus.emit('app:ready', {automaton: this.automaton, uiController: this.uiController});
+            eventBus.emit(Events.APP_READY, {automaton: this.automaton, uiController: this.uiController});
 
         } catch (error) {
             console.error('❌ Error en inicialización:', error);
-            eventBus.emit('app:error', error);
+            eventBus.emit(Events.APP_ERROR, error);
             this._emergencyCleanup();
         }
     }
@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.app = new Application();
 
     // ResponsiveController se inicializa una vez que app:ready lleva las dependencias
-    eventBus.on('app:ready', ({automaton, uiController}) => {
+    eventBus.on(Events.APP_READY, ({automaton, uiController}) => {
         // requestAnimationFrame garantiza que el layout esté pintado antes de medir
         // el área disponible para el canvas (necesario para el autofit inicial).
         requestAnimationFrame(() => {

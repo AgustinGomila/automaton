@@ -1,5 +1,5 @@
 import {AppConfig} from '../../utils/config.js';
-import {eventBus} from '../../infrastructure/event-bus.js';
+import {eventBus, Events} from '../../infrastructure/event-bus.js';
 import {HexGridManager} from '../hex-grid-manager.js';
 import {HexWorkerManager} from '../../infrastructure/workers/hex-worker-manager.js';
 
@@ -300,7 +300,7 @@ class HexEngine {
             const population = this.gridManager.countPopulation();
             const totalCells = this.gridManager.width * this.gridManager.height;
             const density = (population / totalCells * 100).toFixed(1);
-            eventBus.emit('stats:updated', {generation: this.generation, population, density});
+            eventBus.emit(Events.STATS_UPDATED, {generation: this.generation, population, density});
         }
 
         if (this._pendingStep) {

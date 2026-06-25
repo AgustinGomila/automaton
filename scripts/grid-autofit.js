@@ -7,11 +7,11 @@
  *
  * Cambios ESM:
  *   - AppConfig y eventBus importados; sin acceso a window.AppConfig / window.eventBus.
- *   - automaton recibido del payload de 'app:ready' en lugar de window.app.automaton.
+ *   - automaton recibido del payload de Events.APP_READY en lugar de window.app.automaton.
  */
 
 import {AppConfig} from './utils/config.js';
-import {eventBus} from './infrastructure/event-bus.js';
+import {eventBus, Events} from './infrastructure/event-bus.js';
 
 /** Margen de seguridad para no tocar el borde del scroll (px). */
 const MARGIN_PX = 6;
@@ -107,10 +107,10 @@ function _setEl(id, prop, value) {
 }
 
 /**
- * Punto de entrada. La app emite 'app:ready' con { automaton } en el payload.
+ * Punto de entrada. La app emite Events.APP_READY con { automaton } en el payload.
  * Se usa doble rAF para garantizar que el navegador completó layout + paint.
  */
-eventBus.on('app:ready', ({automaton}) => {
+eventBus.on(Events.APP_READY, ({automaton}) => {
     requestAnimationFrame(() => requestAnimationFrame(() => {
         if (!automaton) return;
         const area = measureAvailableArea();

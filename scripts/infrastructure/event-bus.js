@@ -72,5 +72,62 @@ class EventBus {
     }
 }
 
+/**
+ * Catálogo de nombres de evento.
+ *
+ * Centraliza los identificadores que antes vivían como strings sueltos en cada
+ * emit/on. Usar la constante (en vez del literal) hace que un typo sea un
+ * ReferenceError inmediato en vez de un listener que nunca dispara, y habilita
+ * "buscar referencias" en el IDE.
+ *
+ * Convención: NAMESPACE_ACCION → 'namespace:accion'.
+ */
+export const Events = Object.freeze({
+    // app
+    APP_ERROR: 'app:error',
+    APP_READY: 'app:ready',
+
+    // automaton
+    AUTOMATON_DESTROYED: 'automaton:destroyed',
+    AUTOMATON_ERROR: 'automaton:error',
+    AUTOMATON_FILTER_CHANGED: 'automaton:filterChanged',
+    AUTOMATON_GRID_HIGHLIGHTS_TOGGLED: 'automaton:gridHighlightsToggled',
+    AUTOMATON_GRID_TOGGLED: 'automaton:gridToggled',
+    AUTOMATON_LIMIT_CHANGED: 'automaton:limitChanged',
+    AUTOMATON_MODE_CHANGED: 'automaton:modeChanged',
+    AUTOMATON_NEIGHBORHOOD_CHANGED: 'automaton:neighborhoodChanged',
+    AUTOMATON_RADIUS_CHANGED: 'automaton:radiusChanged',
+    AUTOMATON_RANDOMIZED: 'automaton:randomized',
+    AUTOMATON_READY: 'automaton:ready',
+    AUTOMATON_RESIZED: 'automaton:resized',
+    AUTOMATON_RULE_CHANGED: 'automaton:ruleChanged',
+    AUTOMATON_RUNNING_CHANGED: 'automaton:runningChanged',
+    AUTOMATON_SHOW_ACTIVITY_EFFECT_CHANGED: 'automaton:showActivityEffectChanged',
+    AUTOMATON_SPEED_CHANGED: 'automaton:speedChanged',
+    AUTOMATON_WRAP_CHANGED: 'automaton:wrapChanged',
+    AUTOMATON_ZOOM_CHANGED: 'automaton:zoomChanged',
+
+    // history / state / stats / perf
+    HISTORY_CHANGED: 'history:changed',
+    STATE_CHANGED: 'state:changed',
+    STATS_UPDATED: 'stats:updated',
+    PERF_UPDATE: 'perf:update',
+
+    // pattern(s)
+    PATTERN_CLEARED: 'pattern:cleared',
+    PATTERN_ROTATION_CHANGED: 'pattern:rotationChanged',
+    PATTERN_SELECTED: 'pattern:selected',
+    PATTERN_UPDATED: 'pattern:updated',
+    PATTERNS_LOADED: 'patterns:loaded',
+    PATTERNS_RENDERED: 'patterns:rendered',
+
+    // rules
+    RULES_LOADED: 'rules:loaded',
+
+    // ui
+    UI_DESTROYED: 'ui:destroyed',
+    UI_READY: 'ui:ready',
+});
+
 /** Instancia singleton compartida por toda la aplicación. */
 export const eventBus = new EventBus();

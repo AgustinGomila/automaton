@@ -1,5 +1,5 @@
 import {t} from './i18n.js';
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 import {SpecialModeUI} from './special-mode-ui.js';
 import {parseCustomRule} from '../config/rules.js';
@@ -484,7 +484,7 @@ class SpecialModeController {
 
             this.automaton.langtonEngine.activate({rule, antCount});
             this._finalizeActivation(SpecialEngineManager.MODES.LANGTON, t('notif.langton.enabled'));
-            eventBus.emit('automaton:modeChanged', {mode: SpecialEngineManager.MODES.LANGTON});
+            eventBus.emit(Events.AUTOMATON_MODE_CHANGED, {mode: SpecialEngineManager.MODES.LANGTON});
         } catch (error) {
             console.error('Error cargando LangtonEngine:', error);
             this._onShowNotification(t('notif.langton.error'), 'warning', 3000);
@@ -493,7 +493,7 @@ class SpecialModeController {
 
     deactivateLangtonMode() {
         this._returnToStandard();
-        eventBus.emit('automaton:modeChanged', {mode: SpecialEngineManager.MODES.STANDARD});
+        eventBus.emit(Events.AUTOMATON_MODE_CHANGED, {mode: SpecialEngineManager.MODES.STANDARD});
     }
 
     async activateWireworldMode() {
@@ -505,7 +505,7 @@ class SpecialModeController {
 
             this.automaton.wireworldEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.WIREWORLD, t('notif.wireworld.enabled'));
-            eventBus.emit('automaton:modeChanged', {mode: SpecialEngineManager.MODES.WIREWORLD});
+            eventBus.emit(Events.AUTOMATON_MODE_CHANGED, {mode: SpecialEngineManager.MODES.WIREWORLD});
         } catch (error) {
             console.error('Error cargando WireWorldEngine:', error);
             this._onShowNotification(t('notif.wireworld.error'), 'warning', 3000);
@@ -514,7 +514,7 @@ class SpecialModeController {
 
     deactivateWireworldMode() {
         this._returnToStandard();
-        eventBus.emit('automaton:modeChanged', {mode: SpecialEngineManager.MODES.STANDARD});
+        eventBus.emit(Events.AUTOMATON_MODE_CHANGED, {mode: SpecialEngineManager.MODES.STANDARD});
     }
 
     /**
@@ -936,7 +936,7 @@ class SpecialModeController {
     _stopIfRunning() {
         if (this.automaton.isRunning) {
             this.automaton.stop();
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
         }
     }
 

@@ -1,5 +1,5 @@
 import {AppConfig} from '../utils/config.js';
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 
 /**
@@ -86,7 +86,7 @@ class GridController {
         this._bindPresetButtons();
 
         // eventBus.on() — no es un elemento DOM, no pasa por _addEventListener
-        eventBus.on('automaton:resized', ({width, height}) => {
+        eventBus.on(Events.AUTOMATON_RESIZED, ({width, height}) => {
             const wSlider = document.getElementById('gridWidth');
             const hSlider = document.getElementById('gridHeight');
             const wDisplay = document.getElementById('gridWidthValue');
@@ -319,7 +319,7 @@ class GridController {
 
         if (this.automaton.isRunning) {
             this._stopAutomaton();
-            eventBus.emit('automaton:runningChanged', {isRunning: false});
+            eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
             this._syncPlayButton();
         }
 

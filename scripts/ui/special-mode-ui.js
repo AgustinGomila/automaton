@@ -1,4 +1,4 @@
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 
 /**
@@ -98,13 +98,13 @@ class SpecialModeUI {
 
         // Evento de filtro (PatternManager lo usa para filtrar patrones)
         if (isGenerations) {
-            eventBus.emit('automaton:filterChanged', {
+            eventBus.emit(Events.AUTOMATON_FILTER_CHANGED, {
                 mode,
                 rule: undefined,
                 skipStandardRuleUpdate: true
             });
         } else {
-            eventBus.emit('automaton:filterChanged', {mode, rule: null});
+            eventBus.emit(Events.AUTOMATON_FILTER_CHANGED, {mode, rule: null});
         }
 
         // Acordeón "rules": visible en Standard/Generations, oculto en modos especiales

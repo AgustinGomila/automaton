@@ -11,7 +11,7 @@
  * Cambios ESM: eventBus y SpecialEngineManager importados; sin window.*.
  */
 
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 
 class EditCoordinator {
@@ -131,7 +131,7 @@ class EditCoordinator {
 
     clear() {
         const wasRunning = this._haltForEdit();
-        if (wasRunning) eventBus.emit('automaton:runningChanged', {isRunning: false});
+        if (wasRunning) eventBus.emit(Events.AUTOMATON_RUNNING_CHANGED, {isRunning: false});
 
         this._clearBaseGrid();
         this._clearSpecialEngine();
@@ -319,7 +319,7 @@ class EditCoordinator {
                 });
                 this._a.updateStats();
                 this._a.render();
-                eventBus.emit('automaton:ruleChanged');
+                eventBus.emit(Events.AUTOMATON_RULE_CHANGED);
 
             } else if (specialMode === SpecialEngineManager.MODES.RD2D && rd2dEngine?.isActive) {
                 rd2dEngine.syncFromGrid();

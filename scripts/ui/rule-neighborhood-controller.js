@@ -1,5 +1,5 @@
 import {t} from './i18n.js';
-import {eventBus} from '../infrastructure/event-bus.js';
+import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {parseCustomRule} from '../config/rules.js';
 import {rulesLoader} from '../config/rules-loader.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
@@ -94,7 +94,7 @@ class RuleController {
 
                 this.automaton.setRule(rule.birth, rule.survival);
                 this._onUpdateHeader();
-                eventBus.emit('automaton:filterChanged', {
+                eventBus.emit(Events.AUTOMATON_FILTER_CHANGED, {
                     mode: SpecialEngineManager.MODES.STANDARD,
                     rule: rule.ruleString
                 });
@@ -133,7 +133,7 @@ class RuleController {
                 selectedOption.textContent = `${t('config.rule.custom')} (${rulesLoader.RULES.custom.ruleString})`;
 
                 this._onUpdateRuleInfo(rulesLoader.RULES.custom);
-                eventBus.emit('automaton:filterChanged', {
+                eventBus.emit(Events.AUTOMATON_FILTER_CHANGED, {
                     mode: SpecialEngineManager.MODES.STANDARD,
                     rule: rulesLoader.RULES.custom.ruleString
                 });
