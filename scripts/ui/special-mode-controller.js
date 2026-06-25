@@ -1,6 +1,7 @@
 import {t} from './i18n.js';
 import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {NeighborhoodType} from '../core/neighborhood-calculator.js';
 import {SpecialModeUI} from './special-mode-ui.js';
 import {parseCustomRule} from '../config/rules.js';
 
@@ -392,7 +393,7 @@ class SpecialModeController {
             await this._prepareEngine(SpecialEngineManager.MODES.RD2D);
 
             this._ui.toggleRD2DControls(true);
-            this._ui.setModeSelectors(true, 'neumann');
+            this._ui.setModeSelectors(true, NeighborhoodType.NEUMANN);
 
             this.automaton.rd2dEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.RD2D, t('notif.rd2d.enabled'));
@@ -501,7 +502,7 @@ class SpecialModeController {
             await this._prepareEngine(SpecialEngineManager.MODES.WIREWORLD);
 
             this._ui.toggleWireworldControls(true);
-            this._ui.setModeSelectors(true, 'moore');
+            this._ui.setModeSelectors(true, NeighborhoodType.MOORE);
 
             this.automaton.wireworldEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.WIREWORLD, t('notif.wireworld.enabled'));
@@ -571,7 +572,7 @@ class SpecialModeController {
         try {
             await this._prepareEngine(SpecialEngineManager.MODES.ULAM_WARBURTON);
 
-            this._ui.setModeSelectors(true, 'neumann');
+            this._ui.setModeSelectors(true, NeighborhoodType.NEUMANN);
 
             this.automaton.uwEngine.activate();
             this._finalizeActivation(SpecialEngineManager.MODES.ULAM_WARBURTON, t('notif.uw.enabled'));
@@ -763,7 +764,7 @@ class SpecialModeController {
 
         // Restaurar selectores compartidos al estado neutro.
         // El modo entrante los reconfigurará según sus necesidades.
-        this._ui.setModeSelectors(false, 'moore');
+        this._ui.setModeSelectors(false, NeighborhoodType.MOORE);
     }
 
     /**

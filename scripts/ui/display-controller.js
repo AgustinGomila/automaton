@@ -1,6 +1,7 @@
 import {t} from './i18n.js';
 import {rulesLoader} from '../config/rules-loader.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {NeighborhoodType} from '../core/neighborhood-calculator.js';
 
 /**
  * DisplayController — Gestiona todas las actualizaciones del DOM informativo.
@@ -116,7 +117,7 @@ class DisplayController {
                     <p class="notation">${t('header.rules.notation')} <span class="highlight">${gi.ruleString}</span></p>
                 `);
                 this._setNeighborhoodText(t('header.neighborhood', {
-                    type: this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann',
+                    type: this.automaton.neighborhoodType === NeighborhoodType.MOORE ? 'Moore' : 'Neumann',
                     radius: this.automaton.neighborhoodRadius,
                     wrap
                 }));
@@ -160,7 +161,7 @@ class DisplayController {
         this._setH1('fas fa-cogs', t('header.title', {ruleName: rule.name}));
 
         const nType = this.automaton.neighborhoodType;
-        const type = nType === 'moore' ? 'Moore' : nType === 'neumann' ? 'Neumann' : t('config.neighborhood.custom.short');
+        const type = nType === NeighborhoodType.MOORE ? 'Moore' : nType === NeighborhoodType.NEUMANN ? 'Neumann' : t('config.neighborhood.custom.short');
         const radius = this.automaton.neighborhoodRadius;
         const wrap = this._wrapSymbol();
         this._setNeighborhoodText(t('header.neighborhood', {type, radius, wrap}));
@@ -184,11 +185,11 @@ class DisplayController {
         const mode = this.automaton.specialMode;
         if (templates[mode]) {
             el.innerHTML = templates[mode];
-        } else if (this.automaton.neighborhoodType === 'custom') {
+        } else if (this.automaton.neighborhoodType === NeighborhoodType.CUSTOM) {
             const n = this.automaton.core?.neighborhood?.getInfo()?.neighborCount ?? 0;
             el.innerHTML = `<i class="fas fa-th"></i> ${t('header.neighborhood.custom', {n, wrap})}`;
         } else {
-            const type = this.automaton.neighborhoodType === 'moore' ? 'Moore' : 'Neumann';
+            const type = this.automaton.neighborhoodType === NeighborhoodType.MOORE ? 'Moore' : 'Neumann';
             const radius = this.automaton.neighborhoodRadius;
             el.innerHTML = `<i class="fas fa-crosshairs"></i> ${t('header.neighborhood', {type, radius, wrap})}`;
         }

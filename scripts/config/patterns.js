@@ -14,6 +14,7 @@
 import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {t} from '../ui/i18n.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {NeighborhoodType} from '../core/neighborhood-calculator.js';
 import {rulesLoader} from './rules-loader.js';
 import {patternLoader} from './pattern-loader.js';
 
@@ -501,7 +502,7 @@ class PatternManager {
             for (let i = -radius; i <= radius; i++) {
                 for (let j = -radius; j <= radius; j++) {
                     if (i === 0 && j === 0) continue;
-                    if (type === 'neumann' && Math.abs(i) + Math.abs(j) > radius) continue;
+                    if (type === NeighborhoodType.NEUMANN && Math.abs(i) + Math.abs(j) > radius) continue;
                     neighbors.push({x: (cx + i + gw) % gw, y: (cy + j + gh) % gh});
                 }
             }

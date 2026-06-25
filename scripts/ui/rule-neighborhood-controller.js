@@ -3,6 +3,7 @@ import {eventBus, Events} from '../infrastructure/event-bus.js';
 import {parseCustomRule} from '../config/rules.js';
 import {rulesLoader} from '../config/rules-loader.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {NeighborhoodType} from '../core/neighborhood-calculator.js';
 
 /**
  * RuleController — Gestión del selector de reglas B/S y la regla custom.
@@ -193,7 +194,7 @@ class NeighborhoodController {
     }
 
     changeNeighborhoodType(type) {
-        if (type === 'custom') {
+        if (type === NeighborhoodType.CUSTOM) {
             this._applyCustomNeighborhood();
         } else {
             this.automaton.setNeighborhoodType(type);
@@ -246,13 +247,13 @@ class NeighborhoodController {
         const currentType = this.automaton.neighborhoodType;
         let activeSet;
 
-        if (currentType === 'moore') {
+        if (currentType === NeighborhoodType.MOORE) {
             activeSet = new Set();
             for (let dx = -radius; dx <= radius; dx++)
                 for (let dy = -radius; dy <= radius; dy++)
                     if (dx !== 0 || dy !== 0) activeSet.add(`${dx},${dy}`);
 
-        } else if (currentType === 'neumann') {
+        } else if (currentType === NeighborhoodType.NEUMANN) {
             activeSet = new Set();
             for (let dx = -radius; dx <= radius; dx++)
                 for (let dy = -radius; dy <= radius; dy++)
@@ -318,7 +319,7 @@ class NeighborhoodController {
         const radius = this.automaton.neighborhoodRadius;
         const detected = this._detectPresetType(radius);
 
-        if (detected === 'moore' || detected === 'neumann') {
+        if (detected === NeighborhoodType.MOORE || detected === NeighborhoodType.NEUMANN) {
             this.automaton.setNeighborhoodType(detected);
         } else {
             this._applyCustomNeighborhood();
@@ -333,7 +334,7 @@ class NeighborhoodController {
 
     _detectPresetType(radius) {
         const container = document.getElementById('neighborhoodGrid');
-        if (!container) return 'custom';
+        if (!container) return NeighborhoodType.CUSTOM;
 
         const active = new Set();
         container.querySelectorAll('.neighborhood-cell:not(.center)').forEach(cell => {
@@ -352,9 +353,9 @@ class NeighborhoodController {
         }
 
         const eq = (a, b) => a.size === b.size && [...a].every(k => b.has(k));
-        if (eq(active, mooreSet)) return 'moore';
-        if (eq(active, neumannSet)) return 'neumann';
-        return 'custom';
+        if (eq(active, mooreSet)) return NeighborhoodType.MOORE;
+        if (eq(active, neumannSet)) return NeighborhoodType.NEUMANN;
+        return NeighborhoodType.CUSTOM;
     }
 
     _applyCustomNeighborhood() {

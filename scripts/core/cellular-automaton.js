@@ -1,6 +1,6 @@
 import {AppConfig} from '../utils/config.js';
 import {GridManager} from './grid-manager.js';
-import {NeighborhoodCalculator} from './neighborhood-calculator.js';
+import {NeighborhoodCalculator, NeighborhoodType} from './neighborhood-calculator.js';
 import {RuleEngine} from './engines/rule-engine.js';
 
 /**
@@ -43,7 +43,7 @@ class CellularAutomatonCore {
         this.gridManager = new GridManager(this.width, this.height);
 
         this.neighborhood = new NeighborhoodCalculator({
-            type: options.neighborhoodType || 'moore',
+            type: options.neighborhoodType || NeighborhoodType.MOORE,
             radius: options.neighborhoodRadius || 1,
             // Acepta wrapMode (nuevo) o wrapEdges boolean (backward-compat)
             ...(options.wrapMode !== undefined

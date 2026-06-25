@@ -17,6 +17,16 @@ import {AppConfig} from '../utils/config.js';
  * Soporta grids rectangulares: gridWidth para el eje X, gridHeight para Y.
  */
 
+/**
+ * Tipos de vecindad. Compartido por el core (este calculador, cellular-automaton),
+ * la app (automaton) y la UI (display/rule-neighborhood/special-mode controllers).
+ */
+export const NeighborhoodType = Object.freeze({
+    MOORE: 'moore',
+    NEUMANN: 'neumann',
+    CUSTOM: 'custom',
+});
+
 /** Valores válidos de wrapMode. */
 const WRAP_MODES = Object.freeze(['both', 'horizontal', 'vertical', 'none']);
 
@@ -31,7 +41,7 @@ class NeighborhoodCalculator {
      * @param {number}  options.gridHeight    — alto del grid
      */
     constructor(options = {}) {
-        this.type = options.type || 'moore';
+        this.type = options.type || NeighborhoodType.MOORE;
         this.radius = Math.max(1, Math.min(options.radius || AppConfig.NEIGHBORHOOD.MIN_RADIUS, AppConfig.NEIGHBORHOOD.MAX_RADIUS));
 
         this.gridWidth = options.gridWidth || AppConfig.GRID.DEFAULT_WIDTH;
@@ -44,7 +54,7 @@ class NeighborhoodCalculator {
 
     /** true cuando se puede usar el fastpath Moore radio-1 de RuleEngine. */
     get isFastPath() {
-        return this.type === 'moore' && this.radius === 1;
+        return this.type === NeighborhoodType.MOORE && this.radius === 1;
     }
 
     /** Copia de los offsets activos. */
@@ -84,7 +94,7 @@ class NeighborhoodCalculator {
         for (let dx = -this.radius; dx <= this.radius; dx++) {
             for (let dy = -this.radius; dy <= this.radius; dy++) {
                 if (dx === 0 && dy === 0) continue;
-                if (this.type === 'neumann' && Math.abs(dx) + Math.abs(dy) > this.radius) continue;
+                if (this.type === NeighborhoodType.NEUMANN && Math.abs(dx) + Math.abs(dy) > this.radius) continue;
                 offsets.push({dx, dy});
             }
         }
@@ -109,7 +119,7 @@ class NeighborhoodCalculator {
 
         if (options.offsets !== undefined) {
             this._offsets = options.offsets.map(o => ({dx: o.dx | 0, dy: o.dy | 0}));
-            this.type = 'custom';
+            this.type = NeighborhoodType.CUSTOM;
             const newMode = NeighborhoodCalculator.resolveWrapMode(options);
             if (options.wrapMode !== undefined || options.wrapEdges !== undefined) this.wrapMode = newMode;
             return;
@@ -121,7 +131,7 @@ class NeighborhoodCalculator {
             this.wrapMode = NeighborhoodCalculator.resolveWrapMode(options);
         }
 
-        if (this.type !== 'custom') this._offsets = this._computeOffsets();
+        if (this.type !== NeighborhoodType.CUSTOM) this._offsets = this._computeOffsets();
     }
 
     countNeighbors(x, y, getCell) {

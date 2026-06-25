@@ -13,6 +13,7 @@ import {AppConfig} from '../utils/config.js';
 import {eventBus, Events} from '../infrastructure/event-bus.js';
 
 import {CellularAutomatonCore, CoreStateChange} from '../core/cellular-automaton.js';
+import {NeighborhoodType} from '../core/neighborhood-calculator.js';
 import {GridRenderer} from '../rendering/grid-renderer.js';
 import {GridWorkerManager} from '../infrastructure/workers/grid-worker-manager.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
@@ -39,7 +40,7 @@ class CellularAutomaton {
             width: this.gridWidth,
             height: this.gridHeight,
             rule: {birth: [3], survival: [2, 3]},
-            neighborhoodType: 'moore',
+            neighborhoodType: NeighborhoodType.MOORE,
             neighborhoodRadius: AppConfig.NEIGHBORHOOD.DEFAULT_RADIUS,
             wrapEdges: true
         });
@@ -200,7 +201,7 @@ class CellularAutomaton {
     }
 
     get neighborhoodType() {
-        return this.core?.neighborhood?.type || 'moore';
+        return this.core?.neighborhood?.type || NeighborhoodType.MOORE;
     }
 
     get neighborhoodRadius() {
