@@ -61,7 +61,6 @@ class Application {
 
         } catch (error) {
             console.error('❌ Error en inicialización:', error);
-            eventBus.emit(Events.APP_ERROR, error);
             this._emergencyCleanup();
         }
     }

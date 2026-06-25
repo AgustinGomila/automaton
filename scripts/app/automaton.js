@@ -51,8 +51,7 @@ class CellularAutomaton {
             maxPopulationHistory: AppConfig.STATE.MAX_POPULATION_HISTORY
         });
         this.stateManager.on({
-            onStateChange: (event) => this._handleStateChange(event),
-            onHistoryChange: (stats) => this._handleHistoryChange(stats)
+            onStateChange: (event) => this._handleStateChange(event)
         });
         this.stateManager.startTracking();
 
@@ -153,7 +152,6 @@ class CellularAutomaton {
 
         this._init().catch(err => {
             console.error('Error inicializando autómata:', err);
-            eventBus.emit(Events.AUTOMATON_ERROR, err);
         });
     }
 
@@ -448,10 +446,6 @@ class CellularAutomaton {
         }
     }
 
-    _handleHistoryChange(stats) {
-        eventBus.emit(Events.HISTORY_CHANGED, stats);
-    }
-
     // =========================================
     // WORKERS
     // =========================================
@@ -722,7 +716,6 @@ class CellularAutomaton {
 
         this.renderer.resetActivity();
         this.render();
-        eventBus.emit(Events.AUTOMATON_ZOOM_CHANGED, {zoom: newSize});
     }
 
     setNeighborhoodType(type) {
@@ -756,7 +749,6 @@ class CellularAutomaton {
 
     setLimit(type, value) {
         this._limiter.setLimit(type, value);
-        eventBus.emit(Events.AUTOMATON_LIMIT_CHANGED, {type, value});
     }
 
     getCellFromMouse(e) {
@@ -766,21 +758,18 @@ class CellularAutomaton {
     toggleGrid() {
         const newState = this.renderer.toggleGrid();
         this.render();
-        eventBus.emit(Events.AUTOMATON_GRID_TOGGLED, {showGrid: newState});
         return newState;
     }
 
     toggleGridHighlights() {
         const newState = this.renderer.toggleGridHighlights();
         this.render();
-        eventBus.emit(Events.AUTOMATON_GRID_HIGHLIGHTS_TOGGLED, {showGridHighlights: newState});
         return newState;
     }
 
     setShowActivityEffect(enabled) {
         this.renderer.setConfig('showActivityEffect', enabled);
         this.render();
-        eventBus.emit(Events.AUTOMATON_SHOW_ACTIVITY_EFFECT_CHANGED, {enabled});
         return enabled;
     }
 
@@ -819,7 +808,6 @@ class CellularAutomaton {
 
     setSpeed(level) {
         const result = this._loop.setSpeed(level);
-        eventBus.emit(Events.AUTOMATON_SPEED_CHANGED, {speed: result.interval, stepsPerFrame: result.stepsPerFrame});
         return result.interval;
     }
 
@@ -1020,7 +1008,6 @@ class CellularAutomaton {
         this._editor = null;
 
         this._isDestroyed = true;
-        eventBus.emit(Events.AUTOMATON_DESTROYED);
     }
 
     _addEventListener(target, event, handler, options) {

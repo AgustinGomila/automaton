@@ -209,8 +209,6 @@ class UIController {
 
         eventBus.on(Events.AUTOMATON_RUNNING_CHANGED, () => this._syncPlayButtonState());
         eventBus.on(Events.APP_READY, () => setTimeout(() => this._gridController.initGridRectUI(), 60));
-
-        eventBus.emit(Events.UI_READY);
     }
 
     // =========================================
@@ -243,8 +241,6 @@ class UIController {
         this._specialModeController = null;
         this._displayController?.destroy();
         this._displayController = null;
-
-        eventBus.emit(Events.UI_DESTROYED);
     }
 
     _addEventListener(target, event, handler, options) {
@@ -264,13 +260,6 @@ class UIController {
                 weakThis.deref()?._displayController?.updateHeaderInfo();
             }),
             eventBus.on(Events.AUTOMATON_NEIGHBORHOOD_CHANGED, () => {
-                const ui = weakThis.deref();
-                if (ui) {
-                    ui._displayController?.updateHeaderInfo();
-                    ui._displayController?.updateNeighborhoodInfo();
-                }
-            }),
-            eventBus.on(Events.AUTOMATON_RADIUS_CHANGED, () => {
                 const ui = weakThis.deref();
                 if (ui) {
                     ui._displayController?.updateHeaderInfo();

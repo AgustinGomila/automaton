@@ -84,30 +84,19 @@ class EventBus {
  */
 export const Events = Object.freeze({
     // app
-    APP_ERROR: 'app:error',
     APP_READY: 'app:ready',
 
     // automaton
-    AUTOMATON_DESTROYED: 'automaton:destroyed',
-    AUTOMATON_ERROR: 'automaton:error',
     AUTOMATON_FILTER_CHANGED: 'automaton:filterChanged',
-    AUTOMATON_GRID_HIGHLIGHTS_TOGGLED: 'automaton:gridHighlightsToggled',
-    AUTOMATON_GRID_TOGGLED: 'automaton:gridToggled',
-    AUTOMATON_LIMIT_CHANGED: 'automaton:limitChanged',
     AUTOMATON_MODE_CHANGED: 'automaton:modeChanged',
     AUTOMATON_NEIGHBORHOOD_CHANGED: 'automaton:neighborhoodChanged',
-    AUTOMATON_RADIUS_CHANGED: 'automaton:radiusChanged',
     AUTOMATON_READY: 'automaton:ready',
     AUTOMATON_RESIZED: 'automaton:resized',
     AUTOMATON_RULE_CHANGED: 'automaton:ruleChanged',
     AUTOMATON_RUNNING_CHANGED: 'automaton:runningChanged',
-    AUTOMATON_SHOW_ACTIVITY_EFFECT_CHANGED: 'automaton:showActivityEffectChanged',
-    AUTOMATON_SPEED_CHANGED: 'automaton:speedChanged',
     AUTOMATON_WRAP_CHANGED: 'automaton:wrapChanged',
-    AUTOMATON_ZOOM_CHANGED: 'automaton:zoomChanged',
 
-    // history / stats / perf
-    HISTORY_CHANGED: 'history:changed',
+    // stats / perf
     STATS_UPDATED: 'stats:updated',
     PERF_UPDATE: 'perf:update',
 
@@ -116,15 +105,10 @@ export const Events = Object.freeze({
     PATTERN_ROTATION_CHANGED: 'pattern:rotationChanged',
     PATTERN_SELECTED: 'pattern:selected',
     PATTERN_UPDATED: 'pattern:updated',
-    PATTERNS_LOADED: 'patterns:loaded',
     PATTERNS_RENDERED: 'patterns:rendered',
 
     // rules
     RULES_LOADED: 'rules:loaded',
-
-    // ui
-    UI_DESTROYED: 'ui:destroyed',
-    UI_READY: 'ui:ready',
 });
 
 /** Instancia singleton compartida por toda la aplicación. */
