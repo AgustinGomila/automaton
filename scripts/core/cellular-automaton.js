@@ -44,6 +44,13 @@ class CellularAutomatonCore {
 
         this.generation = 0;
 
+        // Población cacheada — evita la 2ª pasada N² de countPopulation() en cada
+        // step(). step() la mantiene incrementalmente (+= births - deaths); cualquier
+        // mutación del grid fuera de step() invalida el baseline para forzar un
+        // recuento único en la próxima lectura.
+        this._population = 0;
+        this._populationValid = false;
+
         this._callbacks = {
             onGeneration: null,
             onCellChange: null,
@@ -91,7 +98,17 @@ class CellularAutomatonCore {
             this._callbacks.onCellChange(result.changedCells, result.changedCount);
         }
 
-        const population = this.gridManager.countPopulation();
+        // Población incremental: con baseline válido basta sumar el delta del paso
+        // (births - deaths). Si es inválido, el recuento post-swap ya es la población
+        // de la nueva generación, así que NO se le suma el delta. Elimina el
+        // full-scan por generación cuando el baseline se mantiene válido.
+        if (this._populationValid) {
+            this._population += result.generationStats.births - result.generationStats.deaths;
+        } else {
+            this._population = this.gridManager.countPopulation();
+            this._populationValid = true;
+        }
+        const population = this._population;
         const stats = {
             generation: this.generation,
             population,
@@ -120,10 +137,40 @@ class CellularAutomatonCore {
 
     setCell(x, y, state) {
         const changed = this.gridManager.setCell(x, y, state);
-        if (changed && this._callbacks.onCellChange) {
-            this._callbacks.onCellChange([{x, y, from: state ? 0 : 1, to: state}]);
+        if (changed) {
+            // El grid cambió fuera de step(): invalidar el baseline de población.
+            this._populationValid = false;
+            if (this._callbacks.onCellChange) {
+                this._callbacks.onCellChange([{x, y, from: state ? 0 : 1, to: state}]);
+            }
         }
         return changed;
+    }
+
+    // =========================================
+    // POBLACIÓN CACHEADA
+    // =========================================
+
+    /**
+     * Marca el baseline de población como inválido. Lo llama el coordinador
+     * (vía automaton.updateStats) tras cualquier edición que mute el grid sin
+     * pasar por step(): randomize, paste, import, shift, clear de área, etc.
+     */
+    invalidatePopulation() {
+        this._populationValid = false;
+    }
+
+    /**
+     * Devuelve la población viva, recontando una sola vez si el baseline es
+     * inválido y cacheando el resultado. O(1) mientras el baseline siga válido.
+     * @returns {number}
+     */
+    getPopulation() {
+        if (!this._populationValid) {
+            this._population = this.gridManager.countPopulation();
+            this._populationValid = true;
+        }
+        return this._population;
     }
 
     // =========================================
@@ -133,6 +180,8 @@ class CellularAutomatonCore {
     clear() {
         this.gridManager.clear();
         this.generation = 0;
+        this._population = 0;
+        this._populationValid = true;
         this._callbacks.onStateChange?.({type: 'clear'});
     }
 
@@ -144,6 +193,7 @@ class CellularAutomatonCore {
     resize(newWidth, newHeight = newWidth) {
         const result = this.gridManager.resize(newWidth, newHeight);
         if (result.wasResized) {
+            this._populationValid = false;
             this.width = this.gridManager.width;
             this.height = this.gridManager.height;
             this.neighborhood.configure({
@@ -204,6 +254,7 @@ class CellularAutomatonCore {
 
     deserialize(data) {
         if (data.grid) this.gridManager.deserialize(data.grid);
+        this._populationValid = false;
         if (data.generation !== undefined) this.generation = data.generation;
         if (data.rule) this.ruleEngine.setRule(data.rule);
         if (data.neighborhood) this.neighborhood.configure(data.neighborhood);

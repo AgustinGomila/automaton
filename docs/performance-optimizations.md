@@ -65,17 +65,56 @@ de GC en cada frame.
 | gen/s    | ~392           | ~509          | **+30%** |
 
 > Nota: estos tiempos de *step* aún incluyen la segunda pasada N² de `countPopulation()`
-> (ver Pendientes #4), por lo que la mejora real del bucle de regla es mayor que el %
+> (resuelto en #4), por lo que la mejora real del bucle de regla es mayor que el %
 > mostrado — el costo fijo del recuento de población diluye el porcentaje.
+
+### 2026-06 — Tier 2 #4: `cellular-automaton.js` — población incremental
+
+`core.step()` llamaba a `gridManager.countPopulation()` (una pasada N² completa) en
+**cada** generación, además del N² del propio bucle de regla — duplicando el trabajo.
+
+**Cambio:**
+- El core mantiene `_population` con un flag `_populationValid`. `step()` con baseline
+  válido solo suma el delta `births - deaths` (que el bucle de regla ya calcula); si el
+  baseline es inválido, el recuento post-swap es directamente la población nueva.
+- `invalidatePopulation()` / `getPopulation()` (recuento perezoso y cacheado).
+- Invalidación en `setCell`, `resize`, `deserialize`; `clear` fija población 0.
+- `automaton.updateStats()` invalida el baseline — es el único lector de población
+  *fuera* del hot-loop estándar (ediciones, resize, modos especiales), así que toda
+  mutación del grid fuerza un recuento único en el siguiente step. `checkLimits()` usa
+  `core.getPopulation()` cacheado. El *shift* toroidal preserva la población, no invalida.
+
+**Correctitud:** verificada comparando la población incremental contra
+`countPopulation()` real en cada step (100 steps, cero desajustes).
+
+**Resultado (Conway 400×400, sobre el motor ya con LUT):**
+
+| Métrica  | Antes (#1) | Después (#4) | Mejora   |
+|----------|------------|--------------|----------|
+| step avg | ~1.96 ms   | ~1.83 ms     | **−7%**  |
+| gen/s    | ~494       | ~547         | **+11%** |
+
+> Acumulado vs. la versión original con `Set`: **~322 → ~547 gen/s (+70%)**.
 
 ---
 
+## Evaluadas y descartadas
+
+### 2026-06 — #3: `hex-engine.js` — `push({x,y})` → índice empaquetado
+
+**Hipótesis:** asignar un objeto `{x, y}` por celda cambiada en `_stepSync` generaba
+presión de GC; empaquetar a entero `(c<<16)|r` la eliminaría.
+
+**Resultado:** **sin mejora medible.** Benchmark Hex B2/S1234 400×400 (200 steps, misma
+semilla, población final idéntica 93646): empaquetado ~582–602 gen/s vs. objetos
+~573–603 gen/s — iguales dentro del ruido. V8 maneja los objetos efímeros `{x, y}` en la
+nursery sin costo apreciable, y el cómputo de los 6 vecinos domina el step. Además, en la
+app real los grids hex ≥100×100 usan el Worker, por lo que el path síncrono ni siquiera
+corre para grids grandes. **Revertido** — el cambio añadía churn (hex-engine + hex-renderer)
+sin beneficio. Confirma el valor del criterio "solo se conserva lo que mejora el benchmark".
+
 ## Pendientes (plan priorizado)
 
-- **Tier 2 #4** — `cellular-automaton.js`: población incremental (`pop += births - deaths`)
-  para eliminar la 2ª pasada N² de `countPopulation()` en cada step. *(Siguiente)*
-- **Tier 1 #3** — `hex-engine.js`: `_changedCells.push({x, y})` (un objeto por celda) →
-  buffer plano con índice empaquetado `(x<<16)|y`.
 - **Tier 3** — `triangle-engine._stepSync`: reemplazar `% w`/`% h` por ternarios en el
   path wrap; `_changedCells` a `Uint32Array` preasignado en Generations/Hex;
   `langton._DIRS` de objetos `{dx,dy}` a `Int8Array`.
