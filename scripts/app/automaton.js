@@ -12,13 +12,13 @@
 import {AppConfig} from '../utils/config.js';
 import {eventBus, Events} from '../infrastructure/event-bus.js';
 
-import {CellularAutomatonCore} from '../core/cellular-automaton.js';
+import {CellularAutomatonCore, CoreStateChange} from '../core/cellular-automaton.js';
 import {GridRenderer} from '../rendering/grid-renderer.js';
 import {GridWorkerManager} from '../infrastructure/workers/grid-worker-manager.js';
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 import {AnimationLoop} from './automaton-loop.js';
 import {SimulationLimiter} from './simulator-limiter.js';
-import {StateManager} from './state-manager.js';
+import {StateManager, StateChange} from './state-manager.js';
 import {EditCoordinator} from './edit-coordinator.js';
 import {rulesLoader} from '../config/rules-loader.js';
 
@@ -403,16 +403,16 @@ class CellularAutomaton {
 
     _handleCoreStateChange(event) {
         switch (event.type) {
-            case 'clear':
+            case CoreStateChange.CLEAR:
                 this.renderer.resetActivity();
                 this.renderer.markAllDirty();
                 break;
-            case 'resize':
+            case CoreStateChange.RESIZE:
                 this.gridWidth = event.width ?? this.gridWidth;
                 this.gridHeight = event.height ?? this.gridHeight;
                 this.renderer.markAllDirty();
                 break;
-            case 'ruleChange':
+            case CoreStateChange.RULE_CHANGE:
                 this.generation = 0;
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
@@ -420,14 +420,14 @@ class CellularAutomaton {
                 this._initWorker();
                 eventBus.emit(Events.AUTOMATON_RULE_CHANGED, this.core.ruleEngine);
                 break;
-            case 'neighborhoodChange':
+            case CoreStateChange.NEIGHBORHOOD_CHANGE:
                 this.generation = 0;
                 this.isLimitReached = false;
                 this.renderer.markAllDirty();
                 this._initWorker();
                 eventBus.emit(Events.AUTOMATON_NEIGHBORHOOD_CHANGED, event.info);
                 break;
-            case 'deserialize':
+            case CoreStateChange.DESERIALIZE:
                 this.renderer.markAllDirty();
                 this.updateStats();
                 break;
@@ -436,10 +436,10 @@ class CellularAutomaton {
 
     _handleStateChange(event) {
         switch (event.type) {
-            case 'clear':
-            case 'randomize':
-            case 'import':
-            case 'paste':
+            case StateChange.CLEAR:
+            case StateChange.RANDOMIZE:
+            case StateChange.IMPORT:
+            case StateChange.PASTE:
                 this.renderer.markAllDirty();
                 this.updateStats();
                 this.render();

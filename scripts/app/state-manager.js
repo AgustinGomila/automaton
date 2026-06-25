@@ -2,6 +2,22 @@ import {AppConfig} from '../utils/config.js';
 import {CircularArray} from '../utils/circular-array.js';
 
 /**
+ * Tipos de cambio de estado que StateManager notifica vía `onStateChange`.
+ * Compartir la constante entre productor (aquí) y consumidor
+ * (`automaton._handleStateChange`) hace que un typo sea un error de referencia
+ * en vez de un caso del switch que nunca dispara.
+ */
+export const StateChange = Object.freeze({
+    UNDO: 'undo',
+    REDO: 'redo',
+    CLEAR: 'clear',
+    RANDOMIZE: 'randomize',
+    PASTE: 'paste',
+    CLEAR_AREA: 'clearArea',
+    IMPORT: 'import',
+});
+
+/**
  * StateManager - Gestión completa del estado del autómata.
  *
  * Actualizado para grids rectangulares:
@@ -107,7 +123,7 @@ class StateManager {
             const previousState = this.undoStack.pop();
             this.gridManager.deserialize(previousState);
 
-            this._emit('onStateChange', {type: 'undo', generation: previousState.generation});
+            this._emit('onStateChange', {type: StateChange.UNDO, generation: previousState.generation});
             this._emit('onHistoryChange', {undoCount: this.undoStack.length, redoCount: this.redoStack.length});
 
             return {grid: this.gridManager.grid, generation: previousState.generation};
@@ -126,7 +142,7 @@ class StateManager {
             const nextState = this.redoStack.pop();
             this.gridManager.deserialize(nextState);
 
-            this._emit('onStateChange', {type: 'redo', generation: nextState.generation});
+            this._emit('onStateChange', {type: StateChange.REDO, generation: nextState.generation});
             this._emit('onHistoryChange', {undoCount: this.undoStack.length, redoCount: this.redoStack.length});
 
             return {grid: this.gridManager.grid, generation: nextState.generation};
@@ -152,7 +168,7 @@ class StateManager {
         const {saveToHistory = true, generation = 0} = options;
         if (saveToHistory && this.isTracking) this.saveState(generation);
         this.gridManager.clear();
-        this._emit('onStateChange', {type: 'clear', generation: 0});
+        this._emit('onStateChange', {type: StateChange.CLEAR, generation: 0});
         return {grid: this.gridManager.grid, population: 0, generation: 0};
     }
 
@@ -171,7 +187,7 @@ class StateManager {
 
         const stats = this.gridManager.getStats();
         this.populationHistory.clear();
-        this._emit('onStateChange', {type: 'randomize', density: validDensity, stats});
+        this._emit('onStateChange', {type: StateChange.RANDOMIZE, density: validDensity, stats});
         return stats;
     }
 
@@ -223,7 +239,7 @@ class StateManager {
         }
 
         const stats = this.gridManager.getStats();
-        this._emit('onStateChange', {type: 'paste', changedCount: changedCells.length, stats});
+        this._emit('onStateChange', {type: StateChange.PASTE, changedCount: changedCells.length, stats});
         return {changedCells, stats};
     }
 
@@ -270,7 +286,7 @@ class StateManager {
         }
 
         const stats = this.gridManager.getStats();
-        this._emit('onStateChange', {type: 'clearArea', changedCount: changedCells.length, stats});
+        this._emit('onStateChange', {type: StateChange.CLEAR_AREA, changedCount: changedCells.length, stats});
         return {changedCells, stats};
     }
 
@@ -364,7 +380,7 @@ class StateManager {
 
         const stats = this.gridManager.getStats();
         this._emit('onStateChange', {
-            type: 'import',
+            type: StateChange.IMPORT,
             patternName: patternData.name,
             changedCount: changedCells.length,
             stats

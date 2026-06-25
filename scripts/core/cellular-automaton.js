@@ -4,6 +4,19 @@ import {NeighborhoodCalculator} from './neighborhood-calculator.js';
 import {RuleEngine} from './engines/rule-engine.js';
 
 /**
+ * Tipos de cambio de estado que el núcleo notifica vía `onStateChange`.
+ * Centralizar el literal evita que un typo entre productor (aquí) y consumidor
+ * (`automaton._handleCoreStateChange`) silencie un caso del switch sin error.
+ */
+export const CoreStateChange = Object.freeze({
+    CLEAR: 'clear',
+    RESIZE: 'resize',
+    RULE_CHANGE: 'ruleChange',
+    NEIGHBORHOOD_CHANGE: 'neighborhoodChange',
+    DESERIALIZE: 'deserialize',
+});
+
+/**
  * CellularAutomatonCore — Núcleo puro del autómata celular.
  *
  * Soporta grids rectangulares (width × height).
@@ -182,7 +195,7 @@ class CellularAutomatonCore {
         this.generation = 0;
         this._population = 0;
         this._populationValid = true;
-        this._callbacks.onStateChange?.({type: 'clear'});
+        this._callbacks.onStateChange?.({type: CoreStateChange.CLEAR});
     }
 
     /**
@@ -202,7 +215,7 @@ class CellularAutomatonCore {
             });
             this.generation = 0;
             this._callbacks.onStateChange?.({
-                type: 'resize', width: this.width, height: this.height
+                type: CoreStateChange.RESIZE, width: this.width, height: this.height
             });
         }
         return result;
@@ -211,14 +224,14 @@ class CellularAutomatonCore {
     setRule(rule) {
         this.ruleEngine.setRule(rule);
         this.generation = 0;
-        this._callbacks.onStateChange?.({type: 'ruleChange', rule: this.ruleEngine.ruleString});
+        this._callbacks.onStateChange?.({type: CoreStateChange.RULE_CHANGE, rule: this.ruleEngine.ruleString});
     }
 
     setNeighborhood(options) {
         this.neighborhood.configure(options);
         this.generation = 0;
         this._callbacks.onStateChange?.({
-            type: 'neighborhoodChange',
+            type: CoreStateChange.NEIGHBORHOOD_CHANGE,
             info: this.neighborhood.getInfo()
         });
     }
@@ -258,7 +271,7 @@ class CellularAutomatonCore {
         if (data.generation !== undefined) this.generation = data.generation;
         if (data.rule) this.ruleEngine.setRule(data.rule);
         if (data.neighborhood) this.neighborhood.configure(data.neighborhood);
-        this._callbacks.onStateChange?.({type: 'deserialize'});
+        this._callbacks.onStateChange?.({type: CoreStateChange.DESERIALIZE});
     }
 
     destroy() {
