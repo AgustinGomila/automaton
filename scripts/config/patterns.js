@@ -334,6 +334,9 @@ class PatternManager {
             this._patternState.key = null;
             this._patternState.pattern = null;
             this._patternState.rotation = 0;
+            // Si había un patrón seleccionado que dejó de ser visible tras el re-render,
+            // se notifica el clear para refrescar el indicador de modo dibujo.
+            if (prevKey) eventBus.emit(Events.PATTERN_CLEARED);
         }
         this._updatePatternInfo();
         eventBus.emit(Events.PATTERNS_RENDERED);
