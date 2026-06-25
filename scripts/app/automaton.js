@@ -739,15 +739,20 @@ class CellularAutomaton {
     }
 
     updateStats(populationOverride = null) {
+        // updateStats() solo se llama fuera del hot-loop estándar (ediciones,
+        // resize, modos especiales): es el punto natural para invalidar el
+        // baseline de población del core. Tras invalidar, getPopulation() hace
+        // un único recuento fresco; el override (cuando lo hay) es autoritativo.
+        this.core.invalidatePopulation();
         const population = populationOverride !== null
             ? populationOverride
-            : this.core.gridManager.countPopulation();
+            : this.core.getPopulation();
         const density = (population / (this.gridWidth * this.gridHeight) * 100).toFixed(1);
         eventBus.emit('stats:updated', {generation: this.generation, population, density});
     }
 
     checkLimits() {
-        return this._limiter.check(this.generation, () => this.core.gridManager.countPopulation());
+        return this._limiter.check(this.generation, () => this.core.getPopulation());
     }
 
     _checkLimitsWithPop(population) {

@@ -41,6 +41,12 @@ class GenerationsEngine {
         this.survival = [2, 3];
         this.numStates = 2;           // C — número total de estados (mín 2)
 
+        // Lookup tables indexadas por nº de vecinos en estado 1 (Moore r1 → 0..8).
+        // Sustituyen el `new Set(...)` que se asignaba en cada step() y el Set.has()
+        // del hot-loop por un acceso a Uint8Array. Se reconstruyen en activate().
+        this._birthLUT = new Uint8Array(9);
+        this._survivalLUT = new Uint8Array(9);
+
         // Grids de estados 0..C-1 (column-major, igual que ctx.grid)
         this.stateGrid = null;
         this._backGrid = null;
@@ -68,6 +74,11 @@ class GenerationsEngine {
         this.birth = birth ?? [3];
         this.survival = survival ?? [2, 3];
         this.numStates = Math.max(2, Math.min(numStates ?? 2, 256));
+
+        this._birthLUT.fill(0);
+        this._survivalLUT.fill(0);
+        for (const b of this.birth) if (b >= 0 && b <= 8) this._birthLUT[b] = 1;
+        for (const s of this.survival) if (s >= 0 && s <= 8) this._survivalLUT[s] = 1;
 
         const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
@@ -170,8 +181,8 @@ class GenerationsEngine {
         const sg = this.stateGrid;
         const back = this._backGrid;
         const C = this.numStates;
-        const bSet = new Set(this.birth);
-        const sSet = new Set(this.survival);
+        const bLUT = this._birthLUT;
+        const sLUT = this._survivalLUT;
         const renderer = this._ctx.renderer;
 
         this._changedCells.length = 0;
@@ -192,8 +203,8 @@ class GenerationsEngine {
                     // Extraído en helper para eliminar la duplicación del bloque original.
                     const n = this._countAliveNeighbors(sg, gw, gh, x, xm, xp, y, ym, yp);
                     next = cur === 0
-                        ? (bSet.has(n) ? 1 : 0)
-                        : (sSet.has(n) ? 1 : (C > 2 ? 2 : 0));
+                        ? bLUT[n]
+                        : (sLUT[n] ? 1 : (C > 2 ? 2 : 0));
                 } else {
                     // Moribundo: avanzar al siguiente estado de envejecimiento
                     next = (cur + 1) % C;
