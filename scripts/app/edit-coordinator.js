@@ -16,6 +16,13 @@ import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 
 class EditCoordinator {
 
+    /**
+     * Plazo máximo (ms) que _haltForEditAsync espera a que el worker termine el
+     * paso en curso antes de forzar su terminación. Un paso de generación es muy
+     * inferior a esto incluso en grids grandes; el plazo solo protege ante cuelgues.
+     */
+    static WORKER_HALT_TIMEOUT_MS = 1000;
+
     /** @param {CellularAutomaton} automaton */
     constructor(automaton) {
         this._a = automaton;
@@ -38,10 +45,20 @@ class EditCoordinator {
         const wasRunning = this._a._loop.isRunning;
         this._a._loop.stop();
         if (this._a._workerManager.isProcessing) {
+            // Espera ACOTADA a que el worker termine el paso en curso, para que su
+            // resultado se aplique antes de terminarlo. Sin el plazo, un worker
+            // colgado o ya terminado (isProcessing nunca vuelve a false) dejaría
+            // esta promesa sin resolver y colgaría paste/import indefinidamente.
+            // Al vencer el plazo se procede igual: cleanup() fuerza terminate().
+            const deadline = performance.now() + EditCoordinator.WORKER_HALT_TIMEOUT_MS;
             await new Promise(resolve => {
-                const check = () => this._a._workerManager.isProcessing
-                    ? setTimeout(check, 10)
-                    : resolve();
+                const check = () => {
+                    if (!this._a._workerManager.isProcessing || performance.now() >= deadline) {
+                        resolve();
+                    } else {
+                        setTimeout(check, 10);
+                    }
+                };
                 check();
             });
             this._a._workerManager.cleanup();
