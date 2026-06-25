@@ -1,4 +1,14 @@
 /**
+ * Modos de límite de la simulación. El productor (select#limitType en index.html,
+ * leído por ui-controller) y el consumidor (SimulationLimiter) comparten estos valores.
+ */
+export const LimitType = Object.freeze({
+    NONE: 'none',
+    GENERATIONS: 'generations',
+    POPULATION: 'population',
+});
+
+/**
  * SimulationLimiter - Gestiona los límites de ejecución de la simulación.
  *
  * Responsabilidad: controlar si se ha alcanzado un límite de generaciones
@@ -14,7 +24,7 @@ class SimulationLimiter {
     constructor({onLimitReached}) {
         this._onLimitReached = onLimitReached;
 
-        this.limitType = 'none';
+        this.limitType = LimitType.NONE;
         this.limitValue = 100;
         this.maxGenerations = null;
         this.maxPopulation = null;
@@ -23,7 +33,7 @@ class SimulationLimiter {
 
     /**
      * Configura el límite activo.
-     * @param {'none'|'generations'|'population'} type
+     * @param {string} type - Uno de los valores de {@link LimitType}.
      * @param {number} value
      */
     setLimit(type, value) {
@@ -31,15 +41,15 @@ class SimulationLimiter {
         this.limitValue = value;
 
         switch (type) {
-            case 'none':
+            case LimitType.NONE:
                 this.maxGenerations = null;
                 this.maxPopulation = null;
                 break;
-            case 'generations':
+            case LimitType.GENERATIONS:
                 this.maxGenerations = parseInt(value);
                 this.maxPopulation = null;
                 break;
-            case 'population':
+            case LimitType.POPULATION:
                 this.maxPopulation = parseInt(value);
                 this.maxGenerations = null;
                 break;
@@ -55,14 +65,14 @@ class SimulationLimiter {
      * @returns {boolean}
      */
     check(generation, getPopulation) {
-        if (this.limitType === 'none') {
+        if (this.limitType === LimitType.NONE) {
             this.isLimitReached = false;
             return false;
         }
 
-        if (this.limitType === 'generations' && this.maxGenerations !== null) {
+        if (this.limitType === LimitType.GENERATIONS && this.maxGenerations !== null) {
             this.isLimitReached = generation >= this.maxGenerations;
-        } else if (this.limitType === 'population' && this.maxPopulation !== null) {
+        } else if (this.limitType === LimitType.POPULATION && this.maxPopulation !== null) {
             this.isLimitReached = getPopulation() >= this.maxPopulation;
         }
 

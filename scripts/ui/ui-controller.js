@@ -24,6 +24,7 @@ import {NeighborhoodController, RuleController} from './rule-neighborhood-contro
 import {EffectsController} from './effects-controller.js';
 import {DisplayController} from './display-controller.js';
 import {AppConfig} from '../utils/config.js';
+import {LimitType} from '../app/simulator-limiter.js';
 
 class UIController {
     /**
@@ -699,9 +700,9 @@ class UIController {
         const select = document.getElementById('limitType');
         const valueGroup = document.getElementById('limitValueGroup');
         const limitValue = document.getElementById('limitValue');
-        if (select.value === 'none') {
+        if (select.value === LimitType.NONE) {
             valueGroup.style.display = 'none';
-            this.automaton.setLimit('none', 0);
+            this.automaton.setLimit(LimitType.NONE, 0);
         } else {
             valueGroup.style.display = 'block';
             this.automaton.setLimit(select.value, parseInt(limitValue.value));
@@ -715,7 +716,7 @@ class UIController {
         const value = parseInt(slider.value);
         const display = document.getElementById('limitValueDisplay');
         if (display) display.textContent = value.toLocaleString();
-        if (select.value !== 'none') this.automaton.setLimit(select.value, value);
+        if (select.value !== LimitType.NONE) this.automaton.setLimit(select.value, value);
     }
 
     changeRule() {
