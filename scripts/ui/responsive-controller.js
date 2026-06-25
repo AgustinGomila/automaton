@@ -18,6 +18,12 @@ class ResponsiveController {
         this._initialized = false;
         this.automaton = null;
         this.uiController = null;
+
+        // Referencias estables para poder quitar los listeners en destroy().
+        // Los de window/document no se liberan al remover elementos del DOM.
+        this._onResize = () => this.handleResize();
+        this._onOrientationChange = () => setTimeout(() => this.handleResize(), 100);
+        this._onDocumentClick = (e) => this._handleDocumentClick(e);
     }
 
     /**
@@ -38,10 +44,22 @@ class ResponsiveController {
             this.adjustForMobile();
         }
 
-        window.addEventListener('resize', () => this.handleResize());
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => this.handleResize(), 100);
-        });
+        window.addEventListener('resize', this._onResize);
+        window.addEventListener('orientationchange', this._onOrientationChange);
+    }
+
+    /**
+     * Quita los listeners globales (window/document) y libera referencias.
+     * Enganchado al teardown de la app para no dejar handlers huérfanos
+     * apuntando a un automaton ya destruido.
+     */
+    destroy() {
+        window.removeEventListener('resize', this._onResize);
+        window.removeEventListener('orientationchange', this._onOrientationChange);
+        document.removeEventListener('click', this._onDocumentClick);
+        this.automaton = null;
+        this.uiController = null;
+        this._initialized = false;
     }
 
     /**
@@ -86,25 +104,31 @@ class ResponsiveController {
         }
 
         // Cerrar panel al hacer clic fuera en móviles
-        document.addEventListener('click', (e) => {
-            if (this.isMobile && this.isPanelOpen) {
-                const leftPanel = document.getElementById('leftPanel');
-                const menuBtn = document.getElementById('mobileMenuBtn');
-                if (leftPanel && !leftPanel.contains(e.target) &&
-                    menuBtn && !menuBtn.contains(e.target)) {
-                    this.closeLeftPanel();
-                }
-            }
+        document.addEventListener('click', this._onDocumentClick);
+    }
 
-            if (this.isMobile && this.isRulesOpen) {
-                const rulesPanel = document.getElementById('rulesPanel');
-                const rulesToggle = document.getElementById('rulesToggle');
-                if (rulesPanel && !rulesPanel.contains(e.target) &&
-                    rulesToggle && !rulesToggle.contains(e.target)) {
-                    this.closeRules();
-                }
+    /**
+     * Cierra el panel lateral o el de reglas si el clic ocurre fuera de ellos.
+     * @param {MouseEvent} e
+     */
+    _handleDocumentClick(e) {
+        if (this.isMobile && this.isPanelOpen) {
+            const leftPanel = document.getElementById('leftPanel');
+            const menuBtn = document.getElementById('mobileMenuBtn');
+            if (leftPanel && !leftPanel.contains(e.target) &&
+                menuBtn && !menuBtn.contains(e.target)) {
+                this.closeLeftPanel();
             }
-        });
+        }
+
+        if (this.isMobile && this.isRulesOpen) {
+            const rulesPanel = document.getElementById('rulesPanel');
+            const rulesToggle = document.getElementById('rulesToggle');
+            if (rulesPanel && !rulesPanel.contains(e.target) &&
+                rulesToggle && !rulesToggle.contains(e.target)) {
+                this.closeRules();
+            }
+        }
     }
 
     toggleLeftPanel() {
