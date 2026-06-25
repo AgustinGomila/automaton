@@ -27,6 +27,32 @@ import {AppConfig} from '../utils/config.js';
 import {LimitType} from '../app/simulator-limiter.js';
 import {WrapMode} from '../core/neighborhood-calculator.js';
 
+/**
+ * Catálogo de teclas que escucha el atajo global de teclado (_handleKeyDown/Up).
+ * Los modificadores (CONTROL/SHIFT/ALT) se comparan contra `e.key` crudo; el resto
+ * contra `e.key.toLowerCase()`, por eso sus valores van en minúscula.
+ */
+const Keys = Object.freeze({
+    CONTROL: 'Control',
+    SHIFT: 'Shift',
+    ALT: 'Alt',
+    ESCAPE: 'escape',
+    SPACE: ' ',
+    DELETE: 'delete',
+    PLUS: '+',
+    MINUS: '-',
+    QUESTION: '?',
+    A: 'a',
+    B: 'b',
+    C: 'c',
+    G: 'g',
+    H: 'h',
+    I: 'i',
+    R: 'r',
+    S: 's',
+    Z: 'z',
+});
+
 class UIController {
     /**
      * @param {CellularAutomaton} automatonInstance
@@ -400,26 +426,26 @@ class UIController {
     }
 
     _handleKeyDown(e) {
-        this._canvasController.ctrlPressed = e.key === 'Control' ? true : this._canvasController._ctrlPressed;
-        this._canvasController.shiftPressed = e.key === 'Shift' ? true : this._canvasController.shiftPressed;
-        if (e.key === 'Alt') {
+        this._canvasController.ctrlPressed = e.key === Keys.CONTROL ? true : this._canvasController._ctrlPressed;
+        this._canvasController.shiftPressed = e.key === Keys.SHIFT ? true : this._canvasController.shiftPressed;
+        if (e.key === Keys.ALT) {
             e.preventDefault();
             this._canvasController.altPressed = true;
         }
 
-        if (e.ctrlKey && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        if (e.ctrlKey && e.key.toLowerCase() === Keys.Z && !e.shiftKey) {
             e.preventDefault();
             this.undo();
             return;
         }
-        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === Keys.Z) {
             e.preventDefault();
             this.redo();
             return;
         }
 
         switch (e.key.toLowerCase()) {
-            case 'escape':
+            case Keys.ESCAPE:
                 this.deselectPattern();
                 this._canvasController.cancelDrag();
                 this._canvasController.clearSelection();
@@ -429,20 +455,20 @@ class UIController {
                     this._canvasController._updateCursor();
                 }
                 break;
-            case '+':
+            case Keys.PLUS:
                 this.increaseSpeed();
                 break;
-            case '-':
+            case Keys.MINUS:
                 this.decreaseSpeed();
                 break;
-            case ' ':
+            case Keys.SPACE:
                 e.preventDefault();
                 this.togglePlay();
                 break;
-            case 's':
+            case Keys.S:
                 this.step();
                 break;
-            case 'r':
+            case Keys.R:
                 if (this._patternState.pattern?.pattern !== 'random') {
                     this._patternState.rotation = (this._patternState.rotation + 90) % 360;
                     this._patternState.pattern = getPatternWithRotation(
@@ -454,7 +480,7 @@ class UIController {
                     });
                 }
                 break;
-            case 'b': {
+            case Keys.B: {
                 const cc = this._canvasController;
                 cc.bucketToolActive = !cc.bucketToolActive;
                 document.getElementById('bucketToolBtn')?.classList.toggle('active', cc.bucketToolActive);
@@ -462,28 +488,28 @@ class UIController {
                 cc._updateCursor();
                 break;
             }
-            case 'a':
+            case Keys.A:
                 this.randomize();
                 break;
-            case 'c':
+            case Keys.C:
                 this.clear();
                 break;
-            case 'delete':
+            case Keys.DELETE:
                 if (this._canvasController.selection) {
                     e.preventDefault();
                     this._canvasController.deleteSelection();
                 }
                 break;
-            case 'g':
+            case Keys.G:
                 this.toggleGrid();
                 break;
-            case 'h':
+            case Keys.H:
                 this.toggleHighlightsGrid();
                 break;
-            case 'i':
+            case Keys.I:
                 this._togglePerf();
                 break;
-            case '?':
+            case Keys.QUESTION:
                 e.preventDefault();
                 document.getElementById('instructionsModal').classList.add('show');
                 break;
@@ -491,9 +517,9 @@ class UIController {
     }
 
     _handleKeyUp(e) {
-        if (e.key === 'Control') this._canvasController.ctrlPressed = false;
-        if (e.key === 'Shift') this._canvasController.shiftPressed = false;
-        if (e.key === 'Alt') this._canvasController.altPressed = false;
+        if (e.key === Keys.CONTROL) this._canvasController.ctrlPressed = false;
+        if (e.key === Keys.SHIFT) this._canvasController.shiftPressed = false;
+        if (e.key === Keys.ALT) this._canvasController.altPressed = false;
     }
 
     // =========================================
