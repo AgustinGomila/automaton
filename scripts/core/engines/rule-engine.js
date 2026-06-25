@@ -18,6 +18,9 @@ class RuleEngine {
         ANNEAL: {birth: [4, 6, 7, 8], survival: [3, 5, 6, 7, 8], name: "Anneal"}
     };
 
+    /** Tamaño de las LUT de regla — cubre el máx. de vecinos Moore con radio 10. */
+    static LUT_SIZE = 441;
+
     constructor(rule = {birth: [3], survival: [2, 3]}) {
         this.setRule(rule);
     }
@@ -42,8 +45,17 @@ class RuleEngine {
         }
         this.birth = [...rule.birth].sort((a, b) => a - b);
         this.survival = [...rule.survival].sort((a, b) => a - b);
-        this._birthSet = new Set(this.birth);
-        this._survivalSet = new Set(this.survival);
+
+        // Lookup tables indexadas por número de vecinos. Sustituyen Set.has() en
+        // el hot-loop por un acceso a Uint8Array — mismo patrón que Hex/Triangle
+        // y el worker estándar. Tamaño 441 = (2·10+1)²-1+1, cubre el máximo de
+        // vecinos Moore con el radio máximo (AppConfig.NEIGHBORHOOD.MAX_RADIUS=10),
+        // por lo que el general-path nunca lee fuera de rango.
+        this._birthLUT = new Uint8Array(RuleEngine.LUT_SIZE);
+        this._survivalLUT = new Uint8Array(RuleEngine.LUT_SIZE);
+        for (const b of this.birth) this._birthLUT[b] = 1;
+        for (const s of this.survival) this._survivalLUT[s] = 1;
+
         this.ruleString = `B${this.birth.join('')}/S${this.survival.join('')}`;
     }
 
@@ -53,8 +65,8 @@ class RuleEngine {
 
     computeNextState(currentState, neighborCount) {
         return currentState
-            ? (this._survivalSet.has(neighborCount) ? 1 : 0)
-            : (this._birthSet.has(neighborCount) ? 1 : 0);
+            ? this._survivalLUT[neighborCount]
+            : this._birthLUT[neighborCount];
     }
 
     // =========================================
@@ -127,6 +139,7 @@ class RuleEngine {
         }
 
         const buf = this._ensureChangedBuf(width, height);
+        const bLUT = this._birthLUT, sLUT = this._survivalLUT;
         let changedCount = 0, births = 0, deaths = 0;
 
         for (let x = 0; x < width; x++) {
@@ -157,9 +170,7 @@ class RuleEngine {
                 }
 
                 const current = col[y];
-                const next = current
-                    ? (this._survivalSet.has(n) ? 1 : 0)
-                    : (this._birthSet.has(n) ? 1 : 0);
+                const next = current ? sLUT[n] : bLUT[n];
                 outGrid[x][y] = next;
 
                 if (next !== current) {
