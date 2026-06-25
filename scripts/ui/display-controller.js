@@ -223,12 +223,8 @@ class DisplayController {
     // =========================================
 
     updateDrawModeIndicator() {
-        const indicators = [
-            document.getElementById('drawModeIndicator'),
-            document.getElementById('drawModeIndicatorModal')
-        ];
-        for (const indicator of indicators) {
-            if (!indicator) continue;
+        const indicator = document.getElementById('drawModeIndicatorModal');
+        if (indicator) {
             if (this._patternState.pattern) {
                 indicator.className = 'pattern-mode-indicator pattern-selected';
                 indicator.textContent = t('mode.pattern', {name: this._patternState.pattern.name});

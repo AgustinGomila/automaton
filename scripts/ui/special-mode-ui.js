@@ -1,5 +1,5 @@
 import {eventBus, Events} from '../infrastructure/event-bus.js';
-import {SpecialEngineManager, WolframDirection} from '../core/engines/special-engine-manager.js';
+import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 
 /**
  * SpecialModeUI — Capa de presentación para los modos especiales del autómata.
@@ -123,9 +123,6 @@ class SpecialModeUI {
             const header = document.querySelector(`.accordion-header[data-accordion="${engineMode}"]`);
             if (header) header.classList.toggle('active', engineMode === mode);
         }
-
-        // Indicador visual principal
-        this._renderModeIndicator(mode);
     }
 
     /**
@@ -140,63 +137,6 @@ class SpecialModeUI {
             : '';
     }
 
-    // =========================================
-    // PRIVADOS
-    // =========================================
-
-    /**
-     * Renderiza el contenido del #modeIndicator según el modo activo.
-     * @param {string} mode
-     */
-    _renderModeIndicator(mode) {
-        const indicator = document.getElementById('modeIndicator');
-        if (!indicator) return;
-
-        switch (mode) {
-            case SpecialEngineManager.MODES.TRIANGLE: {
-                const info = this.automaton.triangleEngine.getInfo();
-                indicator.className = 'mode-indicator triangle-mode';
-                indicator.innerHTML = `<i class="fa-solid fa-play"></i> ETA R${info.rule}`;
-                break;
-            }
-            case SpecialEngineManager.MODES.HEXAGONAL: {
-                const info = this.automaton.hexEngine?.getInfo();
-                indicator.className = 'mode-indicator hex-mode';
-                indicator.innerHTML = `<i class="fas fa-hexagon"></i> Hex ${info?.ruleString ?? ''}`;
-                break;
-            }
-            case SpecialEngineManager.MODES.WOLFRAM: {
-                const info = this.automaton.wolframEngine.getInfo();
-                indicator.className = 'mode-indicator wolfram-mode';
-                indicator.innerHTML = `<i class="fas fa-arrows-alt-v"></i> Wolfram R${info.rule} ${info.direction === WolframDirection.VERTICAL ? '↓' : '→'}`;
-                break;
-            }
-            case SpecialEngineManager.MODES.LANGTON: {
-                const info = this.automaton.langtonEngine?.getInfo() || {rule: 'RL', antCount: 0};
-                const antLabel = info.antCount > 0 ? `×${info.antCount}` : 'custom';
-                indicator.className = 'mode-indicator langton-mode';
-                indicator.innerHTML = `<i class="fas fa-bug"></i> Langton "${info.rule}" ${antLabel}`;
-                break;
-            }
-            case SpecialEngineManager.MODES.WIREWORLD:
-                indicator.className = 'mode-indicator wireworld-mode';
-                indicator.innerHTML = `<i class="fas fa-bolt"></i> WireWorld`;
-                break;
-            case SpecialEngineManager.MODES.ULAM_WARBURTON:
-                indicator.className = 'mode-indicator uw-mode';
-                indicator.innerHTML = `<i class="fas fa-snowflake"></i> Ulam-Warburton`;
-                break;
-            case SpecialEngineManager.MODES.GENERATIONS: {
-                const info = this.automaton.generationsEngine?.getInfo();
-                indicator.className = 'mode-indicator generations-mode';
-                indicator.innerHTML = `<i class="fas fa-layer-group"></i> Generations ${info?.ruleString ?? ''}`;
-                break;
-            }
-            default:
-                indicator.className = 'mode-indicator standard-mode';
-                indicator.innerHTML = `<i class="fas fa-th"></i> 2D Cellular`;
-        }
-    }
 }
 
 export {SpecialModeUI};
