@@ -246,21 +246,22 @@ class SelectionManager {
             document.getElementById('canvas-container')?.appendChild(overlay);
         }
 
-        const cellSize = this.automaton.cellSize;
         const canvasRect = this.automaton.canvas.getBoundingClientRect();
         const containerRect = document.getElementById('canvas-container')?.getBoundingClientRect();
         if (!containerRect) return;
 
-        const scaleX = this.automaton.canvas.width / canvasRect.width;
-        const scaleY = this.automaton.canvas.height / canvasRect.height;
+        // px de display por celda derivados del rect real. Robusto al escalado
+        // CSS pixelated del canvas (la resolución de render puede ser < zoom).
+        const pxX = canvasRect.width / this.automaton.gridWidth;
+        const pxY = canvasRect.height / this.automaton.gridHeight;
 
         overlay.style.cssText = `
             display: block;
             position: absolute;
-            left: ${canvasRect.left - containerRect.left + minX * cellSize / scaleX}px;
-            top: ${canvasRect.top - containerRect.top + minY * cellSize / scaleY}px;
-            width: ${(maxX - minX + 1) * cellSize / scaleX}px;
-            height: ${(maxY - minY + 1) * cellSize / scaleY}px;
+            left: ${canvasRect.left - containerRect.left + minX * pxX}px;
+            top: ${canvasRect.top - containerRect.top + minY * pxY}px;
+            width: ${(maxX - minX + 1) * pxX}px;
+            height: ${(maxY - minY + 1) * pxY}px;
             border: 2px solid #3b82f6;
             pointer-events: none;
             z-index: 10;
@@ -321,20 +322,20 @@ class SelectionManager {
 
         const width = this.selectionContent.width;
         const height = this.selectionContent.height;
-        const cellSize = this.automaton.cellSize;
         const canvasRect = this.automaton.canvas.getBoundingClientRect();
         const containerRect = document.getElementById('canvas-container')?.getBoundingClientRect();
         if (!containerRect) return;
 
-        const scaleX = this.automaton.canvas.width / canvasRect.width;
-        const scaleY = this.automaton.canvas.height / canvasRect.height;
+        // px de display por celda derivados del rect real (ver _updateSelectionOverlay).
+        const pxX = canvasRect.width / this.automaton.gridWidth;
+        const pxY = canvasRect.height / this.automaton.gridHeight;
 
         dragPreview.style.cssText = `
             position: absolute;
-            left: ${canvasRect.left - containerRect.left + targetX * cellSize / scaleX}px;
-            top: ${canvasRect.top - containerRect.top + targetY * cellSize / scaleY}px;
-            width: ${width * cellSize / scaleX}px;
-            height: ${height * cellSize / scaleY}px;
+            left: ${canvasRect.left - containerRect.left + targetX * pxX}px;
+            top: ${canvasRect.top - containerRect.top + targetY * pxY}px;
+            width: ${width * pxX}px;
+            height: ${height * pxY}px;
             border: 2px ${this.isCopying ? 'dashed #10b981' : 'solid #3b82f6'};
             z-index: 5;
             pointer-events: none;

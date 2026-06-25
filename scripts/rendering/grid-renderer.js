@@ -64,6 +64,14 @@ class GridRenderer {
             showGridHighlights: options.showGridHighlights !== false
         };
 
+        /**
+         * Resolución de render (px/celda con la que se rasteriza el canvas),
+         * potencialmente menor que config.cellSize (el zoom de display). El
+         * canvas se rasteriza a gridWidth·_rcs y CSS lo agranda a gridWidth·cellSize
+         * con image-rendering:pixelated. Cacheado; se recalcula en cada resize.
+         */
+        this._rcs = this._computeRenderCellSize();
+
         // Dirty rendering
         this._dirtyCells = new Set();
         this._fullDirtyPending = false;
@@ -269,6 +277,9 @@ class GridRenderer {
         this._fullDirtyPending = false;
         this._subtleGridCache = null;  // Fuerza reconstrucción del overlay
 
+        // Recalcular resolución de render antes de dimensionar buffer/WASM.
+        this._rcs = this._computeRenderCellSize();
+
         this._initPixelBuffer();       // Reinicializar buffer para nuevas dimensiones/cellSize
         this._initWasm();               // Reinicializar WASM para nuevas dimensiones
         this._resizeCanvas();
@@ -357,10 +368,13 @@ class GridRenderer {
         const canvasX = (e.clientX - rect.left) * scaleX;
         const canvasY = (e.clientY - rect.top) * scaleY;
 
-        const {cellSize, gridWidth, gridHeight} = this.config;
+        // scaleX/scaleY ya convierten de px CSS (display) a px de canvas (render),
+        // por lo que canvasX/canvasY están en resolución de render → dividir por _rcs.
+        const {gridWidth, gridHeight} = this.config;
+        const rcs = this._rcs;
         return {
-            x: Math.max(0, Math.min(Math.floor(canvasX / cellSize), gridWidth - 1)),
-            y: Math.max(0, Math.min(Math.floor(canvasY / cellSize), gridHeight - 1))
+            x: Math.max(0, Math.min(Math.floor(canvasX / rcs), gridWidth - 1)),
+            y: Math.max(0, Math.min(Math.floor(canvasY / rcs), gridHeight - 1))
         };
     }
 
@@ -393,25 +407,59 @@ class GridRenderer {
     // =========================================
 
     /**
+     * Resolución de render (px/celda con la que se rasteriza el canvas).
+     *
+     * Es el mayor valor ≤ cellSize tal que el canvas (gridWidth·r × gridHeight·r)
+     * no supere PIXEL_PATH_MAX_CANVAS_PIXELS. Mientras el canvas cabe en ese
+     * presupuesto, render == display (nitidez nativa). En zoom alto, la resolución
+     * se topa y CSS agranda el bitmap con image-rendering:pixelated — como las
+     * celdas son color plano, el escalado por GPU es visualmente idéntico a
+     * rasterizar a cellSize, pero a costo constante (sin salto al path fillRect).
+     * @returns {number}
+     */
+    _computeRenderCellSize() {
+        const {gridWidth, gridHeight, cellSize} = this.config;
+        const budget = AppConfig.RENDER.PIXEL_PATH_MAX_CANVAS_PIXELS;
+        const rMax = Math.max(1, Math.floor(Math.sqrt(budget / (gridWidth * gridHeight))));
+        return Math.min(cellSize, rMax);
+    }
+
+    /**
+     * El path pixel (ImageData/WASM, 1 putImageData/frame) es viable si:
+     *   - la resolución de render está dentro de PIXEL_PATH_MAX_CELL_SIZE, y
+     *   - el framebuffer RGBA del canvas no supera PIXEL_PATH_MAX_CANVAS_PIXELS.
+     *
+     * Con _rcs adaptativo esto es prácticamente siempre cierto; se mantiene como
+     * red de seguridad → si fallara, se usa el path fillRect (celda a celda).
+     * @returns {boolean}
+     */
+    _pixelPathViable(gridWidth, gridHeight, renderCellSize) {
+        if (renderCellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) return false;
+        const canvasPixels = gridWidth * renderCellSize * gridHeight * renderCellSize;
+        return canvasPixels <= AppConfig.RENDER.PIXEL_PATH_MAX_CANVAS_PIXELS;
+    }
+
+    /**
      * Inicializa WasmRenderer si se cumplen todas las condiciones:
      *   - getGridColumns provisto (acceso directo al grid column-major)
-     *   - cellSize ≤ PIXEL_PATH_MAX_CELL_SIZE (path pixel activo)
+     *   - el path pixel es viable a la resolución de render _rcs
      *   - WasmRenderer disponible en el entorno
      *
      * Si alguna falla, _wasmR = null y el path JS es el fallback.
      */
     _initWasm() {
-        const {cellSize, gridWidth, gridHeight} = this.config;
+        const {gridWidth, gridHeight} = this.config;
+        const rcs = this._rcs;
         if (!this._getGridColumns
-            || cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE
+            || !this._pixelPathViable(gridWidth, gridHeight, rcs)
             || typeof WasmRenderer === 'undefined') {
             this._wasmR = null;
             return;
         }
         if (this._wasmR) {
-            this._wasmR.reinit(gridWidth, gridHeight, cellSize);
+            this._wasmR.reinit(gridWidth, gridHeight, rcs);
         } else {
-            this._wasmR = new WasmRenderer(gridWidth, gridHeight, cellSize);
+            this._wasmR = new WasmRenderer(gridWidth, gridHeight, rcs);
         }
         if (!this._wasmR.available) this._wasmR = null;
     }
@@ -426,26 +474,27 @@ class GridRenderer {
     }
 
     // =========================================
-    // PIXEL BUFFER — PATH ImageData (cellSize ≤ 3)
+    // PIXEL BUFFER — PATH ImageData
     // =========================================
 
     /**
-     * Asigna el buffer de píxeles compartido entre Uint32Array e ImageData.
-     * Solo activo para cellSize ≤ 3, donde el overhead de N fillRect por frame
-     * es el cuello de botella dominante.
+     * Asigna el buffer de píxeles compartido entre Uint32Array e ImageData,
+     * dimensionado a la resolución de render _rcs (no al zoom de display).
+     * Es el path dominante: 1 putImageData/frame en lugar de N fillRect.
      *
-     * Para cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE (menos celdas, gradientes, efecto de brillo) se conserva
-     * el path con fillRect, que es más expresivo para esos efectos visuales.
+     * Solo se omite (→ path fillRect) si _pixelPathViable falla, caso que el
+     * _rcs adaptativo evita salvo configuraciones extremas.
      */
     _initPixelBuffer() {
-        const {gridWidth, gridHeight, cellSize} = this.config;
-        if (cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) {
+        const {gridWidth, gridHeight} = this.config;
+        const rcs = this._rcs;
+        if (!this._pixelPathViable(gridWidth, gridHeight, rcs)) {
             this._pixelBuf = null;
             this._imageData = null;
             return;
         }
-        const cw = gridWidth * cellSize;
-        const ch = gridHeight * cellSize;
+        const cw = gridWidth * rcs;
+        const ch = gridHeight * rcs;
         const buf = new Uint8ClampedArray(cw * ch * 4);
         this._imageData = new ImageData(buf, cw, ch);
         this._pixelBuf = new Uint32Array(buf.buffer);
@@ -527,25 +576,27 @@ class GridRenderer {
     }
 
     /**
-     * Escribe el bloque de cellSize×cellSize píxeles de una celda en _pixelBuf.
+     * Escribe el bloque de _rcs×_rcs píxeles de una celda en _pixelBuf.
      * El canvas es row-major: pixel(px, py) = buf[py * canvasWidth + px].
+     * Las coordenadas son en resolución de render (_rcs), no de display.
      * @param {number} gx      — columna del grid
      * @param {number} gy      — fila del grid
      * @param {number} color32 — uint32 RGBA LE
      */
     _writeCellPixels(gx, gy, color32) {
-        const {cellSize, gridWidth} = this.config;
-        if (cellSize === 1) {
+        const gridWidth = this.config.gridWidth;
+        const rcs = this._rcs;
+        if (rcs === 1) {
             // Caso más frecuente: 1 píxel exacto por celda
             this._pixelBuf[gy * gridWidth + gx] = color32;
             return;
         }
-        const cw = gridWidth * cellSize;
-        const px0 = gx * cellSize;
-        const py0 = gy * cellSize;
-        for (let r = 0; r < cellSize; r++) {
+        const cw = gridWidth * rcs;
+        const px0 = gx * rcs;
+        const py0 = gy * rcs;
+        for (let r = 0; r < rcs; r++) {
             const rowBase = (py0 + r) * cw + px0;
-            for (let c = 0; c < cellSize; c++) {
+            for (let c = 0; c < rcs; c++) {
                 this._pixelBuf[rowBase + c] = color32;
             }
         }
@@ -630,7 +681,8 @@ class GridRenderer {
         }
 
         // ── Path JS con dirty bounding box (fallback) ────────────────────────
-        const {gridHeight, cellSize} = this.config;
+        const gridHeight = this.config.gridHeight;
+        const rcs = this._rcs;
 
         let minGx = Infinity, minGy = Infinity;
         let maxGx = -1, maxGy = -1;
@@ -646,10 +698,10 @@ class GridRenderer {
             if (y > maxGy) maxGy = y;
         }
 
-        const px = minGx * cellSize;
-        const py = minGy * cellSize;
-        const pw = (maxGx - minGx + 1) * cellSize;
-        const ph = (maxGy - minGy + 1) * cellSize;
+        const px = minGx * rcs;
+        const py = minGy * rcs;
+        const pw = (maxGx - minGx + 1) * rcs;
+        const ph = (maxGy - minGy + 1) * rcs;
         this.ctx.putImageData(this._imageData, 0, 0, px, py, pw, ph);
     }
 
@@ -670,7 +722,7 @@ class GridRenderer {
             return;
         }
 
-        // Path fillRect — cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE (gradientes, efectos de brillo)
+        // Path fillRect — cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE (relleno plano con borde de 1px)
         this.ctx.fillStyle = '#0f172a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this._drawCells((x, y) => this._getCell(x, y));
@@ -702,15 +754,16 @@ class GridRenderer {
             return;
         }
 
-        // Path fillRect — cellSize > 3
-        const {gridHeight, cellSize} = this.config;
+        // Path fillRect (fallback: _pixelBuf no disponible)
+        const gridHeight = this.config.gridHeight;
+        const rcs = this._rcs;
 
         // ── Pasada 1: borrar todas las celdas sucias con colorDead ──────────
         this.ctx.fillStyle = this.colorDead;
         for (const index of this._dirtyCells) {
             const x = (index / gridHeight) | 0;
             const y = index % gridHeight;
-            this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+            this.ctx.fillRect(x * rcs, y * rcs, rcs, rcs);
         }
 
         // ── Pasada 2: dibujar contenido de celda encima ─────────────────────
@@ -735,11 +788,11 @@ class GridRenderer {
     }
 
     _renderCell(x, y) {
-        const cellSize = this.config.cellSize;
+        const rcs = this._rcs;
         const cellIndex = x * this.config.gridHeight + y;
         const isAlive = this._getCell(x, y);
 
-        if (cellSize <= AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) {
+        if (rcs <= AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) {
             this._renderSmallCell(x, y, cellIndex, isAlive);
         } else {
             this._renderLargeCell(x, y, cellIndex, isAlive);
@@ -764,15 +817,15 @@ class GridRenderer {
         const actColor = customColor ?? this._getCellColor(cellIndex, isAlive);
 
         if (actColor) {
-            const cellSize = this.config.cellSize;
+            const rcs = this._rcs;
             this.ctx.fillStyle = actColor;
-            this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+            this.ctx.fillRect(x * rcs, y * rcs, rcs, rcs);
         }
         // Sin actColor: la pasada 1 ya limpió con colorDead; nada más que hacer
     }
 
     /**
-     * Dibuja una celda grande (cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) con borde de 1px y contenido interior.
+     * Dibuja una celda grande (cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) con borde de 1px y relleno plano.
      *
      * No llama a clearRect: la pasada 1 de _renderDirtyCells ya llenó la celda
      * entera con colorDead, por lo que el borde de 1px queda automáticamente como
@@ -819,41 +872,9 @@ class GridRenderer {
         const drawSize = Math.max(1, cellSize - (cellSize > 2 ? 2 : 1));
         const offset = cellSize > 2 ? 1 : 0;
 
-        if (customColor) {
-            this.ctx.fillStyle = customColor;
-        } else if (cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) {
-            const centerX = x * cellSize + cellSize / 2;
-            const centerY = y * cellSize + cellSize / 2;
-            const isBorn = this.config.showActivityEffect
-                && this._activityAges[cellIndex] < this._activityCooldown;
-
-            const gradient = this.ctx.createRadialGradient(
-                centerX, centerY, 0, centerX, centerY, cellSize / 2
-            );
-            if (isBorn) {
-                gradient.addColorStop(0, this.colorBorn);
-                gradient.addColorStop(0.7, this.colorAlive);
-                gradient.addColorStop(1, this.colorAlive + 'cc');
-            } else {
-                gradient.addColorStop(0, this.colorAlive);
-                gradient.addColorStop(1, this.colorAlive);
-            }
-            this.ctx.fillStyle = gradient;
-        } else {
-            this.ctx.fillStyle = customColor ?? this._getCellColor(cellIndex, true);
-        }
-
+        // Relleno plano: el color ya refleja el estado (born/alive) vía _getCellColor.
+        this.ctx.fillStyle = customColor ?? this._getCellColor(cellIndex, true);
         this.ctx.fillRect(x * cellSize + offset, y * cellSize + offset, drawSize, drawSize);
-
-        // Efecto de brillo en el borde superior al nacer
-        if (!customColor && cellSize > AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) {
-            const isBorn = this.config.showActivityEffect
-                && this._activityAges[cellIndex] < this._activityCooldown;
-            if (isBorn) {
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, 2);
-            }
-        }
     }
 
     // =========================================
@@ -934,9 +955,12 @@ class GridRenderer {
      */
     _buildGridCache() {
         const {
-            gridWidth, gridHeight, cellSize, gridMajorInterval,
+            gridWidth, gridHeight, gridMajorInterval,
             showGrid, showGridHighlights
         } = this.config;
+        // El overlay comparte la resolución de render del canvas principal y se
+        // escala por CSS junto a él; las posiciones van en coordenadas _rcs.
+        const rcs = this._rcs;
 
         // Sin grilla ni highlights: limpiar overlay si existe y salir
         if (!showGrid && !showGridHighlights) {
@@ -961,17 +985,17 @@ class GridRenderer {
         const minorColor = 'rgba(255, 255, 255, 0.10)';
         const majorColor = showGrid ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255, 255, 255, 0.10)';
 
-        if (cellSize <= 2) {
-            // ── Pixel-perfect para celdas pequeñas ──────────────────────────
+        if (rcs <= 2) {
+            // ── Pixel-perfect para resolución de render pequeña ──────────────
             if (showGrid) {
                 ctx.fillStyle = minorColor;
                 for (let x = 0; x <= gridWidth; x++) {
                     if (showGridHighlights && x % interval === 0) continue;
-                    ctx.fillRect(x * cellSize, 0, 1, ch);
+                    ctx.fillRect(x * rcs, 0, 1, ch);
                 }
                 for (let y = 0; y <= gridHeight; y++) {
                     if (showGridHighlights && y % interval === 0) continue;
-                    ctx.fillRect(0, y * cellSize, cw, 1);
+                    ctx.fillRect(0, y * rcs, cw, 1);
                 }
             }
 
@@ -979,15 +1003,15 @@ class GridRenderer {
                 ctx.fillStyle = majorColor;
                 for (let x = 0; x <= gridWidth; x++) {
                     if (x % interval !== 0) continue;
-                    ctx.fillRect(x * cellSize, 0, 1, ch);
+                    ctx.fillRect(x * rcs, 0, 1, ch);
                 }
                 for (let y = 0; y <= gridHeight; y++) {
                     if (y % interval !== 0) continue;
-                    ctx.fillRect(0, y * cellSize, cw, 1);
+                    ctx.fillRect(0, y * rcs, cw, 1);
                 }
             }
         } else {
-            // ── Stroke para celdas grandes (más exacto que fillRect) ─────────
+            // ── Stroke para resolución de render mayor (más exacto) ──────────
             ctx.lineWidth = 1;
 
             if (showGrid) {
@@ -995,13 +1019,13 @@ class GridRenderer {
                 ctx.beginPath();
                 for (let i = 0; i <= gridWidth; i++) {
                     if (showGridHighlights && i % interval === 0) continue;
-                    const pos = i * cellSize;
+                    const pos = i * rcs;
                     ctx.moveTo(pos, 0);
                     ctx.lineTo(pos, ch);
                 }
                 for (let j = 0; j <= gridHeight; j++) {
                     if (showGridHighlights && j % interval === 0) continue;
-                    const pos = j * cellSize;
+                    const pos = j * rcs;
                     ctx.moveTo(0, pos);
                     ctx.lineTo(cw, pos);
                 }
@@ -1013,13 +1037,13 @@ class GridRenderer {
                 ctx.beginPath();
                 for (let i = 0; i <= gridWidth; i++) {
                     if (i % interval !== 0) continue;
-                    const pos = i * cellSize;
+                    const pos = i * rcs;
                     ctx.moveTo(pos, 0);
                     ctx.lineTo(pos, ch);
                 }
                 for (let j = 0; j <= gridHeight; j++) {
                     if (j % interval !== 0) continue;
-                    const pos = j * cellSize;
+                    const pos = j * rcs;
                     ctx.moveTo(0, pos);
                     ctx.lineTo(cw, pos);
                 }
@@ -1032,7 +1056,8 @@ class GridRenderer {
     }
 
     _drawCells(predicate) {
-        const {gridWidth, gridHeight, cellSize} = this.config;
+        const {gridWidth, gridHeight} = this.config;
+        const rcs = this._rcs;
         for (let x = 0; x < gridWidth; x++) {
             for (let y = 0; y < gridHeight; y++) {
                 const isAlive = predicate(x, y);
@@ -1043,11 +1068,7 @@ class GridRenderer {
                 if (!color) continue;
 
                 this.ctx.fillStyle = color;
-                if (cellSize <= AppConfig.RENDER.PIXEL_PATH_MAX_CELL_SIZE) {
-                    this.ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
-                } else {
-                    this.ctx.fillRect(x * cellSize + 1, y * cellSize + 1, cellSize - 2, cellSize - 2);
-                }
+                this.ctx.fillRect(x * rcs, y * rcs, rcs, rcs);
             }
         }
     }
@@ -1060,16 +1081,27 @@ class GridRenderer {
      */
     _resizeCanvas() {
         if (!this.canvas) return;
+        // Recalcular la resolución de render antes de dimensionar buffers/canvas.
+        this._rcs = this._computeRenderCellSize();
+
         const {gridWidth, gridHeight, cellSize} = this.config;
-        const w = gridWidth * cellSize;
-        const h = gridHeight * cellSize;
+        const rcs = this._rcs;
+
+        // Resolución de rasterizado (px reales del canvas).
+        const w = gridWidth * rcs;
+        const h = gridHeight * rcs;
         this.canvas.width = w;
         this.canvas.height = h;
-        this.canvas.style.width = w + 'px';
-        this.canvas.style.height = h + 'px';
+
+        // Tamaño de display (CSS): el navegador agranda el bitmap con
+        // image-rendering:pixelated. Cuando rcs == cellSize no hay escalado.
+        const dw = gridWidth * cellSize;
+        const dh = gridHeight * cellSize;
+        this.canvas.style.width = dw + 'px';
+        this.canvas.style.height = dh + 'px';
         if (this.container) {
-            this.container.style.width = (w + 20) + 'px';
-            this.container.style.height = (h + 20) + 'px';
+            this.container.style.width = (dw + 20) + 'px';
+            this.container.style.height = (dh + 20) + 'px';
         }
         // Invalidar overlay: se reconstruirá (con nuevas dimensiones) en el próximo render
         this._subtleGridCache = null;

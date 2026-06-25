@@ -57,11 +57,21 @@ export const AppConfig = Object.freeze({
         FULL_RENDER_THRESHOLD: 0.15,
 
         /**
-         * cellSize máximo para usar el path ImageData (putImageData).
-         * Por encima de este valor se usa el path fillRect, que soporta
-         * gradientes, efectos de brillo y bordes de 1px.
+         * cellSize máximo para usar el path ImageData/WASM (putImageData,
+         * 1 transferencia/frame). Cubre todo el rango de zoom: el kernel pinta
+         * bloques sólidos de cellSize×cellSize sin borde, igual a cualquier zoom.
+         * Por encima de este valor (no alcanzable hoy: == MAX_CELL_SIZE) se usa
+         * el path fillRect, que pinta celda a celda con un borde de 1px.
          */
-        PIXEL_PATH_MAX_CELL_SIZE: 3,
+        PIXEL_PATH_MAX_CELL_SIZE: 20,
+
+        /**
+         * Tope de píxeles del canvas (gridW×cellSize × gridH×cellSize) para
+         * habilitar el path pixel. Por encima, el framebuffer RGBA extra sería
+         * demasiado grande → se cae al path fillRect, que no asigna buffer propio.
+         * 32M px ≈ 128 MB de buffer RGBA.
+         */
+        PIXEL_PATH_MAX_CANVAS_PIXELS: 32_000_000,
 
         /**
          * Frames de cooldown del efecto de actividad.

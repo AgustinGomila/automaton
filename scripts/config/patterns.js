@@ -447,10 +447,9 @@ class PatternManager {
             return;
         }
 
-        const {ctx, w, h} = this._getOverlayCtx('patternPreview', 3);
+        const {ctx, w, h, cs: cellSize} = this._getOverlayCtx('patternPreview', 3);
         if (!ctx) return;
 
-        const cellSize = this.automaton.cellSize;
         const gw = this.automaton.gridWidth;
         const gh = this.automaton.gridHeight;
         const patternOffX = Math.floor(patternData[0].length / 2);
@@ -486,10 +485,9 @@ class PatternManager {
     // =========================================
 
     showInfluenceArea(x, y) {
-        const {ctx, w, h} = this._getOverlayCtx('influenceArea', 2);
+        const {ctx, w, h, cs: cellSize} = this._getOverlayCtx('influenceArea', 2);
         if (!ctx) return;
 
-        const cellSize = this.automaton.cellSize;
         const gw = this.automaton.gridWidth;
         const gh = this.automaton.gridHeight;
         const radius = this.automaton.neighborhoodRadius;
@@ -568,8 +566,9 @@ class PatternManager {
         const div = document.getElementById(divId);
         if (!div) return null;
 
-        const w = this.automaton.canvas.width;
-        const h = this.automaton.canvas.height;
+        const main = this.automaton.canvas;
+        const w = main.width;
+        const h = main.height;
 
         const cacheKey = divId === 'patternPreview' ? '_previewCanvas' : '_influenceCanvas';
         let canvas = this[cacheKey];
@@ -584,8 +583,15 @@ class PatternManager {
             this[cacheKey] = canvas;
         }
 
+        // Espejar el tamaño de display del canvas principal: el bitmap está en
+        // resolución de render (w×h) y CSS lo agranda con pixelated, igual que el
+        // canvas principal. cs = px de render por celda (puede ser < cellSize).
+        canvas.style.width = main.style.width;
+        canvas.style.height = main.style.height;
+
         div.style.cssText = `display:block; z-index:${zIndex};`;
-        return {ctx: canvas.getContext('2d'), w, h};
+        const cs = w / this.automaton.gridWidth;
+        return {ctx: canvas.getContext('2d'), w, h, cs};
     }
 }
 
