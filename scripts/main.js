@@ -66,15 +66,19 @@ class Application {
     }
 
     _setupGlobalCleanup() {
+        // El teardown solo corresponde cuando la página realmente se va: destruir
+        // todo (incluido eventBus.destroy(), que es irreversible y no tiene re-init)
+        // ante un error aislado convertiría la app en un cascarón congelado. Por eso
+        // un error no capturado se registra pero NO desmonta la app.
         window.addEventListener('beforeunload', () => this._emergencyCleanup());
         window.addEventListener('error', (e) => {
-            console.error('Error crítico:', e.error);
-            this._emergencyCleanup();
+            console.error('Error no capturado:', e.error ?? e.message);
         });
     }
 
     _emergencyCleanup() {
         try {
+            window.responsiveController?.destroy();
             this.uiController?.destroy();
             this.automaton?.destroy();
             this.patternManager?.destroy();
