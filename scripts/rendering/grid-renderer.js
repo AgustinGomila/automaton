@@ -774,19 +774,6 @@ class GridRenderer {
         }
     }
 
-    /**
-     * Asegura que el overlay esté construido. Devuelve null deliberadamente:
-     * el overlay es un elemento DOM, no una fuente para drawImage.
-     * Mantenido para compatibilidad con código que pudiera llamarlo externamente.
-     * @returns {null}
-     */
-    _getGridCache() {
-        const {showGrid, showGridHighlights} = this.config;
-        if (!showGrid && !showGridHighlights) return null;
-        if (!this._subtleGridCache) this._buildGridCache();
-        return null; // El overlay DOM es el canal de display — no usar drawImage
-    }
-
     _renderCell(x, y) {
         const rcs = this._rcs;
         const cellIndex = x * this.config.gridHeight + y;
