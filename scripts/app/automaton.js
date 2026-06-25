@@ -663,14 +663,6 @@ class CellularAutomaton {
         this.core.setRule({birth, survival});
     }
 
-    setRuleByKey(ruleKey) {
-        const rules = rulesLoader.RULES;
-        if (!rules?.[ruleKey]) throw new Error(`Regla ${ruleKey} no encontrada`);
-        const rule = rules[ruleKey];
-        this.setRule(rule.birth, rule.survival);
-        return true;
-    }
-
     resizeGrid(newWidth, newHeight = newWidth) {
         const w = Math.min(Math.max(newWidth, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);
         const h = Math.min(Math.max(newHeight, AppConfig.GRID.MIN_CELLS), AppConfig.GRID.MAX_CELLS);

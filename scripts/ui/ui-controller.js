@@ -701,10 +701,6 @@ class UIController {
         this._effectsController._toggleActivityEffect(v);
     }
 
-    toggleActivityEffectCheckbox() {
-        this._effectsController._syncActivityEffectCheckbox();
-    }
-
     _syncActivityColorsBlock(active) {
         this._effectsController.syncActivityColorsBlock(active);
     }
