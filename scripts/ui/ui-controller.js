@@ -237,6 +237,8 @@ class UIController {
         this.automaton = null;
         this._patternState = null;
 
+        this._effectsController?.destroy();
+        this._effectsController = null;
         this._specialModeController?.destroy();
         this._specialModeController = null;
         this._displayController?.destroy();

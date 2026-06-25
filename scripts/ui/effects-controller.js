@@ -39,6 +39,29 @@ class EffectsController {
 
         // Estado propio: actividad visual
         this.showActivityEffect = true;
+
+        // Cleanups de los listeners de swatches (color pickers). Se gestionan
+        // aparte del helper central porque los swatches se reemplazan vía
+        // innerHTML en cada cambio binario↔Generations: hay que quitar los
+        // anteriores antes de re-registrar para no retener nodos desprendidos.
+        this._swatchCleanups = [];
+    }
+
+    /**
+     * Registra un listener de swatch y guarda su removedor en _swatchCleanups.
+     * @param {EventTarget} target
+     * @param {string} event
+     * @param {Function} handler
+     */
+    _registerSwatchListener(target, event, handler) {
+        target.addEventListener(event, handler);
+        this._swatchCleanups.push(() => target.removeEventListener(event, handler));
+    }
+
+    /** Quita todos los listeners de swatches registrados y vacía el array. */
+    _clearSwatchListeners() {
+        this._swatchCleanups.forEach(cleanup => cleanup());
+        this._swatchCleanups = [];
     }
 
     // =========================================
@@ -63,6 +86,12 @@ class EffectsController {
             () => this.toggleActivityEffect()
         );
         this._bindActivityColorPickers();
+    }
+
+    /** Libera los listeners de swatches gestionados localmente. */
+    destroy() {
+        this._clearSwatchListeners();
+        this.automaton = null;
     }
 
     // =========================================
@@ -183,11 +212,12 @@ class EffectsController {
                 </div>`;
         }).join('');
 
+        this._clearSwatchListeners();
         for (let i = 0; i < C; i++) {
             const input = document.getElementById(`genColor${i}`);
             const swatch = document.getElementById(`genSwatch${i}`);
             if (!input || !swatch) continue;
-            this._addEventListener(input, 'input', () => {
+            this._registerSwatchListener(input, 'input', () => {
                 const color = input.value;
                 swatch.style.setProperty('--swatch-color', color);
                 engine._palette[i] = i === 0 ? null : color;
@@ -213,12 +243,13 @@ class EffectsController {
             {id: 'colorDying', swatchId: 'swatchDying', prop: 'colorDying'},
         ];
 
+        this._clearSwatchListeners();
         for (const {id, swatchId, prop} of map) {
             const input = document.getElementById(id);
             const swatch = document.getElementById(swatchId);
             if (!input || !swatch) continue;
 
-            this._addEventListener(input, 'input', () => {
+            this._registerSwatchListener(input, 'input', () => {
                 const color = input.value;
                 swatch.style.setProperty('--swatch-color', color);
                 this.automaton.renderer[prop] = color;
