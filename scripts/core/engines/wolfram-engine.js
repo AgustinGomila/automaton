@@ -19,6 +19,9 @@
  * gridWidth y gridHeight se guardan como propiedades de instancia y se
  * re-sincronizan al inicio de step() para detectar resize en caliente.
  */
+
+import {WolframDirection} from './special-engine-manager.js';
+
 class WolframEngine {
 
     /**
@@ -29,7 +32,7 @@ class WolframEngine {
     constructor(automaton) {
         this.automaton = automaton;
         this.isActive = false;
-        this.direction = 'vertical'; // 'vertical' (↓) o 'horizontal' (→)
+        this.direction = WolframDirection.VERTICAL; // (↓) o WolframDirection.HORIZONTAL (→)
         this.ruleNumber = 30;
         this.ruleTable = this._generateRuleTable(30);
         this.generation = 0;
@@ -55,7 +58,7 @@ class WolframEngine {
      * @param {number} [ruleNumber=30]       — regla Wolfram (0-255)
      * @param {string} [direction='vertical'] — 'vertical' o 'horizontal'
      */
-    activate(ruleNumber = 30, direction = 'vertical') {
+    activate(ruleNumber = 30, direction = WolframDirection.VERTICAL) {
         this.gridWidth = this.automaton?.gridWidth || 200;
         this.gridHeight = this.automaton?.gridHeight || 200;
         this.ruleNumber = Math.max(0, Math.min(255, ruleNumber));
@@ -113,7 +116,7 @@ class WolframEngine {
                 this._initializeSeed();
             } else {
                 // Semilla del usuario en fila/columna 0 → empezar desde 1
-                this.direction === 'vertical'
+                this.direction === WolframDirection.VERTICAL
                     ? (this.currentRow = 1)
                     : (this.currentCol = 1);
             }
@@ -122,12 +125,12 @@ class WolframEngine {
         }
 
         // Comprobar límite del eje temporal antes de continuar
-        if (this.direction === 'vertical' && this.currentRow >= this.gridHeight) return false;
-        if (this.direction === 'horizontal' && this.currentCol >= this.gridWidth) return false;
+        if (this.direction === WolframDirection.VERTICAL && this.currentRow >= this.gridHeight) return false;
+        if (this.direction === WolframDirection.HORIZONTAL && this.currentCol >= this.gridWidth) return false;
 
         this._changedCells.length = 0;
 
-        if (this.direction === 'vertical') {
+        if (this.direction === WolframDirection.VERTICAL) {
             const y = this.currentRow;
             const gw = this.gridWidth;
             const gh = this.gridHeight;
@@ -189,9 +192,9 @@ class WolframEngine {
             active: this.isActive,
             rule: this.ruleNumber,
             direction: this.direction,
-            progress: this.direction === 'vertical' ? this.currentRow : this.currentCol,
+            progress: this.direction === WolframDirection.VERTICAL ? this.currentRow : this.currentCol,
             // max: límite del eje temporal según dirección
-            max: this.direction === 'vertical' ? this.gridHeight : this.gridWidth,
+            max: this.direction === WolframDirection.VERTICAL ? this.gridHeight : this.gridWidth,
             generation: this.generation
         };
     }
@@ -231,7 +234,7 @@ class WolframEngine {
         const gw = this.gridWidth || this.automaton.gridWidth || 200;
         const gh = this.gridHeight || this.automaton.gridHeight || 200;
 
-        if (this.direction === 'vertical') {
+        if (this.direction === WolframDirection.VERTICAL) {
             for (let x = 0; x < gw; x++) {
                 if (this.automaton.grid[x]) this.automaton.grid[x][0] = 0;
             }
@@ -261,7 +264,7 @@ class WolframEngine {
     _checkUserSeed() {
         const gw = this.gridWidth || this.automaton.gridWidth || 200;
         const gh = this.gridHeight || this.automaton.gridHeight || 200;
-        if (this.direction === 'vertical') {
+        if (this.direction === WolframDirection.VERTICAL) {
             for (let x = 0; x < gw; x++) {
                 if (this.automaton.grid[x]?.[0]) return true;
             }

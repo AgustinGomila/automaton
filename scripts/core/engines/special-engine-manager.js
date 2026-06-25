@@ -17,6 +17,18 @@
 
 import {AppConfig} from '../../utils/config.js';
 
+/**
+ * Eje de evolución del motor Wolfram (autómata 1D que se dibuja fila a fila).
+ * Vive aquí (módulo no-lazy que todos los consumidores ya importan) y no en
+ * wolfram-engine.js, que se carga de forma diferida: importarlo desde la UI
+ * forzaría la carga anticipada del motor. NO confundir con WrapMode, que reusa
+ * 'horizontal'/'vertical' para el modo de borde del grid.
+ */
+export const WolframDirection = Object.freeze({
+    VERTICAL: 'vertical',
+    HORIZONTAL: 'horizontal',
+});
+
 class SpecialEngineManager {
 
     static MODES = Object.freeze({

@@ -1,5 +1,5 @@
 import {eventBus, Events} from '../infrastructure/event-bus.js';
-import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {SpecialEngineManager, WolframDirection} from '../core/engines/special-engine-manager.js';
 
 /**
  * SpecialModeUI — Capa de presentación para los modos especiales del autómata.
@@ -168,7 +168,7 @@ class SpecialModeUI {
             case SpecialEngineManager.MODES.WOLFRAM: {
                 const info = this.automaton.wolframEngine.getInfo();
                 indicator.className = 'mode-indicator wolfram-mode';
-                indicator.innerHTML = `<i class="fas fa-arrows-alt-v"></i> Wolfram R${info.rule} ${info.direction === 'vertical' ? '↓' : '→'}`;
+                indicator.innerHTML = `<i class="fas fa-arrows-alt-v"></i> Wolfram R${info.rule} ${info.direction === WolframDirection.VERTICAL ? '↓' : '→'}`;
                 break;
             }
             case SpecialEngineManager.MODES.LANGTON: {

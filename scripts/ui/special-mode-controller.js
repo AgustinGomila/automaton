@@ -1,6 +1,6 @@
 import {t} from './i18n.js';
 import {eventBus, Events} from '../infrastructure/event-bus.js';
-import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {SpecialEngineManager, WolframDirection} from '../core/engines/special-engine-manager.js';
 import {NeighborhoodType} from '../core/neighborhood-calculator.js';
 import {SpecialModeUI} from './special-mode-ui.js';
 import {parseCustomRule} from '../config/rules.js';
@@ -82,7 +82,7 @@ class SpecialModeController {
                 if (this._suppressToggleEvents) return;
                 if (wolframToggle.checked) {
                     const rule = parseInt(document.getElementById('wolframRule')?.value) || 30;
-                    const direction = document.getElementById('wolframDirection')?.value || 'vertical';
+                    const direction = document.getElementById('wolframDirection')?.value || WolframDirection.VERTICAL;
                     this.activateWolframMode(rule, direction);
                 } else {
                     this.deactivateWolframMode();
@@ -354,7 +354,7 @@ class SpecialModeController {
     // ACTIVACIÓN / DESACTIVACIÓN
     // =========================================
 
-    async activateWolframMode(rule = 30, direction = 'vertical') {
+    async activateWolframMode(rule = 30, direction = WolframDirection.VERTICAL) {
         if (!this.automaton?.grid) {
             this._onShowNotification(t('notif.automata.error'), 'warning', 3000);
             return;

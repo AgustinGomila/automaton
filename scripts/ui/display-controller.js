@@ -1,6 +1,6 @@
 import {t} from './i18n.js';
 import {rulesLoader} from '../config/rules-loader.js';
-import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
+import {SpecialEngineManager, WolframDirection} from '../core/engines/special-engine-manager.js';
 import {NeighborhoodType, WrapMode} from '../core/neighborhood-calculator.js';
 
 /**
@@ -44,9 +44,9 @@ class DisplayController {
 
             case M.WOLFRAM: {
                 const binary = Number(info.rule).toString(2).padStart(8, '0');
-                const dirSymbol = info.direction === 'vertical' ? '↓' : '→';
-                const dirText = t(info.direction === 'vertical' ? 'wolfram.vertical.short' : 'wolfram.horizontal.short');
-                const dirAxis = info.direction === 'vertical' ? 'v' : 'h';
+                const dirSymbol = info.direction === WolframDirection.VERTICAL ? '↓' : '→';
+                const dirText = t(info.direction === WolframDirection.VERTICAL ? 'wolfram.vertical.short' : 'wolfram.horizontal.short');
+                const dirAxis = info.direction === WolframDirection.VERTICAL ? 'v' : 'h';
                 this._setTitle(t('app.title.wolfram', {rule: info.rule}));
                 this._setH1('fas fa-dice', t('header.title', {ruleName: `Wolfram R${info.rule}`}));
                 this._setRulesSpecific(`
