@@ -68,6 +68,7 @@ internationalization.
 - Non-blocking temporary notifications
 - Active mode indicator with rule details
 - Performance overlay (I key): gen/s, step ms, render ms
+- Population chart overlay (P key): cells per generation evolution, with full-run downsampling
 
 ---
 
@@ -101,6 +102,7 @@ internationalization.
 | A         | Random                 |
 | B         | Paint bucket           |
 | I         | Performance overlay    |
+| P         | Population chart       |
 | C         | Clear                  |
 | G         | Show / Hide grid       |
 | H         | Show / Hide highlights |

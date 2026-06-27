@@ -98,6 +98,7 @@ class I18n {
                 'tooltip.patterns.compact': 'Vista compacta',
                 'tooltip.bucket': 'Bote de pintura',
                 'tooltip.perf': 'Rendimiento (I)',
+                'tooltip.chart': 'Gráfico de población (P)',
 
                 // Configuración
                 'config.title': 'Configuración',
@@ -256,6 +257,7 @@ class I18n {
                 'instructions.shortcut.r': 'Rotar patrón',
                 'instructions.shortcut.a': 'Aleatorio',
                 'instructions.shortcut.i': 'Performance',
+                'instructions.shortcut.p': 'Gráfico de población',
                 'instructions.shortcut.b': 'Bote de pintura',
                 'instructions.shortcut.c': 'Limpiar',
                 'instructions.shortcut.g': 'Mostrar/Ocultar grilla',
@@ -409,6 +411,7 @@ class I18n {
                 'tooltip.patterns.compact': 'Compact view',
                 'tooltip.bucket': 'Paint bucket',
                 'tooltip.perf': 'Performance (I)',
+                'tooltip.chart': 'Population chart (P)',
 
                 // Configuración
                 'config.title': 'Configuration',
@@ -567,6 +570,7 @@ class I18n {
                 'instructions.shortcut.r': 'Rotate pattern',
                 'instructions.shortcut.a': 'Random',
                 'instructions.shortcut.i': 'Performance',
+                'instructions.shortcut.p': 'Population chart',
                 'instructions.shortcut.b': 'Bucket fill tool',
                 'instructions.shortcut.c': 'Clear',
                 'instructions.shortcut.g': 'Toggle grid',

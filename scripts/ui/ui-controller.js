@@ -23,6 +23,7 @@ import {ImportExportController} from './import-export-controller.js';
 import {NeighborhoodController, RuleController} from './rule-neighborhood-controller.js';
 import {EffectsController} from './effects-controller.js';
 import {DisplayController} from './display-controller.js';
+import {PopulationChart} from './population-chart.js';
 import {AppConfig} from '../utils/config.js';
 import {LimitType} from '../app/simulator-limiter.js';
 import {WrapMode} from '../core/neighborhood-calculator.js';
@@ -48,6 +49,7 @@ const Keys = Object.freeze({
     G: 'g',
     H: 'h',
     I: 'i',
+    P: 'p',
     R: 'r',
     S: 's',
     Z: 'z',
@@ -151,6 +153,8 @@ class UIController {
         // se ejecuta sincrónicamente cuando las reglas ya están cargadas.
         this._displayController = new DisplayController(this.automaton, this._patternState);
 
+        this._populationChart = new PopulationChart();
+
         this._waitForRulesAndInit();
 
         this._cleanups.push(
@@ -247,6 +251,8 @@ class UIController {
         this._specialModeController = null;
         this._displayController?.destroy();
         this._displayController = null;
+        this._populationChart?.destroy();
+        this._populationChart = null;
     }
 
     _addEventListener(target, event, handler, options) {
@@ -384,6 +390,11 @@ class UIController {
         }
         this._cleanups.push(eventBus.on(Events.PERF_UPDATE, (perf) => this._updatePerfOverlay(perf)));
 
+        const chartToggle = document.getElementById('chartToggle');
+        if (chartToggle) {
+            this._addEventListener(chartToggle, 'click', () => this._toggleChart());
+        }
+
         this._specialModeController.bindEvents();
     }
 
@@ -503,6 +514,9 @@ class UIController {
                 break;
             case Keys.I:
                 this._togglePerf();
+                break;
+            case Keys.P:
+                this._toggleChart();
                 break;
             case Keys.QUESTION:
                 e.preventDefault();
@@ -683,6 +697,13 @@ class UIController {
             <div class="perf-row"><span class="perf-label">render</span><span class="perf-value ${cls(perf.renderMs)}">${renderMs}ms</span></div>
             <div class="perf-row"><span class="perf-label">total</span><span class="perf-value ${cls(perf.stepMs + perf.renderMs)}">${totalMs}ms</span></div>
             <div class="perf-row"><span class="perf-label">modo</span><span class="perf-value" style="color:var(--gray-text)">${perf.mode}</span></div>`;
+    }
+
+    _toggleChart() {
+        const btn = document.getElementById('chartToggle');
+        if (!btn || !this._populationChart) return;
+        const active = btn.classList.toggle('active');
+        if (active) this._populationChart.show(); else this._populationChart.hide();
     }
 
     toggleInfluenceArea() {

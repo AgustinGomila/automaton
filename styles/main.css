@@ -540,6 +540,26 @@ canvas {
     z-index: 5;
 }
 
+/* Overlay de gráfico de población: flota centrado sobre el borde inferior del
+   frame del CA, ocupando el 50% del ancho del tablero (escala con el tablero
+   sin desbordar). */
+.population-chart-overlay {
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    width: 50%;
+    height: 90px;
+    z-index: 8;
+    pointer-events: none;
+    cursor: default;
+    image-rendering: auto;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+}
+
 /* ============================================================
    GRILLA
    ============================================================ */
@@ -2524,6 +2544,10 @@ canvas {
         min-width: 120px;
         position: absolute;
         top: 100%;
+    }
+
+    .population-chart-overlay {
+        height: 64px;
     }
 
     .mode-indicator {

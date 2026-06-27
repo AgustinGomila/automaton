@@ -69,6 +69,7 @@ completa del grid e internacionalización ES/EN.
 - Notificaciones temporales no bloqueantes
 - Indicador de modo activo con detalles de regla
 - Overlay de rendimiento (tecla I): gen/s, step ms, render ms
+- Overlay de gráfico de población (tecla P): evolución de células por generación, con downsampling de toda la corrida
 
 ---
 
@@ -102,6 +103,7 @@ completa del grid e internacionalización ES/EN.
 | A         | Aleatorio                   |
 | B         | Bote de pintura             |
 | I         | Overlay de rendimiento      |
+| P         | Gráfico de población        |
 | C         | Limpiar                     |
 | G         | Mostrar / Ocultar grilla    |
 | H         | Mostrar / Ocultar resaltado |
