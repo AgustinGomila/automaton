@@ -241,6 +241,16 @@ class RD2DEngine {
         this.stateGrid = back;
         this.generation++;
 
+        // Marcar dirty TODA celda cuyo estado cambió, no solo las que cambian de
+        // vivo↔muerto: el colorProvider colorea por nº de bordes (popcount 0-15),
+        // así que una celda que pasa de un estado no-cero a otro distinto cambia de
+        // color y debe repintarse. `buf` ya contiene exactamente esas celdas. Mismo
+        // patrón que Generations/WireWorld/Langton (markDirty por cambio de estado).
+        const renderer = this.automaton.renderer;
+        for (let i = 0; i < this._changedCount; i++) {
+            renderer.markDirtyIndex(buf[i]);
+        }
+
         this._syncToAutomatonGrid();
         return changed;
     }
@@ -370,6 +380,12 @@ class RD2DEngine {
         return this.stateGrid[x]?.[y] || 0;
     }
 
+    /**
+     * Espeja el stateGrid (16 estados) al grid binario de automaton para stats/WASM.
+     * El marcado dirty para el renderer lo hace step() sobre `buf` (cubre también los
+     * cambios de color sin cambio de vivacidad), así que aquí solo se sincroniza el
+     * valor binario sin volver a marcar dirty.
+     */
     _syncToAutomatonGrid() {
         const gw = this.gridWidth;
         const gh = this.gridHeight;
@@ -379,7 +395,6 @@ class RD2DEngine {
                 const isAlive = this.stateGrid[x]?.[y] !== 0;
                 if (this.automaton.grid[x][y] !== (isAlive ? 1 : 0)) {
                     this.automaton.grid[x][y] = isAlive ? 1 : 0;
-                    this.automaton.renderer.markDirty(x, y);
                 }
             }
         }
