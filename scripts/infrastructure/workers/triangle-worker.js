@@ -48,9 +48,13 @@
 
         destroboscope = !!data.destroboscope;
         if (destroboscope) {
-            // Twin rule: twin[k] = rule[7-k]
+            // Twin rule = bits invertidos y luego reversados. DEBE coincidir con
+            // TriangleEngine._buildTwinRuleTable (sync); de lo contrario el modo
+            // destroboscópico evoluciona distinto en grids grandes (worker) que en
+            // chicos (sync) y que el número que muestra la UI (engine._twinRuleNumber).
+            const inverted = (~data.ruleNumber) & 0xFF;
             let twinRev = 0;
-            for (let i = 0; i < 8; i++) twinRev = (twinRev << 1) | ((data.ruleNumber >> i) & 1);
+            for (let i = 0; i < 8; i++) twinRev = (twinRev << 1) | ((inverted >> i) & 1);
             const twinBin = (twinRev & 0xFF).toString(2).padStart(8, '0');
             for (let i = 0; i < 8; i++) twinRuleTable[i] = twinBin[7 - i] === '1' ? 1 : 0;
         }
