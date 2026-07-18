@@ -491,6 +491,35 @@ class SpecialEngineManager {
         return {handled: false, changed: false, dirtyX: 0, dirtyY: 0, population: null};
     }
 
+    /**
+     * Hook de edición del path estándar (automaton.setCell): mantiene los
+     * stateGrid de los motores multiestado que dibujan sobre el grid
+     * rectangular en sincronía con grid[][].
+     *
+     * Sin este hook, el pincel crea celdas "fantasma" (grid=1 con stateGrid=0,
+     * visibles pero inertes para las reglas) y el borrado deja celdas
+     * invisibles activas (grid=0 con stateGrid>0, que siguen contando como
+     * vecinas y reaparecen al siguiente paso).
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number|boolean} state — truthy: celda viva; falsy: vacía
+     */
+    onCellSet(x, y, state) {
+        const M = SpecialEngineManager.MODES;
+        if (this.specialMode === M.RD2D && this.rd2dEngine?.isActive) {
+            if (this.rd2dEngine.stateGrid?.[x]) {
+                this.rd2dEngine.stateGrid[x][y] = state
+                    ? (this.rd2dEngine._inferStateFromNeighbors(x, y) || 15)
+                    : 0;
+            }
+        } else if (this.specialMode === M.GENERATIONS && this.generationsEngine?.isActive) {
+            if (this.generationsEngine.stateGrid?.[x]) {
+                this.generationsEngine.stateGrid[x][y] = state ? 1 : 0;
+            }
+        }
+    }
+
     destroy() {
         this.wolframEngine?.deactivate?.();
         this.rd2dEngine?.deactivate?.();
