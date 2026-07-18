@@ -113,7 +113,10 @@ class SpecialEngineManager {
             continued, label, stopMessage,
             generation: engine.generation,
             changedCells: engine.getChangedCells(),
-            population: null,
+            // Motores con población propia (Generations: estados ≠ 0 en su
+            // stateGrid) la reportan post-step en O(1); el resto usa el
+            // recuento del core sobre grid[][].
+            population: engine.getPopulation?.() ?? null,
             markDirtyFromCells: false,
             skipActivity
         };
@@ -156,6 +159,22 @@ class SpecialEngineManager {
     // =========================================
     // INFO DEL MOTOR ACTIVO
     // =========================================
+
+    /**
+     * Población del motor activo recontada desde su stateGrid, o null si el
+     * modo activo no lleva población propia (su grid[][] ya refleja todo lo
+     * no-vacío y el recuento del core es correcto).
+     *
+     * O(N): pensado para los caminos fríos (ediciones vía updateStats, límite
+     * por población). El hot-loop usa el contador incremental que el motor
+     * reporta en _describeStep.
+     */
+    getActivePopulation() {
+        if (this.specialMode === SpecialEngineManager.MODES.GENERATIONS && this.generationsEngine?.isActive) {
+            return this.generationsEngine.recountPopulation();
+        }
+        return null;
+    }
 
     getActiveInfo() {
         const mode = this.specialMode || SpecialEngineManager.MODES.STANDARD;

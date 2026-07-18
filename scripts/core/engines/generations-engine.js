@@ -9,6 +9,12 @@
  * Solo el estado 1 cuenta como vecino vivo para las reglas B/S.
  * El envejecimiento (2→3→…→0) es determinista y no depende de vecinos.
  *
+ * ─── Población ─────────────────────────────────────────────────────────
+ * La población reportada (getPopulation) cuenta TODAS las celdas en estado
+ * distinto de 0 —vivas y moribundas—, igual que MCell y que los demás
+ * motores multiestado (WireWorld, Langton). grid[][] en cambio solo refleja
+ * el estado 1: es la superficie de edición binaria, no la métrica.
+ *
  * ─── Convención de índice plano ────────────────────────────────────────
  * Column-major:  index = x * gridHeight + y
  * Consistente con GridRenderer y GridManager.
@@ -54,6 +60,11 @@ class GenerationsEngine {
         this.generation = 0;
         this._changedCells = [];      // índices planos x*gridHeight+y
 
+        // Población: celdas con estado ≠ 0. Mantenida exacta por los caminos
+        // internos (activate/reset/randomize/step); las ediciones externas
+        // que mutan stateGrid la refrescan vía recountPopulation().
+        this._population = 0;
+
         // Paleta de colores: _palette[state] → string CSS | null
         this._palette = [];
     }
@@ -86,11 +97,15 @@ class GenerationsEngine {
         this._backGrid = this._allocGrid(gw, gh);
 
         // Importar grid binario actual → estado 1
+        let pop = 0;
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
-                this.stateGrid[x][y] = grid[x][y] ? 1 : 0;
+                const s = grid[x][y] ? 1 : 0;
+                this.stateGrid[x][y] = s;
+                pop += s;
             }
         }
+        this._population = pop;
 
         this._buildPalette();
         this._ctx.renderer.setColorProvider(this._colorProvider.bind(this));
@@ -131,11 +146,15 @@ class GenerationsEngine {
             for (let x = 0; x < gw; x++) this.stateGrid[x].fill(0);
         }
 
+        let pop = 0;
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
-                this.stateGrid[x][y] = grid[x][y] ? 1 : 0;
+                const s = grid[x][y] ? 1 : 0;
+                this.stateGrid[x][y] = s;
+                pop += s;
             }
         }
+        this._population = pop;
         this._ctx.renderer.markAllDirty();
     }
 
@@ -147,13 +166,16 @@ class GenerationsEngine {
         if (!this.stateGrid) return;
         const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
 
+        let pop = 0;
         for (let x = 0; x < gw; x++) {
             for (let y = 0; y < gh; y++) {
                 const s = Math.random() < density ? 1 : 0;
                 this.stateGrid[x][y] = s;
                 grid[x][y] = s;
+                pop += s;
             }
         }
+        this._population = pop;
 
         this.generation = 0;
         this._changedCells = [];
@@ -186,6 +208,7 @@ class GenerationsEngine {
         const renderer = this._ctx.renderer;
 
         this._changedCells.length = 0;
+        let pop = 0;
 
         for (let x = 0; x < gw; x++) {
             const xm = wrap ? (x === 0 ? gw - 1 : x - 1) : x - 1;
@@ -211,6 +234,7 @@ class GenerationsEngine {
                 }
 
                 back[x][y] = next;
+                if (next !== 0) pop++;
 
                 if (next !== cur) {
                     const idx = x * gh + y;
@@ -225,6 +249,7 @@ class GenerationsEngine {
         // Swap de buffers sin allocaciones
         this._backGrid = sg;
         this.stateGrid = back;
+        this._population = pop;
         this.generation++;
 
         return true;
@@ -235,27 +260,36 @@ class GenerationsEngine {
     }
 
     // =========================================
-    // SINCRONIZACIÓN TRAS EDICIÓN MANUAL
+    // POBLACIÓN
     // =========================================
 
     /**
-     * Reconstruye stateGrid desde grid[][] tras paste/move.
-     * Celdas vivas → estado 1; celdas muertas → estado 0 (borra moribundos).
+     * Población actual: celdas en cualquier estado ≠ 0 (vivas + moribundas).
+     * O(1). Exacta tras activate/reset/randomize/step; las ediciones que
+     * mutan stateGrid desde fuera del motor deben refrescarla con
+     * recountPopulation().
      */
-    syncFromGrid() {
-        if (!this.stateGrid) return;
-        const {gridWidth: gw, gridHeight: gh, grid} = this._ctx;
+    getPopulation() {
+        return this._population;
+    }
 
+    /**
+     * Recuenta la población escaneando stateGrid y actualiza el contador.
+     * O(N); pensado para los caminos de edición (paste/import/flood-fill)
+     * que escriben stateGrid directamente.
+     */
+    recountPopulation() {
+        if (!this.stateGrid) return 0;
+        const {gridWidth: gw, gridHeight: gh} = this._ctx;
+        let pop = 0;
         for (let x = 0; x < gw; x++) {
+            const col = this.stateGrid[x];
             for (let y = 0; y < gh; y++) {
-                if (grid[x][y]) {
-                    this.stateGrid[x][y] = 1;
-                } else if (this.stateGrid[x][y] !== 0) {
-                    // Solo limpiar si era moribundo — no tocar celdas que ya eran 0
-                    this.stateGrid[x][y] = 0;
-                }
+                if (col[y] !== 0) pop++;
             }
         }
+        this._population = pop;
+        return pop;
     }
 
     // =========================================

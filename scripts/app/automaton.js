@@ -723,16 +723,21 @@ class CellularAutomaton {
         // resize, modos especiales): es el punto natural para invalidar el
         // baseline de población del core. Tras invalidar, getPopulation() hace
         // un único recuento fresco; el override (cuando lo hay) es autoritativo.
+        // Los motores con población propia (Generations) recuentan desde su
+        // stateGrid — grid[][] solo refleja el estado 1 y quedaría corto.
         this.core.invalidatePopulation();
         const population = populationOverride !== null
             ? populationOverride
-            : this.core.getPopulation();
+            : (this._engineManager.getActivePopulation() ?? this.core.getPopulation());
         const density = (population / (this.gridWidth * this.gridHeight) * 100).toFixed(1);
         eventBus.emit(Events.STATS_UPDATED, {generation: this.generation, population, density});
     }
 
     checkLimits() {
-        return this._limiter.check(this.generation, () => this.core.getPopulation());
+        // El límite por población debe disparar sobre el mismo número que
+        // muestra la UI: en Generations incluye las celdas moribundas.
+        return this._limiter.check(this.generation, () =>
+            this._engineManager.getActivePopulation() ?? this.core.getPopulation());
     }
 
     _checkLimitsWithPop(population) {

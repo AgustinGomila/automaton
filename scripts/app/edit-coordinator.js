@@ -291,6 +291,10 @@ class EditCoordinator {
         if (result.changedCells.length > 0) {
             this._commitCells(result.changedCells, {full: false});
         } else if (stateGrid && area.engineStates) {
+            // Solo cambiaron estados extendidos (moribundos → 0) sin tocar
+            // grid[][]: refrescar población igualmente — en Generations los
+            // moribundos cuentan.
+            this._a.updateStats();
             this._a.render();
         }
 
@@ -353,7 +357,9 @@ class EditCoordinator {
                 this._a.render();
 
             } else if (specialMode === SpecialEngineManager.MODES.GENERATIONS && generationsEngine?.isActive) {
-                // NO llamar syncFromGrid() — destruiría los estados moribundos.
+                // Mutar stateGrid solo en las celdas del patrón: una
+                // reconstrucción completa desde grid[][] destruiría los
+                // estados moribundos (2..C-1) del resto del tablero.
                 result.changedCells.forEach(cell => {
                     if (generationsEngine.stateGrid?.[cell.x]) {
                         generationsEngine.stateGrid[cell.x][cell.y] = 1;
