@@ -18,8 +18,15 @@ class EditCoordinator {
 
     /**
      * Plazo máximo (ms) que _haltForEditAsync espera a que el worker termine el
-     * paso en curso antes de forzar su terminación. Un paso de generación es muy
-     * inferior a esto incluso en grids grandes; el plazo solo protege ante cuelgues.
+     * paso en curso antes de forzar su terminación.
+     *
+     * Medido en el grid máximo (2000×2000, sopa al 50%): el fastpath Moore-1
+     * (~95% del uso) tarda ≤56ms (margen 18×) y el camino genérico con radio 2
+     * ~360ms; con radios ≥5 el paso legítimamente supera el plazo (r5 ≈ 1.9s,
+     * r10 ≈ 6.8s). En ese caso el terminate a mitad de paso solo pierde la
+     * generación en vuelo (el grid queda en la última completada y el worker se
+     * re-inicializa), lo cual es preferible a congelar paste/import durante
+     * segundos en configuraciones que ya corren a <1 gen/s.
      */
     static WORKER_HALT_TIMEOUT_MS = 1000;
 
