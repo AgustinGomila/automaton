@@ -71,7 +71,8 @@ class RD2DEngine {
         this.gridWidth = this.automaton.gridWidth;
         this.gridHeight = this.automaton.gridHeight;
         this.generation = 0;
-        this.initialized = false;        this._initStateGrid();
+        this.initialized = false;
+        this._initStateGrid();
 
         this.automaton.renderer.setColorProvider(
             (idx) => this._colorProvider(idx)
@@ -100,7 +101,8 @@ class RD2DEngine {
      * borrar el grid principal cuando RD2D no era el modo activo.
      */
     reset() {
-        this.initialized = false;        this.generation = 0;
+        this.initialized = false;
+        this.generation = 0;
         this._changedCount = 0;
 
         if (this.stateGrid) {
@@ -422,7 +424,8 @@ class RD2DEngine {
         }
 
         this.generation = 0;
-        this.initialized = true;    }
+        this.initialized = true;
+    }
 
     _inferStateFromNeighbors(x, y) {
         const gw = this.gridWidth;

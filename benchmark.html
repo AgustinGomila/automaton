@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <title>Benchmark — Cellular Automaton</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
@@ -573,15 +573,15 @@
 
 <div class="config-bar">
     <label>Warm-up</label>
-    <input type="number" id="cfgWarmup" value="20" min="0" max="200" step="10" title="Warmup steps (discarded)">
+    <input id="cfgWarmup" max="200" min="0" step="10" title="Warmup steps (discarded)" type="number" value="20">
 
     <label style="margin-left:8px">Steps</label>
-    <input type="number" id="cfgSteps" value="200" min="10" max="2000" step="50" title="Measured steps">
+    <input id="cfgSteps" max="2000" min="10" step="50" title="Measured steps" type="number" value="200">
 
     <label style="margin-left:8px">Grid</label>
     <select id="cfgGrid">
         <option value="200">200 × 200</option>
-        <option value="400" selected>400 × 400</option>
+        <option selected value="400">400 × 400</option>
         <option value="600">600 × 600</option>
         <option value="800">800 × 800</option>
         <option value="1000">1000 × 1000</option>
@@ -655,7 +655,7 @@
     </div>
 </div>
 
-<canvas id="offscreen" width="400" height="400"></canvas>
+<canvas height="400" id="offscreen" width="400"></canvas>
 
 <!-- ── Core dependencies (order matters) ────────────────── -->
 <script type="module">

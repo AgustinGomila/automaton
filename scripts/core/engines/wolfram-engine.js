@@ -63,7 +63,8 @@ class WolframEngine {
         this.ruleTable = this._generateRuleTable(this.ruleNumber);
         this.direction = direction;
         this.isActive = true;
-        this.initialized = false;        this.generation = 0;
+        this.initialized = false;
+        this.generation = 0;
         this.currentRow = 0;
         this.currentCol = 0;
         this._changedCells = [];
@@ -79,7 +80,8 @@ class WolframEngine {
     }
 
     reset() {
-        this.initialized = false;        this.currentRow = 0;
+        this.initialized = false;
+        this.currentRow = 0;
         this.currentCol = 0;
         this.generation = 0;
         this._changedCells = [];
@@ -233,7 +235,8 @@ class WolframEngine {
             this.currentCol = 1;
         }
 
-        this.initialized = true;        if (typeof this.automaton._markAllDirty === 'function') {
+        this.initialized = true;
+        if (typeof this.automaton._markAllDirty === 'function') {
             this.automaton._markAllDirty();
         }
     }

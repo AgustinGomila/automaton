@@ -1099,7 +1099,7 @@ canvas {
 
 .patterns-grid-container {
     display: flex;
-    flex-wrap: wrap;           /* siempre wrap — sin scroll horizontal */
+    flex-wrap: wrap; /* siempre wrap — sin scroll horizontal */
     align-content: flex-start;
     gap: 6px;
     padding: 4px 2px 2px;
@@ -2458,7 +2458,7 @@ canvas {
 
     /* Contenedor de scroll de patrones */
     .patterns-grid-container {
-        max-height: 66px;   /* botón mobile 52px + gap + padding */
+        max-height: 66px; /* botón mobile 52px + gap + padding */
         gap: 5px;
     }
 
@@ -2467,7 +2467,7 @@ canvas {
     }
 
     .patterns-grid-container.compact-view {
-        max-height: 56px;   /* botón compact mobile ~44px + gap */
+        max-height: 56px; /* botón compact mobile ~44px + gap */
     }
 
     .patterns-grid-container.two-rows.compact-view {

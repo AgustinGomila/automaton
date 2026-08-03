@@ -19,7 +19,7 @@ import {GridWorkerManager} from '../infrastructure/workers/grid-worker-manager.j
 import {SpecialEngineManager} from '../core/engines/special-engine-manager.js';
 import {AnimationLoop} from './automaton-loop.js';
 import {SimulationLimiter} from './simulator-limiter.js';
-import {StateManager, StateChange} from './state-manager.js';
+import {StateChange, StateManager} from './state-manager.js';
 import {EditCoordinator} from './edit-coordinator.js';
 import {rulesLoader} from '../config/rules-loader.js';
 
