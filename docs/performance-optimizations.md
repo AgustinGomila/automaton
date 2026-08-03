@@ -33,6 +33,7 @@ El motor estándar (Conway, HighLife, Day & Night, y toda regla B/S) evaluaba
 y `computeNextState`.
 
 **Cambio:**
+
 - `_birthSet`/`_survivalSet` → `_birthLUT`/`_survivalLUT` (`Uint8Array(441)`), construidas en
   `setRule()`. Tamaño 441 = máx. de vecinos Moore con el radio máximo (10), por lo que el
   *general-path* nunca lee fuera de rango.
@@ -53,6 +54,7 @@ y `computeNextState`.
 de GC en cada frame.
 
 **Cambio:**
+
 - LUT `Uint8Array(9)` (`_birthLUT`/`_survivalLUT`) construidas una vez en `activate()`
   (Generations fija la regla siempre vía `activate`, no hay *setRule* en caliente).
 - Hot-loop usa las LUT; cero allocations por step.
@@ -68,12 +70,38 @@ de GC en cada frame.
 > (resuelto en #4), por lo que la mejora real del bucle de regla es mayor que el %
 > mostrado — el costo fijo del recuento de población diluye el porcentaje.
 
+### 2026-08 — Tier 3: `generations-engine.js` — punteros de columna hoisteados + conteo inline
+
+`step()` invocaba `_countAliveNeighbors(sg, gw, gh, x, xm, xp, y, ym, yp)` **por celda**
+(N² = 160 000 llamadas/step en 400²). El helper re-indexaba `sg[xm]`, `sg[x]`, `sg[xp]`
+en cada una de las `gh` filas, pese a que esas columnas dependen solo de `x`.
+
+**Cambio:**
+
+- Punteros de columna `colM`/`col`/`colP` (más `backCol`/`gridCol` y `xBase = x*gh`)
+  hoisteados al bucle exterior — se calculan una vez por columna, no por celda.
+- Conteo de vecinos **inline** en `step()` sobre esos punteros (elimina la llamada al
+  helper y su re-indexado); `_countAliveNeighbors` borrado (quedó sin llamadores).
+- `cur === 0 || cur === 1` → `cur <= 1` (el estado es `Uint8`, siempre ≥ 0).
+
+**Correctitud:** verificada con paridad A/B (baseline vs. optimizado, misma semilla) —
+100 pasos con población y nº de celdas cambiadas idénticos en cada paso.
+
+**Resultado (Generations B36/S23/C4 400×400, medido con corridas intercaladas para
+neutralizar el warm-up del JIT):**
+
+| Métrica  | Antes    | Después  | Mejora   |
+|----------|----------|----------|----------|
+| step avg | ~1.99 ms | ~1.76 ms | **−12%** |
+| gen/s    | ~506     | ~569     | **+12%** |
+
 ### 2026-06 — Tier 2 #4: `cellular-automaton.js` — población incremental
 
 `core.step()` llamaba a `gridManager.countPopulation()` (una pasada N² completa) en
 **cada** generación, además del N² del propio bucle de regla — duplicando el trabajo.
 
 **Cambio:**
+
 - El core mantiene `_population` con un flag `_populationValid`. `step()` con baseline
   válido solo suma el delta `births - deaths` (que el bucle de regla ya calcula); si el
   baseline es inválido, el recuento post-swap es directamente la población nueva.
@@ -113,8 +141,21 @@ app real los grids hex ≥100×100 usan el Worker, por lo que el path síncrono 
 corre para grids grandes. **Revertido** — el cambio añadía churn (hex-engine + hex-renderer)
 sin beneficio. Confirma el valor del criterio "solo se conserva lo que mejora el benchmark".
 
+### 2026-08 — Tier 3: `langton-engine._DIRS` — objetos `{dx,dy}` → `Int8Array`
+
+**Hipótesis:** el acceso `d.dx`/`d.dy` por hormiga en `step()` tenía overhead evitable
+empaquetando las direcciones en un `Int8Array`.
+
+**Resultado:** **descartada sin medir cambio útil.** El `step()` de Langton es O(nº de
+hormigas), no O(N²): con 200 hormigas el paso completo mide **~0.006 ms** (≈165 000 gen/s).
+No es un cuello de botella — el bucle de 200 iteraciones es despreciable frente al resto del
+frame. Optimizarlo añade churn sin ganancia observable, igual que el caso #3 de Hex. El
+acceso a propiedades de un objeto monomórfico pequeño ya es óptimo en V8.
+
 ## Pendientes (plan priorizado)
 
-- **Tier 3** — `triangle-engine._stepSync`: reemplazar `% w`/`% h` por ternarios en el
-  path wrap; `_changedCells` a `Uint32Array` preasignado en Generations/Hex;
-  `langton._DIRS` de objetos `{dx,dy}` a `Int8Array`.
+- **Tier 3 (menor)** — `triangle-engine._stepSync`: reemplazar `% w`/`% h` por ternarios
+  en el path wrap (el patrón ya probado en `generations-engine`). Prioridad baja: en la app
+  real el path síncrono de Triangle solo corre por debajo del umbral de worker
+  (`TRIANGLE_THRESHOLD = 100`), es decir grids pequeños donde el trabajo total ya es mínimo;
+  para grids grandes el cómputo lo hace `triangle-worker.js`. Medir antes de aplicar.

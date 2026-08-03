@@ -207,24 +207,50 @@ class GenerationsEngine {
         const sLUT = this._survivalLUT;
         const renderer = this._ctx.renderer;
 
-        this._changedCells.length = 0;
+        const changed = this._changedCells;
+        changed.length = 0;
         let pop = 0;
 
         for (let x = 0; x < gw; x++) {
             const xm = wrap ? (x === 0 ? gw - 1 : x - 1) : x - 1;
             const xp = wrap ? (x === gw - 1 ? 0 : x + 1) : x + 1;
 
-            for (let y = 0; y < gh; y++) {
-                const ym = wrap ? (y === 0 ? gh - 1 : y - 1) : y - 1;
-                const yp = wrap ? (y === gh - 1 ? 0 : y + 1) : y + 1;
+            // Punteros de columna izq/centro/der: dependen solo de x, no de y.
+            // Hoisteados fuera del bucle interno para no re-indexar sg[xm]/sg[x]/sg[xp]
+            // en cada una de las gh celdas (el conteo de vecinos va inline, no en helper).
+            const colM = (xm >= 0 && xm < gw) ? sg[xm] : null;
+            const col = sg[x];
+            const colP = (xp >= 0 && xp < gw) ? sg[xp] : null;
+            const backCol = back[x];
+            const gridCol = grid[x];
+            const xBase = x * gh;
 
-                const cur = sg[x][y];
+            for (let y = 0; y < gh; y++) {
+                const cur = col[y];
                 let next;
 
-                if (cur === 0 || cur === 1) {
-                    // Ambos estados usan el mismo conteo de vecinos en estado 1.
-                    // Extraído en helper para eliminar la duplicación del bloque original.
-                    const n = this._countAliveNeighbors(sg, gw, gh, x, xm, xp, y, ym, yp);
+                if (cur <= 1) {
+                    const ym = wrap ? (y === 0 ? gh - 1 : y - 1) : y - 1;
+                    const yp = wrap ? (y === gh - 1 ? 0 : y + 1) : y + 1;
+                    const ymOk = ym >= 0 && ym < gh;
+                    const ypOk = yp >= 0 && yp < gh;
+
+                    // Vecinos en estado 1 (Moore r1). Columnas izq/der son null en
+                    // los bordes no-toroidales; ymOk/ypOk excluyen filas fuera del grid.
+                    let n = 0;
+                    if (colM) {
+                        if (ymOk && colM[ym] === 1) n++;
+                        if (colM[y] === 1) n++;
+                        if (ypOk && colM[yp] === 1) n++;
+                    }
+                    if (ymOk && col[ym] === 1) n++;
+                    if (ypOk && col[yp] === 1) n++;
+                    if (colP) {
+                        if (ymOk && colP[ym] === 1) n++;
+                        if (colP[y] === 1) n++;
+                        if (ypOk && colP[yp] === 1) n++;
+                    }
+
                     next = cur === 0
                         ? bLUT[n]
                         : (sLUT[n] ? 1 : (C > 2 ? 2 : 0));
@@ -233,14 +259,14 @@ class GenerationsEngine {
                     next = (cur + 1) % C;
                 }
 
-                back[x][y] = next;
+                backCol[y] = next;
                 if (next !== 0) pop++;
 
                 if (next !== cur) {
-                    const idx = x * gh + y;
-                    this._changedCells.push(idx);
+                    const idx = xBase + y;
+                    changed.push(idx);
                     // Solo estado 1 es "vivo" para el resto del sistema
-                    grid[x][y] = next === 1 ? 1 : 0;
+                    gridCol[y] = next === 1 ? 1 : 0;
                     renderer.markDirtyIndex(idx);
                 }
             }
@@ -319,46 +345,6 @@ class GenerationsEngine {
         const g = new Array(w);
         for (let x = 0; x < w; x++) g[x] = new Uint8Array(h);
         return g;
-    }
-
-    /**
-     * Cuenta los vecinos en estado 1 (Moore, 8 vecinos) de la celda (x, y).
-     *
-     * Los índices xm/xp/ym/yp están pre-calculados con wrap por el caller;
-     * los bounds checks excluyen vecinos fuera del grid en modo no-toroidal.
-     *
-     * Extraído de step() para eliminar la duplicación idéntica entre los
-     * bloques cur=0 y cur=1, que usaban exactamente el mismo cómputo.
-     *
-     * @param {Uint8Array[]} sg  - stateGrid
-     * @param {number} gw       - gridWidth (para bounds check)
-     * @param {number} gh       - gridHeight (para bounds check)
-     * @param {number} x        - columna actual
-     * @param {number} xm       - columna izquierda (ya wraped o -1 si borde)
-     * @param {number} xp       - columna derecha   (ya wraped o gw si borde)
-     * @param {number} y        - fila actual
-     * @param {number} ym       - fila superior     (ya wraped o -1 si borde)
-     * @param {number} yp       - fila inferior     (ya wraped o gh si borde)
-     * @returns {number} número de vecinos en estado 1
-     */
-    _countAliveNeighbors(sg, gw, gh, x, xm, xp, y, ym, yp) {
-        let n = 0;
-        // Columna izquierda (xm)
-        if (xm >= 0 && xm < gw) {
-            if (ym >= 0 && ym < gh && sg[xm][ym] === 1) n++;
-            if (sg[xm][y] === 1) n++;
-            if (yp >= 0 && yp < gh && sg[xm][yp] === 1) n++;
-        }
-        // Columna central (x) — excluyendo (x,y) que es la celda actual
-        if (ym >= 0 && ym < gh && sg[x][ym] === 1) n++;
-        if (yp >= 0 && yp < gh && sg[x][yp] === 1) n++;
-        // Columna derecha (xp)
-        if (xp >= 0 && xp < gw) {
-            if (ym >= 0 && ym < gh && sg[xp][ym] === 1) n++;
-            if (sg[xp][y] === 1) n++;
-            if (yp >= 0 && yp < gh && sg[xp][yp] === 1) n++;
-        }
-        return n;
     }
 
     /**
