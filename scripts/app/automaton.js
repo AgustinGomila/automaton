@@ -81,7 +81,7 @@ class CellularAutomaton {
 
         // === ESTADO DE EJECUCIÓN ===
         this.generation = 0;
-        this._loop = new AnimationLoop({onStep: () => this._step()});
+        this._loop = new AnimationLoop({onStep: (steps) => this._step(steps)});
 
         // === WORKERS ===
         this._workerManager = new GridWorkerManager({
@@ -475,9 +475,15 @@ class CellularAutomaton {
             : this._stepStandardMode(t0);
     }
 
-    _stepEngineMode(t0) {
+    /**
+     * Avanza un paso del motor especial activo y aplica el bookkeeping
+     * (generación, stats, actividad, dirty) SIN renderizar ni medir tiempo.
+     * Permite batchear N pasos por frame (stepsPerFrame) emitiendo un único
+     * render() al final. Devuelve el descriptor del paso, o null si no hubo paso.
+     */
+    _advanceEngineMode() {
         const desc = this._engineManager.stepActive();
-        if (!desc) return 0;
+        if (!desc) return null;
 
         if (!desc.continued) {
             this.stop();
@@ -495,7 +501,12 @@ class CellularAutomaton {
                 this.renderer.markDirty(cc[i] >>> 16, cc[i] & 0xFFFF);
             }
         }
+        return desc;
+    }
 
+    _stepEngineMode(t0) {
+        const desc = this._advanceEngineMode();
+        if (!desc) return 0;
         const tStep = performance.now();
         this.render();
         this._debugTiming(desc.label, t0, tStep, performance.now());
@@ -604,7 +615,24 @@ class CellularAutomaton {
 
     _step(stepsPerFrame = 1) {
         if (this.specialMode) {
-            this.nextGeneration();
+            // Batch de N pasos por frame con un único render al final (paridad
+            // con la ruta estándar). checkLimits() por iteración replica el guard
+            // de nextGeneration(); los motores marcan dirty dentro de su step(),
+            // así que las marcas se acumulan y el render final las pinta todas.
+            let stepT0 = 0, stepT1 = 0, lastDesc = null;
+            for (let i = 0; i < stepsPerFrame; i++) {
+                if (!this.isRunning) break;
+                if (this.checkLimits()) break;
+                stepT0 = performance.now();
+                const desc = this._advanceEngineMode();
+                stepT1 = performance.now();
+                if (!desc) break;
+                lastDesc = desc;
+            }
+            if (lastDesc) {
+                this.render();
+                this._debugTiming(lastDesc.label, stepT0, stepT1, performance.now());
+            }
             return;
         }
         if (this._workerManager.isProcessing) return;
