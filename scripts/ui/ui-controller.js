@@ -690,9 +690,20 @@ class UIController {
         const stepMs = perf.stepMs.toFixed(1);
         const renderMs = perf.renderMs.toFixed(1);
         const totalMs = (perf.stepMs + perf.renderMs).toFixed(1);
+        const fps = perf.fps ?? 0;
+        const frameMs = (perf.frameMs ?? 0).toFixed(1);
+        const jitterMs = (perf.frameJitterMs ?? 0).toFixed(1);
+        const frameMaxMs = (perf.frameMaxMs ?? 0).toFixed(1);
         const cls = (ms) => ms < 16 ? '' : ms < 33 ? 'warn' : 'slow';
+        // fps ≥50 fluido, 30-50 aceptable, <30 se percibe trabado
+        const fpsCls = fps >= 50 ? '' : fps >= 30 ? 'warn' : 'slow';
         overlay.innerHTML = `
             <div class="perf-row"><span class="perf-label">gen/s</span><span class="perf-value">${perf.genPerSec}</span></div>
+            <div class="perf-row"><span class="perf-label">N/frame</span><span class="perf-value">${perf.nPerFrame ?? '-'}</span></div>
+            <div class="perf-row"><span class="perf-label">fps</span><span class="perf-value ${fpsCls}">${fps}</span></div>
+            <div class="perf-row"><span class="perf-label">frame</span><span class="perf-value ${cls(perf.frameMs ?? 0)}">${frameMs}ms</span></div>
+            <div class="perf-row"><span class="perf-label">jitter</span><span class="perf-value ${cls(perf.frameJitterMs ?? 0)}">±${jitterMs}ms</span></div>
+            <div class="perf-row"><span class="perf-label">frame max</span><span class="perf-value ${cls(perf.frameMaxMs ?? 0)}">${frameMaxMs}ms</span></div>
             <div class="perf-row"><span class="perf-label">step</span><span class="perf-value ${cls(perf.stepMs)}">${stepMs}ms</span></div>
             <div class="perf-row"><span class="perf-label">render</span><span class="perf-value ${cls(perf.renderMs)}">${renderMs}ms</span></div>
             <div class="perf-row"><span class="perf-label">total</span><span class="perf-value ${cls(perf.stepMs + perf.renderMs)}">${totalMs}ms</span></div>

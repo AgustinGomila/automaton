@@ -95,7 +95,29 @@ export const AppConfig = Object.freeze({
          * Por debajo de este valor el step corre en el hilo principal.
          */
         THRESHOLD: 600,
-        TRIANGLE_THRESHOLD: 100
+        TRIANGLE_THRESHOLD: 100,
+
+        /**
+         * Intervalo (ms) de AnimationLoop que marca la banda de "máxima
+         * velocidad" (niveles 6-10, todos con interval mínimo). En esa banda se
+         * activan el pipeline del worker y el N adaptativo; por encima, las
+         * velocidades bajas siguen moduladas por su intervalo.
+         */
+        MAX_SPEED_INTERVAL_MS: 16,
+
+        /**
+         * Objetivo de duración de frame (ms) para el N adaptativo. Con el worker
+         * pipelineado, gen/s queda topado por el cómputo (~1/costo_por_paso)
+         * independiente de N, así que se elige N para que cada frame dure ~esto
+         * → ~60fps. Grid grande ⇒ N chico; grid chico ⇒ N grande.
+         */
+        TARGET_FRAME_MS: 16,
+
+        /** Tope de pasos/frame del N adaptativo (evita batches enormes en grids chicos). */
+        MAX_ADAPTIVE_STEPS: 64,
+
+        /** Suavizado EMA del N adaptativo (mayor = converge más rápido, más ruidoso). */
+        ADAPTIVE_ALPHA: 0.25
     }),
 
     // =========================================================================

@@ -83,6 +83,13 @@ class CellularAutomaton {
         this.generation = 0;
         this._loop = new AnimationLoop({onStep: (steps) => this._step(steps)});
 
+        // Pipeline del worker: timing e inicio del batch en vuelo.
+        this._workerStartTime = null;
+        this._workerN = 1;
+        // N adaptativo (float, suavizado): pasos/frame elegidos para ~60fps en la
+        // banda de máxima velocidad. Arranca conservador y sube al medir el costo.
+        this._adaptiveN = 1;
+
         // === WORKERS ===
         this._workerManager = new GridWorkerManager({
             workerPath: 'scripts/infrastructure/workers/automaton-worker.js',
@@ -91,7 +98,11 @@ class CellularAutomaton {
             getGridHeight: () => this.gridHeight,
             getCore: () => this.core,
             onResult: ({generation, population, changedCells, changedCount}) => {
+                if (this._isDestroyed) return;
                 const tStep = performance.now();
+                // Inicio y N del batch que acaba de completar (para medir su cómputo).
+                const prevWorkerStart = this._workerStartTime;
+                const completedN = this._workerN;
                 this.generation = generation;
                 this.stateManager.recordPopulation(population);
                 if (changedCount > 0) {
@@ -104,12 +115,30 @@ class CellularAutomaton {
                 this.updateStats(population);
                 this.checkLimits();
                 this.renderer.updateActivityAges(changedCells, changedCount);
-                this.render();
-                if (this._workerStartTime && this._perfVisible) {
-                    const modeLabel = this._getPerfModeLabel();
-                    this._debugTiming(modeLabel, this._workerStartTime, tStep, performance.now());
-                    this._workerStartTime = null;
+
+                // Ajustar el N adaptativo con el costo real del batch recién medido.
+                if (prevWorkerStart && this._isMaxSpeed()) {
+                    this._updateAdaptiveN(tStep - prevWorkerStart, completedN);
                 }
+
+                // PIPELINE: relanzar el worker ANTES de renderizar → computa el
+                // próximo batch en paralelo con el render, eliminando el hueco
+                // secuencial (worker ocioso esperando el próximo tick de RAF).
+                // Pero SOLO flat-out si el nivel está capado (pide más pasos de los
+                // que entran en un frame → compute-bound, sin ocio que aprovechar).
+                // Si el nivel entra en el presupuesto (sub-cap), NO encadenamos: lo
+                // pacea el interval del loop a ~60fps, así los niveles bajos de la
+                // banda corren más lento (6<7<8). Va tras checkLimits() por el límite.
+                const capped = this._isMaxSpeed() && this._loop.stepsPerFrame > this._adaptiveCap();
+                const pipeline = this.isRunning && capped;
+                if (pipeline) this._nextGenerationWorker(this._adaptiveCap());
+
+                this.render();
+                if (prevWorkerStart && this._perfVisible) {
+                    const modeLabel = this._getPerfModeLabel();
+                    this._debugTiming(modeLabel, prevWorkerStart, tStep, performance.now());
+                }
+                if (!pipeline) this._workerStartTime = null;
             },
             onError: () => {
                 this.renderer.markAllDirty();
@@ -563,8 +592,50 @@ class CellularAutomaton {
 
     _nextGenerationWorker(stepsPerFrame = 1) {
         this._workerStartTime = performance.now();
+        this._workerN = stepsPerFrame;
         this._workerManager.requestNextGeneration(stepsPerFrame);
         return 0;
+    }
+
+    /** True en la banda de máxima velocidad (niveles 6-10, interval mínimo). */
+    _isMaxSpeed() {
+        return this._loop.updateInterval <= AppConfig.WORKER.MAX_SPEED_INTERVAL_MS;
+    }
+
+    /** Tope de pasos/frame que entra en ~TARGET_FRAME_MS (N adaptativo redondeado). */
+    _adaptiveCap() {
+        return Math.max(1, Math.round(this._adaptiveN));
+    }
+
+    /**
+     * Pasos/frame a pedir al worker. En máxima velocidad, el N del nivel pero
+     * CAPADO a lo que entra en un frame de ~TARGET_FRAME_MS. Así 6-10 diferencian
+     * hacia abajo desde el techo (6=1, 7=2, 8=4…) en vez de converger todos al
+     * máximo; solo los niveles que superan el tope se igualan (ahí es imposible ir
+     * más rápido). En grids chicos el tope es grande → diferenciación completa.
+     * @param {number} levelSteps — stepsPerFrame del nivel actual
+     */
+    _effectiveStepsPerFrame(levelSteps) {
+        if (this._isMaxSpeed()) return Math.min(levelSteps, this._adaptiveCap());
+        return levelSteps;
+    }
+
+    /**
+     * Lazo de control del N adaptativo. Mide el costo por paso del batch que
+     * acaba de completar (workerMs / N) y despeja el N que haría durar el frame
+     * ~TARGET_FRAME_MS, suavizado con EMA. Con el worker pipelineado gen/s queda
+     * topado por el cómputo independiente de N, así que esto maximiza el fps sin
+     * perder velocidad.
+     * @param {number} workerMs   — cómputo del batch completado
+     * @param {number} completedN — pasos de ese batch
+     */
+    _updateAdaptiveN(workerMs, completedN) {
+        if (workerMs <= 0 || completedN <= 0) return;
+        const perStep = workerMs / completedN;
+        const idealN = AppConfig.WORKER.TARGET_FRAME_MS / perStep;
+        const alpha = AppConfig.WORKER.ADAPTIVE_ALPHA;
+        this._adaptiveN = alpha * idealN + (1 - alpha) * this._adaptiveN;
+        this._adaptiveN = Math.min(Math.max(this._adaptiveN, 1), AppConfig.WORKER.MAX_ADAPTIVE_STEPS);
     }
 
     _getPerfModeLabel() {
@@ -582,19 +653,39 @@ class CellularAutomaton {
             this._perf = {
                 stepMs, renderMs, totalMs,
                 lastSecond: tRender, lastGenSnapshot: this.generation,
-                genPerSec: 0, mode
+                genPerSec: 0, mode,
+                // Cadencia de frames visibles: cada llamada a _debugTiming = un
+                // frame renderizado. En la ruta worker esto ocurre 1 vez por
+                // round-trip (N generaciones), así que fps y jitter delatan la
+                // traba percibida aunque gen/s sea alto.
+                fps: 0, frameMs: 0, frameJitterMs: 0, frameMaxMs: 0,
+                nPerFrame: this._workerN,
+                _frameCount: 0, _lastFrameTs: tRender, _frameMaxAccum: 0
             };
         } else {
             this._perf.stepMs = alpha * stepMs + (1 - alpha) * this._perf.stepMs;
             this._perf.renderMs = alpha * renderMs + (1 - alpha) * this._perf.renderMs;
             this._perf.totalMs = alpha * totalMs + (1 - alpha) * this._perf.totalMs;
             this._perf.mode = mode;
+
+            const frameMs = tRender - this._perf._lastFrameTs;
+            this._perf._lastFrameTs = tRender;
+            this._perf.frameMs = alpha * frameMs + (1 - alpha) * this._perf.frameMs;
+            this._perf.frameJitterMs =
+                alpha * Math.abs(frameMs - this._perf.frameMs) + (1 - alpha) * this._perf.frameJitterMs;
+            this._perf._frameCount++;
+            if (frameMs > this._perf._frameMaxAccum) this._perf._frameMaxAccum = frameMs;
+            this._perf.nPerFrame = this._workerN;
         }
 
         if (tRender - this._perf.lastSecond >= 1000) {
             this._perf.genPerSec = this.generation - this._perf.lastGenSnapshot;
             this._perf.lastGenSnapshot = this.generation;
             this._perf.lastSecond = tRender;
+            this._perf.fps = this._perf._frameCount;
+            this._perf._frameCount = 0;
+            this._perf.frameMaxMs = this._perf._frameMaxAccum;
+            this._perf._frameMaxAccum = 0;
         }
 
         if (this._perfVisible) eventBus.emit(Events.PERF_UPDATE, this._perf);
@@ -638,7 +729,10 @@ class CellularAutomaton {
         if (this._workerManager.isProcessing) return;
 
         if (this._workerManager.isAvailable) {
-            this._nextGenerationWorker(stepsPerFrame);
+            // En la banda de máxima velocidad usamos N adaptativo; si no, el N del
+            // nivel. Solo bootstrapea el primer batch: el pipeline en onResult
+            // encadena los siguientes.
+            this._nextGenerationWorker(this._effectiveStepsPerFrame(stepsPerFrame));
             return;
         }
 
